@@ -1,0 +1,1 @@
+self.__BUILD_MANIFEST = {__rewrites:{afterFiles:[],beforeFiles:[],fallback:[{has:void 0,source:"\u002Fhybridaction\u002F:path*",destination:"\u002F_next\u002Fstatic\u002Fempty.json"}]},sortedPages:["\u002F_app"]};self.__BUILD_MANIFEST_CB && self.__BUILD_MANIFEST_CB()

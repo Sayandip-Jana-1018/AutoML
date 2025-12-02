@@ -1,0 +1,5 @@
+timestamp,heart_rate,spo2,systolic_bp,diastolic_bp,temperature,respiratory_rate,ecg_raw,condition,is_simulated
+2025-11-29T07:51:30.480Z,142,,167,106,39.4,32,0,,1
+2025-11-29T07:53:53.046Z,114,,143,95,37.8,22,0,,1
+2025-11-29T11:12:19.714Z,130,,168,97,38.5,34,0,,1
+2025-12-01T12:52:01.240Z,134,,169,109,38.9,30,0,,1
