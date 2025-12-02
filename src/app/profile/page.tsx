@@ -183,7 +183,7 @@ export default function ProfilePage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-black text-white">
+            <div className="min-h-screen flex items-center justify-center bg-white dark:bg-black text-black dark:text-white">
                 <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
             </div>
         )
@@ -204,7 +204,7 @@ export default function ProfilePage() {
     return (
         <>
             {/* ... existing Navbar/ThemeToggle ... */}
-            <div className="fixed top-0 right-0 z-50">
+            <div className="fixed bg-black/10 dark:bg-white/10 text-black dark:text-white top-0 right-0 z-50">
                 <ThemeToggle />
             </div>
             <div className="relative z-40">
@@ -225,14 +225,14 @@ export default function ProfilePage() {
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl relative"
+                            className="bg-[#0a0a0a] border border-black/10 dark:border-white/10 rounded-3xl p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl relative"
                             onClick={e => e.stopPropagation()}
                         >
-                            <button onClick={closeModal} className="absolute top-4 right-4 p-2 bg-white/5 hover:bg-white/10 rounded-full text-white/60 hover:text-white transition-colors">
+                            <button onClick={closeModal} className="absolute top-4 right-4 p-2 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:bg-white/10 rounded-full text-black dark:text-white/60 hover:text-black dark:text-white transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
 
-                            <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                            <h2 className="text-2xl font-bold text-black dark:text-white mb-6 flex items-center gap-3">
                                 {modalType === 'models' ? <BrainCircuit className="w-6 h-6 text-blue-400" /> : <User className="w-6 h-6 text-purple-400" />}
                                 All {modalType === 'models' ? 'Models' : 'Collaborators'}
                             </h2>
@@ -240,7 +240,7 @@ export default function ProfilePage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {modalType === 'models' ? (
                                     profileData.models.map((model: any, i: number) => (
-                                        <div key={i} className="bg-white/5 border border-white/10 p-4 rounded-2xl hover:bg-white/10 transition-colors group">
+                                        <div key={i} className="bg-black/5 dark:bg-white/5 border border-black dark:border-white p-4 rounded-2xl hover:bg-black/10 dark:bg-white/10 transition-colors group">
                                             <div className="flex justify-between items-start mb-2">
                                                 <div className="p-2 bg-blue-500/20 rounded-lg text-blue-400">
                                                     <BrainCircuit className="w-5 h-5" />
@@ -249,17 +249,17 @@ export default function ProfilePage() {
                                                     {model.status}
                                                 </span>
                                             </div>
-                                            <h3 className="font-bold text-white text-lg mb-1">{model.name}</h3>
-                                            <p className="text-white/50 text-sm">{model.type}</p>
+                                            <h3 className="font-bold text-black dark:text-white text-lg mb-1">{model.name}</h3>
+                                            <p className="text-black dark:text-white/50 text-sm">{model.type}</p>
                                         </div>
                                     ))
                                 ) : (
                                     collaborators.map((collab, i) => (
-                                        <div key={i} className="bg-white/5 border border-white/10 p-4 rounded-2xl flex items-center gap-4 hover:bg-white/10 transition-colors">
+                                        <div key={i} className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-4 rounded-2xl flex items-center gap-4 hover:bg-black/10 dark:bg-white/10 transition-colors">
                                             <img src={collab.avatar} alt={collab.name} className="w-12 h-12 rounded-full" />
                                             <div>
-                                                <div className="font-bold text-white">{collab.name}</div>
-                                                <div className="text-sm text-white/50">{collab.role}</div>
+                                                <div className="font-bold text-black dark:text-white">{collab.name}</div>
+                                                <div className="text-sm text-black dark:text-white/50">{collab.role}</div>
                                             </div>
                                         </div>
                                     ))
@@ -273,23 +273,24 @@ export default function ProfilePage() {
             {/* Global Prism Background */}
             <div className="fixed inset-0 z-0 top-[20%]">
                 <Prism
-                    scale={1.4}
+                    scale={1.8}
                     height={5}
                     baseWidth={7}
                     glow={1}
+                    bloom={1.2}
                     noise={0.1}
                     animationType="rotate"
                     timeScale={0.3}
                 />
             </div>
 
-            <main className="relative z-10 min-h-screen flex flex-col items-center pt-24 pb-8 px-4 md:px-6 bg-transparent">
+            <main className="relative z-10 min-h-screen flex flex-col items-center pt-24 pb-8 px-4 md:px-6">
 
                 {/* Main Glass Container */}
                 <motion.div
                     initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="w-full max-w-6xl bg-transparent backdrop-blur-xl border border-white/10 rounded-[2rem] overflow-hidden shadow-2xl flex flex-col relative z-20"
+                    className="w-full max-w-6xl bg-white/40 dark:bg-black/40 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-[2rem] overflow-hidden shadow-2xl flex flex-col relative z-20"
                 >
 
 
@@ -300,15 +301,15 @@ export default function ProfilePage() {
                             {tempData.banner ? (
                                 <img src={tempData.banner} alt="Banner" className="w-full h-full object-screen" />
                             ) : (
-                                <div className="w-full h-full bg-white/5" />
+                                <div className="w-full h-full bg-black/5 dark:bg-white/5" />
                             )}
                         </div>
-                        <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors duration-500" />
+                        <div className="absolute inset-0 duration-500" />
 
                         {/* Banner Edit Button */}
                         <button
                             onClick={() => bannerInputRef.current?.click()}
-                            className="absolute top-6 right-6 p-3 bg-black/30 hover:bg-black/50 backdrop-blur-md rounded-full text-white/80 hover:text-white transition-all border border-white/10 opacity-0 group-hover:opacity-100"
+                            className="absolute top-6 right-6 p-3 bg-black/30 dark:bg-white/30 hover:bg-black/50 backdrop-blur-md rounded-full text-black dark:text-white/80 hover:text-black dark:text-white transition-all border border-black/10 dark:border-white/10 opacity-0 group-hover:opacity-100"
                         >
                             <Camera className="w-5 h-5" />
                         </button>
@@ -319,25 +320,25 @@ export default function ProfilePage() {
                     <div className="flex flex-col lg:flex-row flex-1 relative z-10">
 
                         {/* --- LEFT COLUMN: Profile Info & Stats --- */}
-                        <div className="lg:w-1/3 p-6 -mt-32 relative z-20 flex flex-col gap-5">
+                        <div className="lg:w-1/3 p-6 -mt-36 relative z-20 flex flex-col gap-5">
 
                             {/* Avatar & Basic Info Card */}
-                            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 shadow-xl flex flex-col items-center text-center">
+                            <div className="bg-black/5 dark:bg-white/5 backdrop-blur-md border border-black/10 dark:border-white/10 rounded-3xl p-6 shadow-xl flex flex-col items-center text-center">
                                 {/* Avatar */}
                                 <div className="relative group mb-4">
-                                    <div className="w-48 h-48 rounded-full border-4 border-white/10 shadow-2xl overflow-hidden bg-white/5 relative">
+                                    <div className="w-48 h-48 rounded-full border-4 border-black dark:border-white shadow-2xl overflow-hidden bg-black/5 dark:bg-white/5 relative">
                                         {tempData.avatar ? (
-                                            <img src={tempData.avatar} alt="Profile" className="w-full h-full object-cover" />
+                                            <img src={tempData.avatar} className="w-full h-full object-cover" />
                                         ) : (
-                                            <div className="w-full h-full flex items-center justify-center bg-white/5">
-                                                <User className="w-20 h-20 text-white/30" />
+                                            <div className="w-full h-full flex items-center justify-center bg-black/5 dark:bg-white/5">
+                                                <User className="w-20 h-20 text-black dark:text-white/30" />
                                             </div>
                                         )}
                                         <div
                                             className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                             onClick={() => fileInputRef.current?.click()}
                                         >
-                                            <Camera className="w-10 h-10 text-white" />
+                                            <Camera className="w-10 h-10 text-black dark:text-white" />
                                         </div>
                                     </div>
                                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileSelect(e, 'avatar')} />
@@ -349,20 +350,21 @@ export default function ProfilePage() {
                                         <input
                                             value={tempData.name || ""}
                                             onChange={(e) => setTempData({ ...tempData, name: e.target.value })}
-                                            className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-lg font-bold text-white w-full text-center focus:bg-white/10 transition-colors"
+                                            className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-xl px-4 py-2 text-lg font-bold text-black dark:text-white w-full text-center focus:bg-black/10 dark:bg-white/10 transition-colors"
                                             placeholder="Name"
                                         />
                                         <input
                                             value={tempData.role || ""}
                                             onChange={(e) => setTempData({ ...tempData, role: e.target.value })}
-                                            className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white/70 w-full text-center focus:bg-white/10 transition-colors"
+                                            className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-xl px-4 py-2 text-black dark:text-white/70 w-full text-center focus:bg-black/10 dark:bg-white/10 transition-colors"
                                             placeholder="Role"
                                         />
                                     </div>
                                 ) : (
                                     <>
-                                        <h1 className="text-2xl font-bold text-white mb-1">{profileData.name || "User Name"}</h1>
-                                        <p className="text-white/60 flex items-center gap-2 justify-center mb-4 text-sm">
+                                        <h1 className="text-2xl font-bold text-black dark:text-white mb-1">{profileData.name || "User Name"}</h1>
+                                        <p className="text-black/60 dark:text-white/40 text-sm mb-3 font-medium">{profileData.email}</p>
+                                        <p className="text-black/80 dark:text-white/60 flex items-center gap-2 justify-center mb-4 text-sm">
                                             <Briefcase className="w-4 h-4" /> {profileData.role || "No Role"}
                                         </p>
                                     </>
@@ -375,18 +377,18 @@ export default function ProfilePage() {
                                             <button onClick={handleSave} className="flex-1 py-2 bg-white text-black rounded-xl font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 text-sm">
                                                 <Check className="w-4 h-4" /> Save
                                             </button>
-                                            <button onClick={handleCancel} className="flex-1 py-2 bg-white/10 text-white rounded-xl font-bold hover:bg-white/20 transition-colors flex items-center justify-center gap-2 text-sm">
+                                            <button onClick={handleCancel} className="flex-1 py-2 bg-black/10 dark:bg-white/10 text-black dark:text-white rounded-xl font-bold hover:bg-white/20 transition-colors flex items-center justify-center gap-2 text-sm">
                                                 <X className="w-4 h-4" /> Cancel
                                             </button>
                                         </>
                                     ) : (
                                         <div className="flex gap-2 w-full">
-                                            <button onClick={() => setEditMode(true)} className="flex-1 py-2 bg-white/10 border border-white/10 text-white rounded-xl font-bold hover:bg-white/20 transition-colors flex items-center justify-center gap-2 text-sm">
+                                            <button onClick={() => setEditMode(true)} className="flex-1 py-2 bg-black/10 dark:bg-white/10 border border-black dark:border-white text-black dark:text-white rounded-xl font-bold hover:bg-white/20 transition-colors flex items-center justify-center gap-2 text-sm">
                                                 <Edit2 className="w-4 h-4" /> Edit Profile
                                             </button>
                                             <button
                                                 onClick={() => setCurrentView(currentView === 'security' ? 'overview' : 'security')}
-                                                className={`p-2 rounded-xl border transition-colors ${currentView === 'security' ? 'bg-white text-black border-white' : 'bg-white/5 border-white/10 text-white hover:bg-white/10'}`}
+                                                className={`p-2 rounded-xl border transition-colors ${currentView === 'security' ? 'bg-white text-black border-white' : 'bg-black/5 dark:bg-white/5 border-black dark:border-white text-black dark:text-white hover:bg-black/10 dark:bg-white/10'}`}
                                             >
                                                 <Settings className="w-5 h-5" />
                                             </button>
@@ -396,38 +398,38 @@ export default function ProfilePage() {
                             </div>
 
                             {/* Stats Card */}
-                            <div className="bg-white/5 border border-white/10 rounded-3xl p-5 flex justify-between items-center">
-                                <div className="text-center flex-1 border-r border-white/10">
-                                    <div className="text-2xl font-black text-white">{profileData.datasets?.length || 0}</div>
-                                    <div className="text-[10px] text-white/50 uppercase tracking-wider font-bold mt-1">Datasets</div>
+                            <div className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-3xl p-5 flex justify-between items-center">
+                                <div className="text-center flex-1 border-r border-black dark:border-white">
+                                    <div className="text-2xl font-black text-black dark:text-white">{profileData.datasets?.length || 0}</div>
+                                    <div className="text-[10px] text-black/70 dark:text-white/50 uppercase tracking-wider font-bold mt-1">Datasets</div>
                                 </div>
                                 <div className="text-center flex-1">
-                                    <div className="text-2xl font-black text-white">{profileData.models?.length || 0}</div>
-                                    <div className="text-[10px] text-white/50 uppercase tracking-wider font-bold mt-1">Models</div>
+                                    <div className="text-2xl font-black text-black dark:text-white">{profileData.models?.length || 0}</div>
+                                    <div className="text-[10px] text-black/70 dark:text-white/50 uppercase tracking-wider font-bold mt-1">Models</div>
                                 </div>
                             </div>
 
                             {/* Navigation / Menu */}
-                            <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden">
+                            <div className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-3xl overflow-hidden">
                                 <button
                                     onClick={() => setCurrentView('overview')}
-                                    className={`w-full p-3.5 flex items-center justify-between transition-colors ${currentView === 'overview' ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}
+                                    className={`w-full p-3.5 flex items-center justify-between transition-colors ${currentView === 'overview' ? 'bg-black/10 dark:bg-white/10 text-black dark:text-white' : 'text-black dark:text-white/60 hover:bg-black/5 dark:bg-white/5 hover:text-black dark:text-white'}`}
                                 >
                                     <span className="flex items-center gap-3 font-medium text-sm"><Database className="w-4 h-4" /> Overview</span>
                                     {currentView === 'overview' && <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />}
                                 </button>
-                                <div className="h-px bg-white/5" />
+                                <div className="h-px bg-black/5 dark:bg-white/5" />
                                 <button
                                     onClick={() => setCurrentView('security')}
-                                    className={`w-full p-3.5 flex items-center justify-between transition-colors ${currentView === 'security' ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}
+                                    className={`w-full p-3.5 flex items-center justify-between transition-colors ${currentView === 'security' ? 'bg-black/10 dark:bg-white/10 text-black dark:text-white' : 'text-black dark:text-white/60 hover:bg-black/5 dark:bg-white/5 hover:text-black dark:text-white'}`}
                                 >
                                     <span className="flex items-center gap-3 font-medium text-sm"><Lock className="w-4 h-4" /> Security</span>
                                     {currentView === 'security' && <div className="w-1.5 h-1.5 bg-purple-500 rounded-full" />}
                                 </button>
-                                <div className="h-px bg-white/5" />
+                                <div className="h-px bg-black/5 dark:bg-white/5" />
                                 <button
                                     onClick={() => setCurrentView('notifications')}
-                                    className={`w-full p-3.5 flex items-center justify-between transition-colors ${currentView === 'notifications' ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}
+                                    className={`w-full p-3.5 flex items-center justify-between transition-colors ${currentView === 'notifications' ? 'bg-black/10 dark:bg-white/10 text-black dark:text-white' : 'text-black dark:text-white/60 hover:bg-black/5 dark:bg-white/5 hover:text-black dark:text-white'}`}
                                 >
                                     <span className="flex items-center gap-3 font-medium text-sm"><Bell className="w-4 h-4" /> Notifications</span>
                                     {currentView === 'notifications' && <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />}
@@ -451,7 +453,7 @@ export default function ProfilePage() {
                                     >
                                         {/* Sign Out (Moved to Top) */}
                                         <div className="flex justify-end">
-                                            <button onClick={() => signOut({ callbackUrl: "/" })} className="px-6 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold hover:bg-red-500/20 transition-colors flex items-center gap-2 group text-sm">
+                                            <button onClick={() => signOut({ callbackUrl: "/" })} className="px-6 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 font-bold hover:bg-red-500/20 transition-colors flex items-center gap-2 group text-sm">
                                                 <LogOut className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> Sign Out
                                             </button>
                                         </div>
@@ -461,16 +463,16 @@ export default function ProfilePage() {
                                             {profileData.models.length > 0 ? (
                                                 <>
                                                     {profileData.models.slice(0, 3).map((model: any, i: number) => (
-                                                        <div key={i} className="bg-white/5 border border-white/10 p-5 rounded-3xl hover:bg-white/10 transition-colors group cursor-pointer">
+                                                        <div key={i} className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-5 rounded-3xl hover:bg-black/10 dark:bg-white/10 transition-colors group cursor-pointer">
                                                             <div className="flex justify-between items-start mb-4">
                                                                 <div className="p-3 bg-blue-500/20 rounded-2xl text-blue-400 group-hover:scale-110 transition-transform">
                                                                     <BrainCircuit className="w-6 h-6" />
                                                                 </div>
                                                                 <div className={`w-2 h-2 rounded-full ${model.status === 'Deployed' ? 'bg-green-500' : 'bg-yellow-500'}`} />
                                                             </div>
-                                                            <h3 className="font-bold text-white text-lg mb-1 truncate">{model.name}</h3>
+                                                            <h3 className="font-bold text-black dark:text-white text-lg mb-1 truncate">{model.name}</h3>
                                                             <div className="flex justify-between items-center">
-                                                                <p className="text-white/50 text-sm">{model.type}</p>
+                                                                <p className="text-black dark:text-white/50 text-sm">{model.type}</p>
                                                                 {model.accuracy !== undefined && (
                                                                     <span className="text-xs font-bold text-green-400 bg-green-500/10 px-2 py-1 rounded-lg">
                                                                         {(model.accuracy * 100).toFixed(1)}% Acc
@@ -482,22 +484,22 @@ export default function ProfilePage() {
                                                     {profileData.models.length > 3 && (
                                                         <button
                                                             onClick={() => openModal('models')}
-                                                            className="bg-white/5 border border-white/10 p-5 rounded-3xl hover:bg-white/10 transition-colors flex flex-col items-center justify-center gap-3 group h-full min-h-[140px]"
+                                                            className="bg-black/5 dark:bg-white/5 border border-black dark:border-white p-5 rounded-3xl hover:bg-black/10 dark:bg-white/10 transition-colors flex flex-col items-center justify-center gap-3 group h-full min-h-[140px]"
                                                         >
-                                                            <div className="p-4 bg-white/10 rounded-full group-hover:bg-white/20 transition-colors">
-                                                                <ChevronRight className="w-6 h-6 text-white" />
+                                                            <div className="p-4 bg-black/10 dark:bg-white/10 rounded-full group-hover:bg-white/20 transition-colors">
+                                                                <ChevronRight className="w-6 h-6 text-black dark:text-white" />
                                                             </div>
-                                                            <span className="font-bold text-white text-sm">View All Models</span>
+                                                            <span className="font-bold text-black dark:text-white text-sm">View All Models</span>
                                                         </button>
                                                     )}
                                                 </>
                                             ) : (
-                                                <div className="col-span-full bg-transparent border border-white/10 rounded-3xl p-10 text-center flex flex-col items-center justify-center border-dashed h-full">
+                                                <div className="col-span-full bg-transparent border border-black dark:border-white rounded-3xl p-10 text-center flex flex-col items-center justify-center border-dashed h-full">
                                                     <div className="w-16 h-16 bg-gradient-to-br from-white/10 to-transparent rounded-full flex items-center justify-center mb-4">
-                                                        <BrainCircuit className="w-8 h-8 text-white/30" />
+                                                        <BrainCircuit className="w-8 h-8 text-black dark:text-white/30" />
                                                     </div>
-                                                    <h3 className="text-xl font-bold text-white mb-2">No Models Found</h3>
-                                                    <p className="text-white/50 max-w-md mx-auto mb-6 text-sm">
+                                                    <h3 className="text-xl font-bold text-black dark:text-white mb-2">No Models Found</h3>
+                                                    <p className="text-black/70 dark:text-white/50 max-w-md mx-auto mb-6 text-sm">
                                                         You haven't created any models yet. Start by creating your first one.
                                                     </p>
                                                     <button
@@ -513,28 +515,28 @@ export default function ProfilePage() {
                                         {/* Collaborators Section */}
                                         <div className="mt-6">
                                             <div className="flex items-center justify-between mb-3">
-                                                <h3 className="text-base font-bold text-white">Recent Collaborators</h3>
+                                                <h3 className="text-base font-bold text-black dark:text-white">Recent Collaborators</h3>
                                                 <button onClick={() => openModal('collaborators')} className="text-xs text-blue-400 hover:text-blue-300">View All</button>
                                             </div>
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                                 {collaborators.slice(0, 3).map((collab, i) => (
-                                                    <div key={i} className="bg-transparent border border-white/10 p-3 rounded-2xl flex items-center gap-3 hover:bg-white/5 transition-colors cursor-pointer group">
+                                                    <div key={i} className="bg-transparent border border-black/10 dark:border-white/10 p-3 rounded-2xl flex items-center gap-3 hover:bg-black/5 dark:bg-white/5 transition-colors cursor-pointer group">
                                                         <img src={collab.avatar} alt={collab.name} className="w-8 h-8 rounded-full" />
                                                         <div className="overflow-hidden">
-                                                            <div className="font-bold text-white text-sm truncate group-hover:text-blue-400 transition-colors">{collab.name}</div>
-                                                            <div className="text-[10px] text-white/50 truncate">{collab.role}</div>
+                                                            <div className="font-bold text-black dark:text-white text-sm truncate group-hover:text-blue-400 transition-colors">{collab.name}</div>
+                                                            <div className="text-[10px] text-black dark:text-white/50 truncate">{collab.role}</div>
                                                         </div>
                                                     </div>
                                                 ))}
                                                 {collaborators.length > 3 && (
                                                     <button
                                                         onClick={() => openModal('collaborators')}
-                                                        className="bg-transparent border border-white/10 p-3 rounded-2xl flex items-center justify-center gap-2 hover:bg-white/5 transition-colors group"
+                                                        className="bg-transparent border border-black/10 dark:border-white/10 p-3 rounded-2xl flex items-center justify-center gap-2 hover:bg-black/5 dark:bg-white/5 transition-colors group"
                                                     >
-                                                        <div className="p-1.5 bg-white/10 rounded-full">
-                                                            <ChevronRight className="w-4 h-4 text-white" />
+                                                        <div className="p-1.5 bg-black/10 dark:bg-white/10 rounded-full">
+                                                            <ChevronRight className="w-4 h-4 text-black dark:text-white" />
                                                         </div>
-                                                        <span className="font-bold text-white text-xs">View All</span>
+                                                        <span className="font-bold text-black dark:text-white text-xs">View All</span>
                                                     </button>
                                                 )}
                                             </div>
@@ -551,41 +553,41 @@ export default function ProfilePage() {
                                         exit={{ opacity: 0, x: -20 }}
                                         className="max-w-lg mx-auto w-full"
                                     >
-                                        <div className="bg-transparent border border-white/10 rounded-[2rem] p-8">
+                                        <div className="bg-transparent border border-black dark:border-white rounded-[2rem] p-8">
                                             <div className="flex items-center gap-4 mb-8">
                                                 <div className="p-3 bg-purple-500/20 rounded-2xl text-purple-400">
                                                     <Shield className="w-8 h-8" />
                                                 </div>
                                                 <div>
-                                                    <h2 className="text-2xl font-bold text-white">Security Settings</h2>
-                                                    <p className="text-white/50 text-base">Manage your password and account security</p>
+                                                    <h2 className="text-2xl font-bold text-black dark:text-white">Security Settings</h2>
+                                                    <p className="text-black dark:text-white/50 text-base">Manage your password and account security</p>
                                                 </div>
                                             </div>
 
                                             <div className="space-y-6">
                                                 <div className="space-y-2">
-                                                    <label className="text-sm font-bold text-white/70 ml-1">Current Password</label>
+                                                    <label className="text-sm font-bold text-black dark:text-white/70 ml-1">Current Password</label>
                                                     <input
                                                         type="password"
-                                                        className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:bg-black/40 transition-all outline-none text-base"
+                                                        className="w-full bg-black/20 dark:bg-white/20 border border-black dark:border-white rounded-xl px-4 py-3 text-black dark:text-white focus:border-purple-500/50 focus:bg-black/40 transition-all outline-none text-base"
                                                         value={passwordData.current || ""}
                                                         onChange={e => setPasswordData({ ...passwordData, current: e.target.value })}
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-sm font-bold text-white/70 ml-1">New Password</label>
+                                                    <label className="text-sm font-bold text-black dark:text-white/70 ml-1">New Password</label>
                                                     <input
                                                         type="password"
-                                                        className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:bg-black/40 transition-all outline-none text-base"
+                                                        className="w-full bg-black/20 dark:bg-white/20 border border-black dark:border-white rounded-xl px-4 py-3 text-black dark:text-white focus:border-purple-500/50 focus:bg-black/40 transition-all outline-none text-base"
                                                         value={passwordData.new || ""}
                                                         onChange={e => setPasswordData({ ...passwordData, new: e.target.value })}
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-sm font-bold text-white/70 ml-1">Confirm New Password</label>
+                                                    <label className="text-sm font-bold text-black dark:text-white/70 ml-1">Confirm New Password</label>
                                                     <input
                                                         type="password"
-                                                        className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:bg-black/40 transition-all outline-none text-base"
+                                                        className="w-full bg-black/20 dark:bg-white/20 border border-black dark:border-white rounded-xl px-4 py-3 text-black dark:text-white focus:border-purple-500/50 focus:bg-black/40 transition-all outline-none text-base"
                                                         value={passwordData.confirm || ""}
                                                         onChange={e => setPasswordData({ ...passwordData, confirm: e.target.value })}
                                                     />
@@ -595,7 +597,7 @@ export default function ProfilePage() {
                                                     <button onClick={handlePasswordChange} className="flex-1 py-3 bg-white text-black rounded-xl font-bold hover:bg-gray-200 transition-colors text-base">
                                                         Update Password
                                                     </button>
-                                                    <button onClick={() => setCurrentView('overview')} className="px-6 py-3 bg-white/5 text-white rounded-xl font-bold hover:bg-white/10 transition-colors text-base">
+                                                    <button onClick={() => setCurrentView('overview')} className="px-6 py-3 bg-black/5 dark:bg-white/5 text-black dark:text-white rounded-xl font-bold hover:bg-black/10 dark:bg-white/10 transition-colors text-base">
                                                         Cancel
                                                     </button>
                                                 </div>
@@ -613,24 +615,24 @@ export default function ProfilePage() {
                                         exit={{ opacity: 0, x: -20 }}
                                         className="max-w-lg mx-auto w-full"
                                     >
-                                        <div className="bg-transparent border border-white/10 rounded-[2rem] p-8">
+                                        <div className="bg-transparent border border-black dark:border-white rounded-[2rem] p-8">
                                             <div className="flex items-center gap-4 mb-8">
                                                 <div className="p-3 bg-green-500/20 rounded-2xl text-green-400">
                                                     <Bell className="w-8 h-8" />
                                                 </div>
                                                 <div>
-                                                    <h2 className="text-2xl font-bold text-white">Notification Preferences</h2>
-                                                    <p className="text-white/50 text-base">Choose what updates you want to receive</p>
+                                                    <h2 className="text-2xl font-bold text-black dark:text-white">Notification Preferences</h2>
+                                                    <p className="text-black dark:text-white/50 text-base">Choose what updates you want to receive</p>
                                                 </div>
                                             </div>
 
                                             <div className="space-y-4">
                                                 {['Email Notifications', 'Push Notifications', 'Product Updates', 'Security Alerts'].map((item, i) => (
-                                                    <div key={i} className="flex items-center justify-between p-4 bg-black/20 rounded-2xl border border-white/5">
-                                                        <span className="font-medium text-white/80 text-base">{item}</span>
+                                                    <div key={i} className="flex items-center justify-between p-4 bg-black/20 dark:bg-white/20 rounded-2xl border border-white/5">
+                                                        <span className="font-medium text-black dark:text-white/80 text-base">{item}</span>
                                                         <button
                                                             onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-                                                            className={`w-12 h-6 rounded-full relative transition-colors flex items-center ${notificationsEnabled ? 'bg-green-500' : 'bg-white/10'}`}
+                                                            className={`w-12 h-6 rounded-full relative transition-colors flex items-center ${notificationsEnabled ? 'bg-green-500' : 'bg-black/10 dark:bg-white/10'}`}
                                                         >
                                                             <div className={`absolute w-4 h-4 bg-white rounded-full transition-all ${notificationsEnabled ? 'left-7' : 'left-1'}`} />
                                                         </button>

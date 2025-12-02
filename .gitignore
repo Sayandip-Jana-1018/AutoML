@@ -32,11 +32,6 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env
-.env*
-**/.env
-**/.env*
-ml-aws/.env*
-ambulance/.env*
 
 # vercel
 .vercel
@@ -44,4 +39,3 @@ ambulance/.env*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-.env

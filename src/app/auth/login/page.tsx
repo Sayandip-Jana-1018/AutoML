@@ -1,54 +1,110 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import { useThemeColor } from "@/context/theme-context"
 import Plasma from "@/components/react-bits/Plasma"
-import SuccessModal from "@/components/ui/success-modal"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Lock, Mail, ArrowRight, Loader2, AlertCircle, Github } from "lucide-react"
+import { FaMicrosoft } from 'react-icons/fa'
 import { FcGoogle } from "react-icons/fc"
-
-import { loginAction } from "@/app/actions/auth"
+import { authenticate } from "./actions"
 
 export default function LoginPage() {
-    const { themeColor } = useThemeColor()
+    const { themeColor, setThemeColor } = useThemeColor()
     const router = useRouter()
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
-    const [showSuccess, setShowSuccess] = useState(false)
+
+    // Set default theme color to Cyan on mount
+    useEffect(() => {
+        setThemeColor("#00ffff")
+    }, [setThemeColor])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
         setError("")
 
-        const formData = new FormData()
-        formData.append("email", email)
-        formData.append("password", password)
-
         try {
-            const result = await loginAction(formData)
-            if (result?.error) {
-                setError(result.error)
+            // Primary path: use NextAuth helper (preferred)
+            const res = await signIn("credentials", {
+                redirect: false,
+                email,
+                password,
+                callbackUrl: "/?login=success",
+            })
+
+            // NextAuth v5 may return undefined or an object. Handle both.
+            // If res is falsy or signals an error, treat as failure.
+            if (!res || (res as any).error) {
+                setError((res as any)?.error || "Login failed")
+                setLoading(false)
+                return
             }
-        } catch (err) {
-            console.error("Login error:", err)
-            // If it's a redirect error, it might be caught here depending on Next.js version
-            // But usually Server Actions handle it.
-            setError("Something went wrong. Please try again.")
-        } finally {
-            setLoading(false)
+
+            // success path
+            // Redirect to home with success param
+            router.push("/?login=success")
+            return
+        } catch (err: any) {
+            // signIn threw (e.g. "Failed to fetch") — fallback to manual fetch
+            console.warn("[Auth] signIn threw, falling back to manual fetch:", err?.message ?? err)
+
+            try {
+                // fetch CSRF token first
+                const csrfResp = await fetch("/api/auth/csrf")
+                if (!csrfResp.ok) {
+                    throw new Error("Failed to fetch CSRF token")
+                }
+                const csrfJson = await csrfResp.json()
+                const csrfToken = csrfJson?.csrfToken
+
+                // Prepare form body (urlencoded) and request json response
+                const body = new URLSearchParams()
+                body.set("csrfToken", csrfToken ?? "")
+                body.set("email", email)
+                body.set("password", password)
+                body.set("callbackUrl", "/?login=success")
+                // Request JSON response to avoid redirect handling
+                body.set("json", "true")
+
+                const callbackResp = await fetch("/api/auth/callback/credentials", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+                    },
+                    body: body.toString(),
+                })
+
+                // NextAuth returns JSON when json=true
+                const json = await callbackResp.json()
+
+                if (!callbackResp.ok || json?.error) {
+                    setError(json?.error || "Login failed")
+                    setLoading(false)
+                    return
+                }
+
+                // success
+                router.push("/?login=success")
+                return
+            } catch (fallbackErr: any) {
+                console.error("[Auth] Manual fallback sign-in failed:", fallbackErr)
+                setError("Login failed (network error). Check console/network tab.")
+                setLoading(false)
+                return
+            }
         }
     }
 
     const handleGoogleSignIn = async () => {
-        await signIn("google", { callbackUrl: "/" })
+        await signIn("google", { callbackUrl: "/?login=success" })
     }
 
     return (
@@ -159,20 +215,27 @@ export default function LoginPage() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="flex items-center justify-center gap-4">
                             <button
                                 onClick={handleGoogleSignIn}
-                                className="w-full py-3.5 rounded-xl bg-white text-black font-bold hover:bg-gray-100 transition-all flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] active:scale-[0.98] border border-transparent"
+                                className="group relative w-14 h-14 rounded-full bg-white hover:bg-gray-100 transition-all flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 border border-gray-200"
+                                title="Continue with Google"
                             >
-                                <FcGoogle className="w-5 h-5" />
-                                <span>Google</span>
+                                <FcGoogle className="w-7 h-7" />
                             </button>
                             <button
-                                onClick={() => signIn("github", { callbackUrl: "/" })}
-                                className="w-full py-3.5 rounded-xl bg-[#24292e] text-white font-bold hover:bg-[#2f363d] transition-all flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] active:scale-[0.98] border border-white/10 hover:border-white/30"
+                                onClick={() => signIn("github", { callbackUrl: "/?login=success" })}
+                                className="group relative w-14 h-14 rounded-full bg-[#24292e] hover:bg-[#2f363d] transition-all flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 border border-white/10"
+                                title="Continue with GitHub"
                             >
-                                <Github className="w-5 h-5" />
-                                <span>GitHub</span>
+                                <Github className="w-6 h-6 text-white" />
+                            </button>
+                            <button
+                                onClick={() => signIn("azure-ad", { callbackUrl: "/?login=success" })}
+                                className="group relative w-14 h-14 rounded-full bg-[#00a4ef] hover:bg-[#0078d4] transition-all flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 border border-white/10"
+                                title="Continue with Microsoft"
+                            >
+                                <FaMicrosoft className="w-6 h-6 text-white" />
                             </button>
                         </div>
 
@@ -187,12 +250,6 @@ export default function LoginPage() {
                     </div>
                 </div>
             </motion.div>
-
-            <SuccessModal
-                isOpen={showSuccess}
-                message="Successfully Signed In"
-                subMessage="Redirecting to dashboard..."
-            />
         </div>
     )
 }

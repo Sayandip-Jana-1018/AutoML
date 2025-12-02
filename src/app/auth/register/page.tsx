@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -9,11 +9,12 @@ import { useThemeColor } from "@/context/theme-context"
 import Plasma from "@/components/react-bits/Plasma"
 import SuccessModal from "@/components/ui/success-modal"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { Lock, Mail, User, ArrowRight, Loader2, AlertCircle, Github } from "lucide-react"
+import { Lock, Mail, User, ArrowRight, Loader2, AlertCircle, Github, Square } from "lucide-react"
+import { FaMicrosoft } from 'react-icons/fa'
 import { FcGoogle } from "react-icons/fc"
 
 export default function RegisterPage() {
-    const { themeColor } = useThemeColor()
+    const { themeColor, setThemeColor } = useThemeColor()
     const router = useRouter()
     const [name, setName] = useState("")
     const [email, setEmail] = useState("")
@@ -21,6 +22,11 @@ export default function RegisterPage() {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
     const [showSuccess, setShowSuccess] = useState(false)
+
+    // Set default theme color to Cyan on mount
+    useEffect(() => {
+        setThemeColor("#00ffff")
+    }, [setThemeColor])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -175,20 +181,27 @@ export default function RegisterPage() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="flex items-center justify-center gap-4">
                             <button
                                 onClick={handleGoogleSignIn}
-                                className="w-full py-3.5 rounded-xl bg-white text-black font-bold hover:bg-gray-100 transition-all flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] active:scale-[0.98] border border-transparent"
+                                className="group relative w-14 h-14 rounded-full bg-white hover:bg-gray-100 transition-all flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 border border-gray-200"
+                                title="Continue with Google"
                             >
-                                <FcGoogle className="w-5 h-5" />
-                                <span>Google</span>
+                                <FcGoogle className="w-7 h-7" />
                             </button>
                             <button
                                 onClick={() => signIn("github", { callbackUrl: "/" })}
-                                className="w-full py-3.5 rounded-xl bg-[#24292e] text-white font-bold hover:bg-[#2f363d] transition-all flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] active:scale-[0.98] border border-white/10 hover:border-white/30"
+                                className="group relative w-14 h-14 rounded-full bg-[#24292e] hover:bg-[#2f363d] transition-all flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 border border-white/10"
+                                title="Continue with GitHub"
                             >
-                                <Github className="w-5 h-5" />
-                                <span>GitHub</span>
+                                <Github className="w-6 h-6 text-white" />
+                            </button>
+                            <button
+                                onClick={() => signIn("azure-ad", { callbackUrl: "/" })}
+                                className="group relative w-14 h-14 rounded-full bg-[#00a4ef] hover:bg-[#0078d4] transition-all flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 border border-white/10"
+                                title="Continue with Microsoft"
+                            >
+                                <FaMicrosoft className="w-6 h-6 text-white" />
                             </button>
                         </div>
 

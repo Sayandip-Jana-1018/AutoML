@@ -1,6 +1,7 @@
 import type { NextAuthConfig } from "next-auth"
 
 export const authConfig = {
+    debug: process.env.NODE_ENV !== "production",
     pages: {
         signIn: "/auth/login",
         error: "/auth/error",
@@ -9,6 +10,12 @@ export const authConfig = {
         authorized({ auth, request: { nextUrl } }) {
             const isLoggedIn = !!auth?.user
             const isOnAuth = nextUrl.pathname.startsWith("/auth")
+            const isOnApi = nextUrl.pathname.startsWith("/api")
+
+            // Allow API routes
+            if (isOnApi) {
+                return true
+            }
 
             // Allow access to auth pages (login, register, forgot-password)
             if (isOnAuth) {
@@ -29,12 +36,20 @@ export const authConfig = {
         async session({ session, token }) {
             if (session.user && token?.sub) {
                 session.user.id = token.sub
+                session.user.email = token.email as string
+                session.user.name = token.name as string
+                // Minimal session data
             }
             return session
         },
         async jwt({ token, user }) {
             if (user) {
-                token.sub = user.id
+                return {
+                    sub: String(user.id),
+                    email: user.email,
+                    name: user.name,
+                    // Exclude large fields like image if not needed immediately
+                }
             }
             return token
         }

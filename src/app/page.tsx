@@ -13,6 +13,8 @@ import { FeaturesSection } from "@/components/sections/FeaturesSection"
 import { PricingSection } from "@/components/sections/PricingSection"
 import { CTASection } from "@/components/sections/CTASection"
 
+import AuthSuccessHandler from "@/components/auth-success-handler"
+
 export default function Home() {
     const { themeColor, setThemeColor, silkConfig } = useThemeColor()
 
@@ -23,6 +25,7 @@ export default function Home() {
 
     return (
         <main className="relative bg-background selection:bg-primary/30 transition-colors duration-300">
+            <AuthSuccessHandler />
             {/* Background */}
             <div className="fixed inset-0 z-0 h-full w-full dark:opacity-90 transition-opacity duration-500 pointer-events-none">
                 <Silk

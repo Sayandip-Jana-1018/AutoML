@@ -16,6 +16,25 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+interface Model {
+    id: string
+    name: string
+    type: string
+    endpoint?: string
+    latency: string
+    algorithm?: string
+    model_id?: string
+    user_email?: string
+    target_column?: string
+}
+
+interface Message {
+    role: 'user' | 'assistant'
+    content: string
+    id: string
+}
+
+
 // Clean markdown and special characters from AI responses
 function cleanMessage(text: string) {
     return text
@@ -49,17 +68,17 @@ export default function ChatPage() {
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [mounted, setMounted] = useState(false)
-    const [deployedModels, setDeployedModels] = useState<any[]>([])
-    const [genAiModels, setGenAiModels] = useState<any[]>([
+    const [deployedModels, setDeployedModels] = useState<Model[]>([])
+    const [genAiModels, setGenAiModels] = useState<Model[]>([
         { id: "ai-1", name: "GPT-4 Turbo", type: "ai", endpoint: "api.openai.com/v1", latency: "24ms" },
         { id: "ai-2", name: "Claude 3 Opus", type: "ai", endpoint: "api.anthropic.com/v1", latency: "32ms" },
         { id: "ai-3", name: "Gemini Pro", type: "ai", endpoint: "generativelanguage.googleapis.com", latency: "45ms" },
     ])
-    const [selectedModel, setSelectedModel] = useState<any>(genAiModels[0])
+    const [selectedModel, setSelectedModel] = useState<Model>(genAiModels[0])
     const [loadingModels, setLoadingModels] = useState(true)
 
     // Custom chat state management
-    const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant', content: string, id: string }>>([])
+    const [messages, setMessages] = useState<Message[]>([])
     const [input, setInput] = useState('')
     const [isLoading, setIsLoading] = useState(false)
 
@@ -143,14 +162,14 @@ export default function ChatPage() {
 
                 if (res.ok) {
                     const data = await res.json()
-                    let models = data.models || []
+                    let models: Model[] = data.models || []
 
                     // Filter models by user email if available
                     if (session?.user?.email) {
-                        models = models.filter((m: any) => m.user_email === session.user?.email)
+                        models = models.filter((m: Model) => m.user_email === session.user?.email)
                     }
 
-                    const mlModels = models.map((m: any, idx: number) => ({
+                    const mlModels = models.map((m: Model, idx: number) => ({
                         id: `ml-${idx}`,
                         name: `${m.target_column} Model`,
                         type: "ml",

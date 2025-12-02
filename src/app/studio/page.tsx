@@ -39,7 +39,7 @@ export default function StudioPage() {
 
     // Set default theme color to Gold on mount
     useEffect(() => {
-        setThemeColor("#bebebeff")
+        setThemeColor("#e4c567ff")
     }, [setThemeColor])
 
     // Poll job status

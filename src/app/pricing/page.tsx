@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Navbar } from "@/components/navbar"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -91,10 +91,12 @@ export default function PricingPage() {
             },
             theme: {
                 color: "#6366f1",
+                backdrop_color: "#000000"
             },
         }
 
         const paymentObject = new window.Razorpay(options)
+        setIsPaymentOpen(true)
         paymentObject.open()
         setLoading(false)
     }
@@ -114,8 +116,7 @@ export default function PricingPage() {
             missing: [
                 "Advanced AI Models",
                 "GPT-3.5 Integration",
-                "Grok 2 Capabilities",
-                "Unlimited Summaries"
+                "Grok 2 Capabilities"
             ]
         },
         {
@@ -130,10 +131,7 @@ export default function PricingPage() {
                 "Claude 3.5 Haiku",
                 "50 Summaries per day",
                 "GPT-3.5 Integration",
-                "Grok 2 Capabilities",
-                "GPT-4 Integration",
-                "Grok 3 Capabilities",
-                "Fast Processing Speed"
+                "Grok 2 Capabilities"
             ],
             missing: []
         },
@@ -149,14 +147,27 @@ export default function PricingPage() {
                 "Ultra-fast Processing",
                 "Dedicated Support",
                 "GPT-4 Turbo",
-                "Gemini Ultra",
-                "Unlimited Summaries",
-                "Premium Analytics",
-                "Team Collaboration"
+                "Gemini Ultra"
             ],
             missing: []
         }
     ]
+
+    // Force body background to black on this page to prevent white bleed-through
+    useEffect(() => {
+        // Save original styles
+        const originalBg = document.body.style.backgroundColor
+        const originalOverflow = document.body.style.overflow
+
+        // Apply dark theme styles
+        document.body.style.backgroundColor = "#020202"
+
+        return () => {
+            // Restore original styles
+            document.body.style.backgroundColor = originalBg
+            document.body.style.overflow = originalOverflow
+        }
+    }, [])
 
     return (
         <>
@@ -167,7 +178,12 @@ export default function PricingPage() {
                 <Navbar />
             </div>
 
-            <main className={`min-h-screen bg-[#020202] pt-24 pb-12 px-4 flex flex-col items-center relative overflow-hidden transition-all duration-300 ${isPaymentOpen ? 'blur-md brightness-50' : ''}`}>
+            {/* Custom Overlay for Razorpay */}
+            {isPaymentOpen && (
+                <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-md transition-all duration-300" />
+            )}
+
+            <main className="min-h-screen bg-[#020202] pt-24 pb-12 px-4 flex flex-col items-center relative overflow-hidden">
                 {/* Background */}
                 <div className="absolute inset-0 z-0 opacity-40">
                     <GradientBlinds
