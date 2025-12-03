@@ -5,19 +5,24 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useThemeColor } from "@/context/theme-context"
 import { Navbar } from "@/components/navbar"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useSession, signOut } from "next-auth/react"
+import { useAuth } from "@/context/auth-context"
 import { useRouter } from "next/navigation"
 import {
     User, Bell, Lock, Camera, Edit2, Check, X, Database, BrainCircuit, Loader2, MapPin, Briefcase, Settings, LogOut, Plus, MoreVertical, ChevronRight, Shield
 } from "lucide-react"
 import Prism from "@/components/react-bits/Prism"
+import { db, storage, auth } from "@/lib/firebase"
+import { updateProfile } from "firebase/auth"
+import { doc, getDoc, setDoc } from "firebase/firestore"
+import { ref, uploadString, getDownloadURL } from "firebase/storage"
 
 export default function ProfilePage() {
     const { themeColor, setThemeColor } = useThemeColor()
-    const { data: session, status } = useSession()
+    const { user, logout, loading: authLoading } = useAuth()
     const router = useRouter()
 
     const [editMode, setEditMode] = useState(false)
+    const [showSaveSuccess, setShowSaveSuccess] = useState(false)
     const [profileData, setProfileData] = useState({
         name: "",
         email: "",
@@ -45,56 +50,6 @@ export default function ProfilePage() {
     const [modalOpen, setModalOpen] = useState(false)
     const [modalType, setModalType] = useState<'models' | 'collaborators' | null>(null)
 
-    // Mock Data for Models (User requested 4 models)
-    // Fetch Models and enrich with feature counts
-    useEffect(() => {
-        if (status === "authenticated") {
-            const fetchModels = async () => {
-                try {
-                    const res = await fetch('/api/proxy/models')
-                    if (res.ok) {
-                        const data = await res.json()
-                        let modelsList = data.models || []
-
-                        // Sort by accuracy (descending)
-                        modelsList.sort((a: any, b: any) => {
-                            const accA = a.metrics?.accuracy || 0
-                            const accB = b.metrics?.accuracy || 0
-                            return accB - accA
-                        })
-
-                        if (modelsList.length === 0) {
-                            // Fallback Mock Data if API returns empty (for demo)
-                            setProfileData(prev => ({
-                                ...prev,
-                                models: [
-                                    { name: "MediScan AI", type: "Computer Vision", status: "Deployed", accuracy: 0.95 },
-                                    { name: "HealthBot Pro", type: "NLP", status: "Deployed", accuracy: 0.88 },
-                                    { name: "GenomicNet", type: "Bioinformatics", status: "Training", accuracy: 0.72 },
-                                    { name: "PharmaPredict", type: "Predictive Analytics", status: "Deployed", accuracy: 0.91 }
-                                ] as any
-                            }))
-                        } else {
-                            setProfileData(prev => ({
-                                ...prev,
-                                models: modelsList.map((m: any) => ({
-                                    name: `${m.target_column} Model`, // Use target column as name
-                                    type: m.algorithm,
-                                    status: "Deployed", // Assume deployed if in list
-                                    accuracy: m.metrics?.accuracy,
-                                    id: m.model_id
-                                }))
-                            }))
-                        }
-                    }
-                } catch (error) {
-                    console.error("Failed to fetch models", error)
-                }
-            }
-            fetchModels()
-        }
-    }, [status])
-
     // Mock Collaborators
     const collaborators = [
         { name: "Sarah Chen", role: "Data Scientist", avatar: "https://i.pravatar.cc/150?u=sarah" },
@@ -105,54 +60,69 @@ export default function ProfilePage() {
 
     // Fetch profile on mount
     useEffect(() => {
-        if (status === "unauthenticated") {
-            router.push("/auth/login")
-            return
-        }
+        if (!authLoading) {
+            if (!user) {
+                router.push("/auth/login")
+                return
+            }
 
-        if (status === "authenticated") {
             const fetchProfile = async () => {
                 try {
-                    const res = await fetch('/api/profile')
-                    if (res.ok) {
-                        const data = await res.json()
-                        // Map 'image' from DB to 'avatar' for state
-                        const mappedData = {
-                            ...data,
-                            avatar: data.image || data.avatar || ""
+                    const docRef = doc(db, "users", user.uid)
+
+                    // Create a timeout promise that rejects after 2 seconds
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error("Timeout")), 2000)
+                    )
+
+                    let data = {}
+                    try {
+                        // Race between Firestore fetch and timeout
+                        const docSnap = await Promise.race([
+                            getDoc(docRef),
+                            timeoutPromise
+                        ]) as any
+
+                        if (docSnap.exists()) {
+                            data = docSnap.data()
                         }
-                        setProfileData(prev => ({ ...prev, ...mappedData }))
-                        setTempData(prev => ({ ...prev, ...mappedData }))
-                        if (data.themeColor) setThemeColor(data.themeColor)
+                    } catch (err: any) {
+                        console.warn("Profile fetch timed out or failed (using Auth fallback):", err)
+                        // Fallback to Auth data is handled below
                     }
+
+                    const mappedData = {
+                        ...profileData,
+                        ...data,
+                        name: (data as any).displayName || (data as any).name || user.displayName || "User",
+                        email: user.email || (data as any).email || "No email provided",
+                        avatar: (data as any).photoURL || (data as any).avatar || user.photoURL || "",
+                        models: (data as any).models || []
+                    }
+                    setProfileData(mappedData)
+                    setTempData(mappedData)
+                    if ((data as any).themeColor) setThemeColor((data as any).themeColor)
+
                 } catch (error) {
-                    console.error("Failed to fetch profile", error)
+                    console.error("Critical error in fetchProfile", error)
                 } finally {
                     setLoading(false)
                 }
             }
             fetchProfile()
         }
-    }, [status, router, setThemeColor])
+    }, [user, authLoading, router, setThemeColor])
 
     const handleSave = async () => {
+        if (!user) return
         try {
             const dataToSave = { ...tempData, themeColor }
-            const res = await fetch('/api/profile', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(dataToSave)
-            })
-            if (res.ok) {
-                const updated = await res.json()
-                // Ensure we map the response back too
-                const mappedUpdated = {
-                    ...updated,
-                    avatar: updated.image || updated.avatar || ""
-                }
-                setProfileData(prev => ({ ...prev, ...mappedUpdated }))
-                setEditMode(false)
-            }
+            await setDoc(doc(db, "users", user.uid), dataToSave, { merge: true })
+
+            setProfileData(prev => ({ ...prev, ...dataToSave }))
+            setEditMode(false)
+            setShowSaveSuccess(true)
+            setTimeout(() => setShowSaveSuccess(false), 2000)
         } catch (error) {
             console.error("Failed to save profile", error)
         }
@@ -163,12 +133,36 @@ export default function ProfilePage() {
         setEditMode(false)
     }
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'banner') => {
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'banner') => {
         const file = e.target.files?.[0]
-        if (file) {
+        if (file && user) {
             const reader = new FileReader()
-            reader.onloadend = () => {
-                setTempData(prev => ({ ...prev, [type]: reader.result as string }))
+            reader.onloadend = async () => {
+                const result = reader.result as string
+                // Update local state immediately for preview
+                setTempData(prev => ({ ...prev, [type]: result }))
+
+                // Upload to Firebase Storage
+                try {
+                    const storageRef = ref(storage, `${type}s/${user.uid}`)
+                    await uploadString(storageRef, result, 'data_url')
+                    const downloadURL = await getDownloadURL(storageRef)
+
+                    // Update Firestore with new URL
+                    await setDoc(doc(db, "users", user.uid), { [type === 'avatar' ? 'photoURL' : type]: downloadURL }, { merge: true })
+
+                    // ALSO Update Auth Profile for Avatar (Backup Persistence)
+                    if (type === 'avatar') {
+                        await updateProfile(user, { photoURL: downloadURL })
+                    }
+
+                    // Update profile data with remote URL
+                    setProfileData(prev => ({ ...prev, [type]: downloadURL }))
+                    setTempData(prev => ({ ...prev, [type]: downloadURL }))
+                } catch (error) {
+                    console.error(`Error uploading ${type}:`, error)
+                    alert(`Failed to upload image. Ensure Firebase Storage is enabled in Console. Error: ${error}`)
+                }
             }
             reader.readAsDataURL(file)
         }
@@ -178,10 +172,10 @@ export default function ProfilePage() {
         // Implement password change logic here
         console.log("Password change requested", passwordData)
         setPasswordData({ current: "", new: "", confirm: "" })
-        alert("Password update simulated.")
+        alert("Password update simulated. Use Forgot Password for actual reset.")
     }
 
-    if (loading) {
+    if (authLoading || loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-white dark:bg-black text-black dark:text-white">
                 <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
@@ -189,7 +183,24 @@ export default function ProfilePage() {
         )
     }
 
-
+    // Success Animation Overlay
+    const SuccessOverlay = () => (
+        <AnimatePresence>
+            {showSaveSuccess && (
+                <motion.div
+                    initial={{ opacity: 0, y: 50 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 50 }}
+                    className="fixed bottom-10 right-10 z-[100] bg-green-500 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 font-bold"
+                >
+                    <div className="bg-white/20 p-1 rounded-full">
+                        <Check className="w-4 h-4" />
+                    </div>
+                    Profile Saved Successfully
+                </motion.div>
+            )}
+        </AnimatePresence>
+    )
 
     const openModal = (type: 'models' | 'collaborators') => {
         setModalType(type)
@@ -203,7 +214,6 @@ export default function ProfilePage() {
 
     return (
         <>
-            {/* ... existing Navbar/ThemeToggle ... */}
             <div className="fixed bg-black/10 dark:bg-white/10 text-black dark:text-white top-0 right-0 z-50">
                 <ThemeToggle />
             </div>
@@ -285,7 +295,7 @@ export default function ProfilePage() {
             </div>
 
             <main className="relative z-10 min-h-screen flex flex-col items-center pt-24 pb-8 px-4 md:px-6">
-
+                <SuccessOverlay />
                 {/* Main Glass Container */}
                 <motion.div
                     initial={{ opacity: 0, scale: 0.98 }}
@@ -353,20 +363,46 @@ export default function ProfilePage() {
                                             className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-xl px-4 py-2 text-lg font-bold text-black dark:text-white w-full text-center focus:bg-black/10 dark:bg-white/10 transition-colors"
                                             placeholder="Name"
                                         />
-                                        <input
-                                            value={tempData.role || ""}
-                                            onChange={(e) => setTempData({ ...tempData, role: e.target.value })}
-                                            className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-xl px-4 py-2 text-black dark:text-white/70 w-full text-center focus:bg-black/10 dark:bg-white/10 transition-colors"
-                                            placeholder="Role"
-                                        />
+                                        <div className="flex flex-col gap-2">
+                                            <div className="relative">
+                                                <Briefcase className="absolute left-3 top-2.5 w-4 h-4 text-black/40 dark:text-white/40" />
+                                                <input
+                                                    value={tempData.role || ""}
+                                                    onChange={(e) => setTempData({ ...tempData, role: e.target.value })}
+                                                    className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-xl pl-10 pr-4 py-2 text-black dark:text-white/70 w-full text-left focus:bg-black/10 dark:bg-white/10 transition-colors"
+                                                    placeholder="Role (e.g. AI Researcher)"
+                                                />
+                                            </div>
+                                            <div className="relative">
+                                                <MapPin className="absolute left-3 top-2.5 w-4 h-4 text-black/40 dark:text-white/40" />
+                                                <input
+                                                    value={tempData.location || ""}
+                                                    onChange={(e) => setTempData({ ...tempData, location: e.target.value })}
+                                                    className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-xl pl-10 pr-4 py-2 text-black dark:text-white/70 w-full text-left focus:bg-black/10 dark:bg-white/10 transition-colors"
+                                                    placeholder="Location (e.g. San Francisco)"
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
                                 ) : (
                                     <>
                                         <h1 className="text-2xl font-bold text-black dark:text-white mb-1">{profileData.name || "User Name"}</h1>
-                                        <p className="text-black/60 dark:text-white/40 text-sm mb-3 font-medium">{profileData.email}</p>
-                                        <p className="text-black/80 dark:text-white/60 flex items-center gap-2 justify-center mb-4 text-sm">
-                                            <Briefcase className="w-4 h-4" /> {profileData.role || "No Role"}
-                                        </p>
+                                        <p className="text-black/60 dark:text-white/40 text-sm mb-4 font-medium">{profileData.email}</p>
+
+                                        <div className="flex flex-wrap gap-2 justify-center mb-6">
+                                            {profileData.role && (
+                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-full text-sm text-black/80 dark:text-white/70 backdrop-blur-sm">
+                                                    <Briefcase className="w-3.5 h-3.5" />
+                                                    <span>{profileData.role}</span>
+                                                </div>
+                                            )}
+                                            {profileData.location && (
+                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-full text-sm text-black/80 dark:text-white/70 backdrop-blur-sm">
+                                                    <MapPin className="w-3.5 h-3.5" />
+                                                    <span>{profileData.location}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </>
                                 )}
 
@@ -453,7 +489,7 @@ export default function ProfilePage() {
                                     >
                                         {/* Sign Out (Moved to Top) */}
                                         <div className="flex justify-end">
-                                            <button onClick={() => signOut({ callbackUrl: "/" })} className="px-6 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 font-bold hover:bg-red-500/20 transition-colors flex items-center gap-2 group text-sm">
+                                            <button onClick={logout} className="px-6 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 font-bold hover:bg-red-500/20 transition-colors flex items-center gap-2 group text-sm">
                                                 <LogOut className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> Sign Out
                                             </button>
                                         </div>

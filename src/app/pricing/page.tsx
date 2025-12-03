@@ -7,7 +7,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { useThemeColor } from "@/context/theme-context"
 import { Check, X, Loader2, Star, Cpu, CreditCard } from "lucide-react"
 import GradientBlinds from "@/components/PrismaticBurst"
-import { useSession } from "next-auth/react"
+import { useAuth } from "@/context/auth-context"
 import { useRouter } from "next/navigation"
 import SuccessModal from "@/components/ui/success-modal"
 
@@ -18,7 +18,7 @@ declare global {
 }
 
 export default function PricingPage() {
-    const { data: session } = useSession()
+    const { user } = useAuth()
     const router = useRouter()
     const { themeColor } = useThemeColor()
     const [loading, setLoading] = useState(false)
@@ -38,7 +38,7 @@ export default function PricingPage() {
     }
 
     const handlePayment = async (plan: string, amount: number) => {
-        if (!session) {
+        if (!user) {
             router.push("/auth/login")
             return
         }
@@ -86,8 +86,8 @@ export default function PricingPage() {
                 }
             },
             prefill: {
-                name: session.user?.name,
-                email: session.user?.email,
+                name: user?.displayName,
+                email: user?.email,
             },
             theme: {
                 color: "#6366f1",

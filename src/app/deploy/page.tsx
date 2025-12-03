@@ -6,7 +6,7 @@ import { useThemeColor } from "@/context/theme-context"
 import FloatingLines from "@/components/react-bits/FloatingLines"
 import { Navbar } from "@/components/navbar"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useSession } from "next-auth/react"
+import { useAuth } from "@/context/auth-context"
 import {
     Rocket, Play, Terminal, X, Loader2, Sparkles
 } from "lucide-react"
@@ -29,7 +29,7 @@ interface Model {
 
 export default function DeployPage() {
     const { themeColor, setThemeColor } = useThemeColor()
-    const { data: session } = useSession()
+    const { user } = useAuth()
     const [models, setModels] = useState<Model[]>([])
     const [loading, setLoading] = useState(true)
     const [isPredictModalOpen, setIsPredictModalOpen] = useState(false)
@@ -74,8 +74,8 @@ export default function DeployPage() {
                 }
 
                 // Filter models by user email if available
-                if (session?.user?.email) {
-                    modelsList = modelsList.filter((m: any) => m.user_email === session.user?.email)
+                if (user?.email) {
+                    modelsList = modelsList.filter((m: any) => m.user_email === user?.email)
                 }
 
                 setModels(modelsList)

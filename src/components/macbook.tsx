@@ -11,11 +11,14 @@ export function MacBook({ children, ...props }: any) {
         if (typeof document === 'undefined') return null
         const vid = document.createElement('video')
         vid.src = '/doctor.mp4'
-        vid.crossOrigin = 'anonymous'
         vid.loop = true
         vid.muted = true
         vid.playsInline = true
         vid.autoplay = true
+        // Add error listener
+        vid.onerror = (e) => {
+            console.warn("Video failed to load:", e)
+        }
         return vid
     })
 
@@ -28,7 +31,7 @@ export function MacBook({ children, ...props }: any) {
         texture.format = THREE.RGBAFormat
         texture.colorSpace = THREE.SRGBColorSpace
         texture.generateMipmaps = false
-        texture.flipY = true  // Fixed: flip video right-side up
+        texture.flipY = true
         return texture
     })
 
@@ -36,50 +39,40 @@ export function MacBook({ children, ...props }: any) {
     const { scene } = useGLTF('/macbook.glb')
     const clone = useMemo(() => scene.clone(), [scene])
 
-    // Store reference to the Screen mesh (which is now the parent of the entire lid)
+    // Store reference to the Screen mesh
     const screenRef = useRef<THREE.Object3D | null>(null)
 
     // Apply video texture and set initial OPEN state
     useEffect(() => {
         if (!clone || !videoTexture || !videoElement) return
 
-        // Find Screen mesh (which is the parent of the lid assembly)
+        // Find Screen mesh
         clone.traverse((child) => {
             if (child instanceof THREE.Mesh && child.name === 'Screen') {
-                console.log('✅ Found Screen mesh, applying video texture')
-
-                // Apply video texture to the screen
                 child.material = new THREE.MeshBasicMaterial({
                     map: videoTexture,
                     side: THREE.DoubleSide,
                     toneMapped: false
                 })
-
                 child.material.needsUpdate = true
-
-                // Store reference to Screen (which now has the lid as children)
                 screenRef.current = child
 
-                // Set initial OPEN state (lid fully open showing screen)
-                // Start at 117° = fully open with screen visible
+                // Set initial OPEN state
                 child.rotation.x = Math.PI * 0.65
-                console.log('🔓 Set MacBook to OPEN state (117°)')
             }
         })
 
-        // Start video playback immediately and keep it playing
+        // Start video playback
         const playVideo = async () => {
             try {
                 await videoElement.play()
-                console.log('✅ Video playing')
             } catch (err) {
-                console.log('⚠️ Autoplay blocked, will play on user interaction')
+                console.warn('Autoplay blocked, waiting for interaction')
                 const onClick = async () => {
                     try {
                         await videoElement.play()
-                        console.log('✅ Video playing after click')
                     } catch (e) {
-                        console.error('❌ Failed to play:', e)
+                        console.error('Failed to play video:', e)
                     }
                     document.removeEventListener('click', onClick)
                 }
@@ -87,7 +80,6 @@ export function MacBook({ children, ...props }: any) {
             }
         }
 
-        // Try to play immediately
         if (videoElement.readyState >= 2) {
             playVideo()
         } else {
@@ -96,6 +88,8 @@ export function MacBook({ children, ...props }: any) {
 
         return () => {
             videoElement.pause()
+            // Optional: videoTexture.dispose() if we were re-creating it often, 
+            // but here it's stable. 
         }
     }, [clone, videoTexture, videoElement])
 
@@ -140,12 +134,14 @@ export function DualMacBook({ children, ...props }: any) {
 
     // Create video element
     const [videoElement] = useState(() => {
+        if (typeof document === 'undefined') return null
         const video = document.createElement('video')
         video.src = '/doctor.mp4'
         video.loop = true
         video.muted = true
         video.playsInline = true
-        video.play().catch(console.error)
+        video.autoplay = true
+        video.onerror = (e) => console.warn("DualMacBook video failed:", e)
         return video
     })
 
@@ -156,25 +152,43 @@ export function DualMacBook({ children, ...props }: any) {
         texture.minFilter = THREE.LinearFilter
         texture.magFilter = THREE.LinearFilter
         texture.format = THREE.RGBAFormat
-        texture.colorSpace = THREE.SRGBColorSpace  // FIX: Proper color space
+        texture.colorSpace = THREE.SRGBColorSpace
         texture.flipY = true
         return texture
     })
 
     useEffect(() => {
-        if (!group.current || !videoTexture) return
+        if (!group.current || !videoTexture || !videoElement) return
 
-        // Apply video texture to ALL Screen meshes (Screen, Screen.001, etc.)
+        // Apply video texture to ALL Screen meshes
         group.current.traverse((child) => {
             if (child instanceof THREE.Mesh && child.name.includes('Screen')) {
-                console.log('Applying video to:', child.name)  // Debug log
                 child.material = new THREE.MeshBasicMaterial({
                     map: videoTexture,
-                    // FIX: Remove toneMapped to preserve video colors
+                    toneMapped: false
                 })
             }
         })
-    }, [videoTexture])
+
+        // Play video
+        const playVideo = async () => {
+            try {
+                await videoElement.play()
+            } catch (err) {
+                console.warn('DualMacBook autoplay blocked')
+            }
+        }
+
+        if (videoElement.readyState >= 2) {
+            playVideo()
+        } else {
+            videoElement.addEventListener('loadeddata', playVideo, { once: true })
+        }
+
+        return () => {
+            videoElement.pause()
+        }
+    }, [videoTexture, videoElement])
 
     return (
         <group ref={group} {...props} dispose={null}>

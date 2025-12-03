@@ -6,7 +6,7 @@ import { useThemeColor } from "@/context/theme-context"
 import Aurora from "@/components/react-bits/Aurora"
 import { Navbar } from "@/components/navbar"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useSession } from "next-auth/react"
+import { useAuth } from "@/context/auth-context"
 import { Send, Paperclip, Search, Sparkles, Server, Zap, FileText, Image as ImageIcon, Loader2, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -61,7 +61,7 @@ function cleanMessage(text: string) {
 
 export default function ChatPage() {
     const { themeColor, setThemeColor } = useThemeColor()
-    const { data: session } = useSession()
+    const { user } = useAuth()
 
     const [attachedFiles, setAttachedFiles] = useState<File[]>([])
     const [researchMode, setResearchMode] = useState(false)
@@ -165,8 +165,8 @@ export default function ChatPage() {
                     let models: Model[] = data.models || []
 
                     // Filter models by user email if available
-                    if (session?.user?.email) {
-                        models = models.filter((m: Model) => m.user_email === session.user?.email)
+                    if (user?.email) {
+                        models = models.filter((m: Model) => m.user_email === user?.email)
                     }
 
                     const mlModels = models.map((m: Model, idx: number) => ({
@@ -197,7 +197,7 @@ export default function ChatPage() {
             }
         }
         fetchDeployedModels()
-    }, [session])
+    }, [user])
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {

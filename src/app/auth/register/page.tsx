@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { motion } from "framer-motion"
@@ -9,9 +8,11 @@ import { useThemeColor } from "@/context/theme-context"
 import Plasma from "@/components/react-bits/Plasma"
 import SuccessModal from "@/components/ui/success-modal"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { Lock, Mail, User, ArrowRight, Loader2, AlertCircle, Github, Square } from "lucide-react"
-import { FaMicrosoft } from 'react-icons/fa'
-import { FcGoogle } from "react-icons/fc"
+import { Lock, Mail, User, ArrowRight, Loader2, AlertCircle, Github } from "lucide-react"
+import { FaMicrosoft, FaApple, FaGoogle } from 'react-icons/fa'
+import { auth, db, googleProvider, githubProvider, microsoftProvider, appleProvider } from "@/lib/firebase"
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile, signInWithPopup, AuthProvider } from "firebase/auth"
+import { doc, setDoc, getDoc } from "firebase/firestore"
 
 export default function RegisterPage() {
     const { themeColor, setThemeColor } = useThemeColor()
@@ -22,11 +23,40 @@ export default function RegisterPage() {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
     const [showSuccess, setShowSuccess] = useState(false)
+    const [showErrorModal, setShowErrorModal] = useState(false)
 
     // Set default theme color to Cyan on mount
     useEffect(() => {
         setThemeColor("#00ffff")
     }, [setThemeColor])
+
+    const handleSuccess = async (user: any) => {
+        // Create user document
+        try {
+            const userDocRef = doc(db, "users", user.uid);
+            const userDoc = await getDoc(userDocRef);
+
+            if (!userDoc.exists()) {
+                await setDoc(userDocRef, {
+                    uid: user.uid,
+                    email: user.email,
+                    displayName: user.displayName || name,
+                    photoURL: user.photoURL,
+                    phoneNumber: user.phoneNumber,
+                    createdAt: new Date().toISOString(),
+                    role: "user"
+                });
+            }
+
+            setShowSuccess(true)
+            setTimeout(() => {
+                router.push("/?login=success")
+            }, 2000)
+        } catch (e) {
+            console.error("Error creating user doc:", e)
+            router.push("/?login=success")
+        }
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -34,36 +64,38 @@ export default function RegisterPage() {
         setError("")
 
         try {
-            const res = await fetch("/api/auth/register", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, email, password }),
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+            const user = userCredential.user
+
+            await updateProfile(user, {
+                displayName: name
             })
 
-            if (res.ok) {
-                // Auto sign in after registration
-                await signIn("credentials", {
-                    email,
-                    password,
-                })
-                setShowSuccess(true)
-                setTimeout(() => {
-                    router.push("/")
-                    router.refresh()
-                }, 2000)
+            await sendEmailVerification(user)
+            await handleSuccess(user)
+
+        } catch (err: any) {
+            if (err.code === 'auth/email-already-in-use') {
+                setShowErrorModal(true)
             } else {
-                const data = await res.json()
-                setError(data.message || "Registration failed")
+                console.error("Registration error:", err)
+                setError(err.message.replace("Firebase: ", ""))
             }
-        } catch (err) {
-            setError("Something went wrong. Please try again.")
-        } finally {
             setLoading(false)
         }
     }
 
-    const handleGoogleSignIn = async () => {
-        await signIn("google", { callbackUrl: "/" })
+    const handleSocialLogin = async (provider: AuthProvider) => {
+        setLoading(true)
+        setError("")
+        try {
+            const result = await signInWithPopup(auth, provider)
+            await handleSuccess(result.user)
+        } catch (err: any) {
+            console.error("Social login error:", err)
+            setError(err.message.replace("Firebase: ", ""))
+            setLoading(false)
+        }
     }
 
     return (
@@ -181,27 +213,38 @@ export default function RegisterPage() {
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-center gap-4">
+                        <div className="grid grid-cols-4 gap-4">
                             <button
-                                onClick={handleGoogleSignIn}
-                                className="group relative w-14 h-14 rounded-full bg-white hover:bg-gray-100 transition-all flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 border border-gray-200"
+                                onClick={() => handleSocialLogin(googleProvider)}
+                                className="group relative h-14 rounded-full bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center border border-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98]"
                                 title="Continue with Google"
                             >
-                                <FcGoogle className="w-7 h-7" />
+                                <div className="absolute inset-0 bg-red-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity rounded-full" />
+                                <FaGoogle className="w-6 h-6 text-red-500 relative z-10" />
                             </button>
                             <button
-                                onClick={() => signIn("github", { callbackUrl: "/" })}
-                                className="group relative w-14 h-14 rounded-full bg-[#24292e] hover:bg-[#2f363d] transition-all flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 border border-white/10"
+                                onClick={() => handleSocialLogin(githubProvider)}
+                                className="group relative h-14 rounded-full bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center border border-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98]"
                                 title="Continue with GitHub"
                             >
-                                <Github className="w-6 h-6 text-white" />
+                                <div className="absolute inset-0 bg-white/10 blur-xl opacity-0 group-hover:opacity-100 transition-opacity rounded-full" />
+                                <Github className="w-6 h-6 text-white relative z-10" />
                             </button>
                             <button
-                                onClick={() => signIn("azure-ad", { callbackUrl: "/" })}
-                                className="group relative w-14 h-14 rounded-full bg-[#00a4ef] hover:bg-[#0078d4] transition-all flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 border border-white/10"
+                                onClick={() => handleSocialLogin(microsoftProvider)}
+                                className="group relative h-14 rounded-full bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center border border-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98]"
                                 title="Continue with Microsoft"
                             >
-                                <FaMicrosoft className="w-6 h-6 text-white" />
+                                <div className="absolute inset-0 bg-blue-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity rounded-full" />
+                                <FaMicrosoft className="w-6 h-6 text-[#00a4ef] relative z-10" />
+                            </button>
+                            <button
+                                onClick={() => handleSocialLogin(appleProvider)}
+                                className="group relative h-14 rounded-full bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center border border-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98]"
+                                title="Continue with Apple"
+                            >
+                                <div className="absolute inset-0 bg-white/10 blur-xl opacity-0 group-hover:opacity-100 transition-opacity rounded-full" />
+                                <FaApple className="w-6 h-6 text-white relative z-10" />
                             </button>
                         </div>
 
@@ -221,6 +264,14 @@ export default function RegisterPage() {
                 isOpen={showSuccess}
                 message="Successfully Signed Up"
                 subMessage="Creating your account..."
+            />
+
+            <SuccessModal
+                isOpen={showErrorModal}
+                message="User Already Exists"
+                subMessage="This email is already registered. Please sign in instead."
+                type="error"
+                onClose={() => setShowErrorModal(false)}
             />
         </div >
     )

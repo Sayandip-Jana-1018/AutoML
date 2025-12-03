@@ -6,7 +6,7 @@ import { useThemeColor } from "@/context/theme-context"
 import ColorBends from "@/components/ColorBends"
 import { Navbar } from "@/components/navbar"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useSession } from "next-auth/react"
+import { useAuth } from "@/context/auth-context"
 import {
     Rocket, Copy, CheckCircle, ExternalLink, Plus, X, Loader2, Sparkles, TrendingUp, Calendar
 } from "lucide-react"
@@ -28,7 +28,7 @@ interface Model {
 
 export default function MarketplacePage() {
     const { themeColor, setThemeColor } = useThemeColor()
-    const { data: session } = useSession()
+    const { user } = useAuth()
     const [models, setModels] = useState<Model[]>([])
     const [loading, setLoading] = useState(true)
     const [selectedModel, setSelectedModel] = useState<Model | null>(null)
@@ -52,8 +52,8 @@ export default function MarketplacePage() {
                 let modelsList = data.models || []
 
                 // Filter models by user email if available
-                if (session?.user?.email) {
-                    modelsList = modelsList.filter((m: any) => m.user_email === session.user?.email)
+                if (user?.email) {
+                    modelsList = modelsList.filter((m: any) => m.user_email === user?.email)
                 }
 
                 setModels(modelsList)
