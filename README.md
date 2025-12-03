@@ -1,7 +1,7 @@
 # 🌿 Healthy ~ Fly (Healthy) - AI-Powered Healthcare Ecosystem
 
 ![Project Status](https://img.shields.io/badge/Status-Active-success)
-![Stack](https://img.shields.io/badge/Stack-Next.js%20%7C%20Gemini%20%7C%20Prisma%20%7C%20PostgreSQL-blue)
+![Stack](https://img.shields.io/badge/Stack-Next.js%20%7C%20Firebase%20%7C%20Gemini%20AI-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 **Healthy ~ Fly** (powered by Healthy) is a comprehensive AI-driven healthcare platform that unifies patient monitoring, emergency response, and custom AI model creation into a single ecosystem. From building AI models for patients to dispatching ambulances with real-time IoT data, Healthy ~ Fly covers the entire lifecycle of intelligent care.
@@ -18,10 +18,12 @@ The gateway to the ecosystem, featuring:
 *   **One-Click Deploy**: Instant production-ready model deployment.
 
 ### 2. 🔐 Secure Authentication
-Robust authentication system powered by **NextAuth.js v5**:
-*   **Multi-Provider Support**: Sign in with **Google**, **GitHub**, **Microsoft (Azure AD)**, or **Email/Password**.
-*   **Robust Security**: Secure session management with JWT and HTTP-only cookies.
-*   **Profile Management**: Dedicated profile page with adaptive UI (Light/Dark mode support).
+Robust authentication system powered by **Firebase Authentication**:
+*   **Multi-Provider Support**: Sign in with **Google**, **GitHub**, **Microsoft (Azure AD)**, **Phone (OTP)**, or **Email/Password**.
+*   **Account Linking**: Seamlessly link multiple sign-in methods to a single account.
+*   **Password Reset**: Secure email-based password recovery.
+*   **Profile Management**: Dedicated profile page with real-time data sync via Firestore.
+*   **Session Management**: Automatic session handling with Firebase Auth.
 
 ### 3. 💳 Payments (Razorpay)
 Seamless payment integration for premium features:
@@ -69,8 +71,8 @@ Manage and monitor your active AI services.
 *   **3D**: React Three Fiber
 
 ### Backend & AI
-*   **Auth**: NextAuth.js v5 (Auth.js)
-*   **Database**: PostgreSQL (via Prisma ORM)
+*   **Auth**: Firebase Authentication (Email/Password, Google, GitHub, Microsoft, Phone OTP)
+*   **Database**: Firebase Firestore (NoSQL)
 *   **AI Models**: Google Gemini 2.0 Flash, OpenAI GPT-4
 *   **AutoML**: Python (Scikit-learn) backend
 *   **API**: Next.js Server Actions
@@ -125,10 +127,26 @@ To use the Live Vitals feature:
     ```
 2.  **Environment Variables** (`.env`):
     ```env
-    DATABASE_URL="postgresql://..."
-    AUTH_SECRET="your-secret"
-    NEXT_PUBLIC_RAZORPAY_KEY_ID="your-key"
-    GEMINI_API_KEY="xxx"
+    # Firebase Configuration
+    NEXT_PUBLIC_FIREBASE_API_KEY="your-firebase-api-key"
+    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="your-project.firebaseapp.com"
+    NEXT_PUBLIC_FIREBASE_PROJECT_ID="your-project-id"
+    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="your-project.appspot.com"
+    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="your-sender-id"
+    NEXT_PUBLIC_FIREBASE_APP_ID="your-app-id"
+    
+    # OAuth Providers
+    GOOGLE_CLIENT_ID="your-google-client-id"
+    GOOGLE_CLIENT_SECRET="your-google-client-secret"
+    GITHUB_ID="your-github-client-id"
+    GITHUB_SECRET="your-github-client-secret"
+    MICROSOFT_CLIENT_ID="your-microsoft-client-id"
+    MICROSOFT_CLIENT_SECRET="your-microsoft-client-secret"
+    MICROSOFT_TENANT_ID="common"
+    
+    # AI & Payments
+    GEMINI_API_KEY="your-gemini-api-key"
+    NEXT_PUBLIC_RAZORPAY_KEY_ID="your-razorpay-key"
     # ... other keys
     ```
 3.  **Run Locally**:
