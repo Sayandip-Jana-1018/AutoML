@@ -31,6 +31,7 @@ export default function LoginPage() {
     const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null)
     const [otpSent, setOtpSent] = useState(false)
     const [isOtpInvalid, setIsOtpInvalid] = useState(false)
+    const [isPasswordInvalid, setIsPasswordInvalid] = useState(false)
     const [linkData, setLinkData] = useState<{ email: string, credential: any } | null>(null)
 
     const countryCodes = [
@@ -104,8 +105,17 @@ export default function LoginPage() {
             const userCredential = await signInWithEmailAndPassword(auth, email, password)
             await handleSuccess(userCredential.user)
         } catch (err: any) {
-            console.error("Login error:", err)
-            setError(err.message.replace("Firebase: ", ""))
+            // Don't log invalid credential errors as they're handled with the overlay
+            if (err.code !== 'auth/invalid-credential' && err.code !== 'auth/wrong-password') {
+                console.error("Login error:", err)
+            }
+
+            // Show blur overlay for wrong password
+            if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+                setIsPasswordInvalid(true)
+            } else {
+                setError(err.message.replace("Firebase: ", ""))
+            }
             setLoading(false)
         }
     }
@@ -464,6 +474,33 @@ export default function LoginPage() {
                                 onClick={() => {
                                     setIsOtpInvalid(false)
                                     setOtp("")
+                                }}
+                                className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold transition-all"
+                            >
+                                Try Again
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* Invalid Password Overlay */}
+                {isPasswordInvalid && (
+                    <motion.div
+                        initial={{ opacity: 0, backdropFilter: "blur(0px)" }}
+                        animate={{ opacity: 1, backdropFilter: "blur(10px)" }}
+                        exit={{ opacity: 0, backdropFilter: "blur(0px)" }}
+                        className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 rounded-3xl"
+                    >
+                        <div className="text-center p-6">
+                            <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <AlertCircle className="w-8 h-8 text-red-500" />
+                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2">Wrong Password</h3>
+                            <p className="text-white/50 text-sm mb-6">The email or password you entered is incorrect. Please try again.</p>
+                            <button
+                                onClick={() => {
+                                    setIsPasswordInvalid(false)
+                                    setPassword("")
                                 }}
                                 className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold transition-all"
                             >

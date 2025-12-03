@@ -213,10 +213,11 @@ export default function RegisterPage() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-4 gap-4">
+
+                        <div className="flex justify-center gap-4">
                             <button
                                 onClick={() => handleSocialLogin(googleProvider)}
-                                className="group relative h-14 rounded-full bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center border border-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98]"
+                                className="group relative h-14 w-14 rounded-full bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center border border-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98]"
                                 title="Continue with Google"
                             >
                                 <div className="absolute inset-0 bg-red-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity rounded-full" />
@@ -224,7 +225,7 @@ export default function RegisterPage() {
                             </button>
                             <button
                                 onClick={() => handleSocialLogin(githubProvider)}
-                                className="group relative h-14 rounded-full bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center border border-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98]"
+                                className="group relative h-14 w-14 rounded-full bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center border border-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98]"
                                 title="Continue with GitHub"
                             >
                                 <div className="absolute inset-0 bg-white/10 blur-xl opacity-0 group-hover:opacity-100 transition-opacity rounded-full" />
@@ -232,21 +233,14 @@ export default function RegisterPage() {
                             </button>
                             <button
                                 onClick={() => handleSocialLogin(microsoftProvider)}
-                                className="group relative h-14 rounded-full bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center border border-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98]"
+                                className="group relative h-14 w-14 rounded-full bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center border border-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98]"
                                 title="Continue with Microsoft"
                             >
                                 <div className="absolute inset-0 bg-blue-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity rounded-full" />
                                 <FaMicrosoft className="w-6 h-6 text-[#00a4ef] relative z-10" />
                             </button>
-                            <button
-                                onClick={() => handleSocialLogin(appleProvider)}
-                                className="group relative h-14 rounded-full bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center border border-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98]"
-                                title="Continue with Apple"
-                            >
-                                <div className="absolute inset-0 bg-white/10 blur-xl opacity-0 group-hover:opacity-100 transition-opacity rounded-full" />
-                                <FaApple className="w-6 h-6 text-white relative z-10" />
-                            </button>
                         </div>
+
 
                         <div className="mt-8 text-center">
                             <p className="text-white/50 text-sm">
