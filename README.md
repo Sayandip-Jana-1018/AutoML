@@ -77,6 +77,44 @@
 
 ---
 
+## 🎨 Latest UI Innovations (v2.0)
+
+### 🌀 Training Progress Overlay
+A world-class, immersive full-screen experience during model training:
+- **Morphing 3D Sphere** with orbiting particles and physics-based animations
+- **Neural Network Visualization** with pulsing nodes and animated connections
+- **Hexagon Grid** subtly animated in the background
+- **Pulsing Concentric Rings** with depth effects
+- **Floating Orbs** with 3D radial gradients and glow effects
+- **Typewriter Text Effects** for step transitions
+- **Liquid Progress Bar** with shimmer animations
+- **Spring-based Staggered Animations** using Framer Motion
+
+### ⚙️ Training Configuration Overlay
+A glassmorphic floating panel for fine-tuning training parameters:
+- **Tier-based Machine Selection** (E2 series for Vertex AI)
+- **Epochs Slider** with tier-aware maximum limits
+- **Batch Size Selection** (16, 32, 64, 128)
+- **Learning Rate Options** with smart defaults
+- **Max Trees Slider** for tree-based algorithms
+- **Real-time Config Preview** before training
+
+### 📊 Unified Tab Experience
+All Studio outputs consolidated into a single, accessible row:
+- **Terminal** - Real-time training logs
+- **Versions** - Script version history
+- **Journey** - Model lineage visualization
+- **Metrics** - Live accuracy and loss metrics
+
+### 🎯 Design Philosophy
+- **Glassmorphism** with backdrop blur and transparency
+- **Theme-aware** colors that adapt to user preferences
+- **Micro-animations** for enhanced engagement
+- **Spring physics** for natural, fluid motion
+- **Accessibility-first** with proper focus states
+
+---
+
 ## 🏗️ Architecture
 
 ### High-Level System Architecture
