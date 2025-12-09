@@ -28,7 +28,7 @@ export function HeroSection({ themeColor }: HeroSectionProps) {
                                 textShadow: `0 0 80px ${themeColor}30`
                             }}
                         >
-                            Healthy ~ Fly
+                            AutoForge ~ ML
                         </h1>
                     </motion.div>
 
@@ -38,7 +38,7 @@ export function HeroSection({ themeColor }: HeroSectionProps) {
                         transition={{ duration: 0.8, delay: 0.1 }}
                         className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground/80 max-w-3xl mx-auto"
                     >
-                        Build AI Models for <span style={{ color: themeColor }}>for Patients</span>
+                        Build Zero Code<span style={{ color: themeColor }}> AI Models</span>
                     </motion.p>
                 </div>
 

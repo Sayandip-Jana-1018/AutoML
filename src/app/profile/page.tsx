@@ -8,13 +8,14 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { useAuth } from "@/context/auth-context"
 import { useRouter } from "next/navigation"
 import {
-    User, Bell, Lock, Camera, Edit2, Check, X, Database, BrainCircuit, Loader2, MapPin, Briefcase, Settings, LogOut, Plus, MoreVertical, ChevronRight, Shield
+    User, Bell, Lock, Camera, Edit2, Check, X, Database, BrainCircuit, Loader2, MapPin, Briefcase, Settings, LogOut, Plus, MoreVertical, ChevronRight, Shield, Users
 } from "lucide-react"
 import Prism from "@/components/react-bits/Prism"
 import { db, storage, auth } from "@/lib/firebase"
 import { updateProfile } from "firebase/auth"
-import { doc, getDoc, setDoc } from "firebase/firestore"
+import { doc, getDoc, setDoc, collection, query, where, orderBy, onSnapshot } from "firebase/firestore"
 import { ref, uploadString, getDownloadURL } from "firebase/storage"
+import { ModelsGrid, DatasetsGrid, SecuritySettings } from "@/components/profile"
 
 export default function ProfilePage() {
     const { themeColor, setThemeColor } = useThemeColor()
@@ -39,6 +40,11 @@ export default function ProfilePage() {
     const bannerInputRef = useRef<HTMLInputElement>(null)
     const [loading, setLoading] = useState(true)
 
+    // Real Firestore Data
+    const [userModels, setUserModels] = useState<any[]>([])
+    const [userDatasets, setUserDatasets] = useState<any[]>([])
+    const [loadingAssets, setLoadingAssets] = useState(true)
+
     // View State: 'overview' (Datasets/Models), 'security', 'notifications'
     const [currentView, setCurrentView] = useState<'overview' | 'security' | 'notifications'>('overview')
 
@@ -50,13 +56,9 @@ export default function ProfilePage() {
     const [modalOpen, setModalOpen] = useState(false)
     const [modalType, setModalType] = useState<'models' | 'collaborators' | null>(null)
 
-    // Mock Collaborators
-    const collaborators = [
-        { name: "Sarah Chen", role: "Data Scientist", avatar: "https://i.pravatar.cc/150?u=sarah" },
-        { name: "Alex Rivera", role: "ML Engineer", avatar: "https://i.pravatar.cc/150?u=alex" },
-        { name: "Mike Ross", role: "Frontend Dev", avatar: "https://i.pravatar.cc/150?u=mike" },
-        { name: "John Doe", role: "AI Researcher", avatar: "https://i.pravatar.cc/150?u=john" },
-    ]
+    // Collaborators state (coming from projects)
+    const [collaborators, setCollaborators] = useState<any[]>([])
+    const [showCollaboratorsModal, setShowCollaboratorsModal] = useState(false)
 
     // Fetch profile on mount
     useEffect(() => {
@@ -101,7 +103,8 @@ export default function ProfilePage() {
                     }
                     setProfileData(mappedData)
                     setTempData(mappedData)
-                    if ((data as any).themeColor) setThemeColor((data as any).themeColor)
+                    // Use user's saved color or fallback to cyan
+                    setThemeColor((data as any).themeColor || "#06B6D4")
 
                 } catch (error) {
                     console.error("Critical error in fetchProfile", error)
@@ -112,6 +115,68 @@ export default function ProfilePage() {
             fetchProfile()
         }
     }, [user, authLoading, router, setThemeColor])
+
+    // Fetch user's deployed models and datasets from Firestore
+    useEffect(() => {
+        if (!user?.email) return
+
+        setLoadingAssets(true)
+
+        // Listen to models collection filtered by user email
+        const modelsQuery = query(
+            collection(db, 'models'),
+            where('user_email', '==', user.email),
+            orderBy('created_at', 'desc')
+        )
+
+        const unsubModels = onSnapshot(modelsQuery, (snapshot) => {
+            const models = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                name: doc.data().target_column ? `${doc.data().target_column} Model` : 'Untitled Model',
+                type: doc.data().algorithm || 'Unknown',
+                status: 'Deployed',
+                accuracy: doc.data().metrics?.accuracy
+            }))
+            setUserModels(models)
+            setLoadingAssets(false)
+        }, (err) => {
+            console.error('Error fetching models:', err)
+            setLoadingAssets(false)
+        })
+
+        // Listen to all projects and their datasets
+        const projectsQuery = query(
+            collection(db, 'projects'),
+            where('owner_email', '==', user.email),
+            orderBy('created_at', 'desc')
+        )
+
+        const unsubProjects = onSnapshot(projectsQuery, async (snapshot) => {
+            const allDatasets: any[] = []
+            for (const projectDoc of snapshot.docs) {
+                // Use getDocs for subcollection with v9 syntax
+                const { getDocs } = await import('firebase/firestore')
+                const datasetsRef = collection(db, 'projects', projectDoc.id, 'datasets')
+                const datasetsSnap = await getDocs(datasetsRef)
+                datasetsSnap.forEach((dsDoc: any) => {
+                    allDatasets.push({
+                        id: dsDoc.id,
+                        projectId: projectDoc.id,
+                        ...dsDoc.data()
+                    })
+                })
+            }
+            setUserDatasets(allDatasets)
+        }, (err) => {
+            console.warn('Error fetching datasets:', err)
+        })
+
+        return () => {
+            unsubModels()
+            unsubProjects()
+        }
+    }, [user])
 
     const handleSave = async () => {
         if (!user) return
@@ -202,7 +267,7 @@ export default function ProfilePage() {
         </AnimatePresence>
     )
 
-    const openModal = (type: 'models' | 'collaborators') => {
+    const openModal = (type: 'models') => {
         setModalType(type)
         setModalOpen(true)
     }
@@ -221,9 +286,9 @@ export default function ProfilePage() {
                 <Navbar />
             </div>
 
-            {/* MODAL OVERLAY */}
+            {/* MODAL OVERLAY - All Models */}
             <AnimatePresence>
-                {modalOpen && (
+                {modalOpen && modalType === 'models' && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -235,45 +300,36 @@ export default function ProfilePage() {
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-[#0a0a0a] border border-black/10 dark:border-white/10 rounded-3xl p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl relative"
+                            className="bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl relative"
                             onClick={e => e.stopPropagation()}
                         >
-                            <button onClick={closeModal} className="absolute top-4 right-4 p-2 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:bg-white/10 rounded-full text-black dark:text-white/60 hover:text-black dark:text-white transition-colors">
+                            <button onClick={closeModal} className="absolute top-4 right-4 p-2 bg-white/5 hover:bg-white/10 rounded-full text-white/60 hover:text-white transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
 
-                            <h2 className="text-2xl font-bold text-black dark:text-white mb-6 flex items-center gap-3">
-                                {modalType === 'models' ? <BrainCircuit className="w-6 h-6 text-blue-400" /> : <User className="w-6 h-6 text-purple-400" />}
-                                All {modalType === 'models' ? 'Models' : 'Collaborators'}
+                            <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                                <BrainCircuit className="w-6 h-6 text-blue-400" />
+                                All Deployed Models ({userModels.length})
                             </h2>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {modalType === 'models' ? (
-                                    profileData.models.map((model: any, i: number) => (
-                                        <div key={i} className="bg-black/5 dark:bg-white/5 border border-black dark:border-white p-4 rounded-2xl hover:bg-black/10 dark:bg-white/10 transition-colors group">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <div className="p-2 bg-blue-500/20 rounded-lg text-blue-400">
-                                                    <BrainCircuit className="w-5 h-5" />
-                                                </div>
-                                                <span className={`text-xs font-bold px-2 py-1 rounded-full ${model.status === 'Deployed' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                                                    {model.status}
-                                                </span>
+                                {userModels.map((model: any, i: number) => (
+                                    <div key={model.id || i} className="bg-white/5 border border-white/10 p-4 rounded-2xl hover:bg-white/10 transition-colors group">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div className="p-2 bg-blue-500/20 rounded-lg text-blue-400">
+                                                <BrainCircuit className="w-5 h-5" />
                                             </div>
-                                            <h3 className="font-bold text-black dark:text-white text-lg mb-1">{model.name}</h3>
-                                            <p className="text-black dark:text-white/50 text-sm">{model.type}</p>
+                                            <span className="text-xs font-bold px-2 py-1 rounded-full bg-green-500/20 text-green-400">
+                                                {model.status || 'Deployed'}
+                                            </span>
                                         </div>
-                                    ))
-                                ) : (
-                                    collaborators.map((collab, i) => (
-                                        <div key={i} className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-4 rounded-2xl flex items-center gap-4 hover:bg-black/10 dark:bg-white/10 transition-colors">
-                                            <img src={collab.avatar} alt={collab.name} className="w-12 h-12 rounded-full" />
-                                            <div>
-                                                <div className="font-bold text-black dark:text-white">{collab.name}</div>
-                                                <div className="text-sm text-black dark:text-white/50">{collab.role}</div>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
+                                        <h3 className="font-bold text-white text-lg mb-1">{model.name}</h3>
+                                        <p className="text-white/50 text-sm">{model.type}</p>
+                                        {model.accuracy && (
+                                            <p className="text-xs text-green-400 mt-2">{(model.accuracy * 100).toFixed(1)}% Accuracy</p>
+                                        )}
+                                    </div>
+                                ))}
                             </div>
                         </motion.div>
                     </motion.div>
@@ -494,152 +550,60 @@ export default function ProfilePage() {
                                             </button>
                                         </div>
 
-                                        {/* Content Grid (Models) */}
+                                        {/* Using ModelsGrid Component */}
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 content-start">
-                                            {profileData.models.length > 0 ? (
-                                                <>
-                                                    {profileData.models.slice(0, 3).map((model: any, i: number) => (
-                                                        <div key={i} className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-5 rounded-3xl hover:bg-black/10 dark:bg-white/10 transition-colors group cursor-pointer">
-                                                            <div className="flex justify-between items-start mb-4">
-                                                                <div className="p-3 bg-blue-500/20 rounded-2xl text-blue-400 group-hover:scale-110 transition-transform">
-                                                                    <BrainCircuit className="w-6 h-6" />
-                                                                </div>
-                                                                <div className={`w-2 h-2 rounded-full ${model.status === 'Deployed' ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                                                            </div>
-                                                            <h3 className="font-bold text-black dark:text-white text-lg mb-1 truncate">{model.name}</h3>
-                                                            <div className="flex justify-between items-center">
-                                                                <p className="text-black dark:text-white/50 text-sm">{model.type}</p>
-                                                                {model.accuracy !== undefined && (
-                                                                    <span className="text-xs font-bold text-green-400 bg-green-500/10 px-2 py-1 rounded-lg">
-                                                                        {(model.accuracy * 100).toFixed(1)}% Acc
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                    {profileData.models.length > 3 && (
-                                                        <button
-                                                            onClick={() => openModal('models')}
-                                                            className="bg-black/5 dark:bg-white/5 border border-black dark:border-white p-5 rounded-3xl hover:bg-black/10 dark:bg-white/10 transition-colors flex flex-col items-center justify-center gap-3 group h-full min-h-[140px]"
-                                                        >
-                                                            <div className="p-4 bg-black/10 dark:bg-white/10 rounded-full group-hover:bg-white/20 transition-colors">
-                                                                <ChevronRight className="w-6 h-6 text-black dark:text-white" />
-                                                            </div>
-                                                            <span className="font-bold text-black dark:text-white text-sm">View All Models</span>
-                                                        </button>
-                                                    )}
-                                                </>
-                                            ) : (
-                                                <div className="col-span-full bg-transparent border border-black dark:border-white rounded-3xl p-10 text-center flex flex-col items-center justify-center border-dashed h-full">
-                                                    <div className="w-16 h-16 bg-gradient-to-br from-white/10 to-transparent rounded-full flex items-center justify-center mb-4">
-                                                        <BrainCircuit className="w-8 h-8 text-black dark:text-white/30" />
-                                                    </div>
-                                                    <h3 className="text-xl font-bold text-black dark:text-white mb-2">No Models Found</h3>
-                                                    <p className="text-black/70 dark:text-white/50 max-w-md mx-auto mb-6 text-sm">
-                                                        You haven't created any models yet. Start by creating your first one.
-                                                    </p>
-                                                    <button
-                                                        onClick={() => router.push('/studio')}
-                                                        className="px-6 py-2.5 bg-white text-black rounded-full font-bold hover:bg-gray-200 transition-colors flex items-center gap-2 text-sm"
-                                                    >
-                                                        <Plus className="w-4 h-4" /> Create New Model
-                                                    </button>
-                                                </div>
-                                            )}
+                                            <ModelsGrid
+                                                models={userModels}
+                                                loading={loadingAssets}
+                                                onViewAll={() => openModal('models')}
+                                            />
                                         </div>
+
+                                        {/* Using DatasetsGrid Component */}
+                                        <DatasetsGrid datasets={userDatasets} />
 
                                         {/* Collaborators Section */}
                                         <div className="mt-6">
-                                            <div className="flex items-center justify-between mb-3">
-                                                <h3 className="text-base font-bold text-black dark:text-white">Recent Collaborators</h3>
-                                                <button onClick={() => openModal('collaborators')} className="text-xs text-blue-400 hover:text-blue-300">View All</button>
-                                            </div>
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                                {collaborators.slice(0, 3).map((collab, i) => (
-                                                    <div key={i} className="bg-transparent border border-black/10 dark:border-white/10 p-3 rounded-2xl flex items-center gap-3 hover:bg-black/5 dark:bg-white/5 transition-colors cursor-pointer group">
-                                                        <img src={collab.avatar} alt={collab.name} className="w-8 h-8 rounded-full" />
-                                                        <div className="overflow-hidden">
-                                                            <div className="font-bold text-black dark:text-white text-sm truncate group-hover:text-blue-400 transition-colors">{collab.name}</div>
-                                                            <div className="text-[10px] text-black dark:text-white/50 truncate">{collab.role}</div>
+                                            <button
+                                                onClick={() => setShowCollaboratorsModal(true)}
+                                                className="w-full flex items-center justify-between p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 hover:bg-black/10 dark:hover:bg-white/10 transition-all group"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 rounded-lg" style={{ backgroundColor: `${themeColor}20` }}>
+                                                        <Users className="w-4 h-4" style={{ color: themeColor }} />
+                                                    </div>
+                                                    <div className="text-left">
+                                                        <h3 className="text-sm font-bold text-black dark:text-white">Collaborators</h3>
+                                                        <p className="text-black/50 dark:text-white/50 text-[10px]">View project contributors</p>
+                                                    </div>
+                                                </div>
+                                                <ChevronRight className="w-5 h-5 text-black/30 dark:text-white/30 group-hover:translate-x-1 transition-transform" />
+                                            </button>
+
+                                            {/* Skeleton Preview Cards */}
+                                            <div className="grid grid-cols-3 gap-2 mt-3">
+                                                {[1, 2, 3].map((i) => (
+                                                    <div
+                                                        key={i}
+                                                        className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg p-2 animate-pulse"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-6 h-6 rounded-full bg-black/10 dark:bg-white/10" />
+                                                            <div className="flex-1 space-y-1">
+                                                                <div className="h-2 bg-black/10 dark:bg-white/10 rounded w-3/4" />
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 ))}
-                                                {collaborators.length > 3 && (
-                                                    <button
-                                                        onClick={() => openModal('collaborators')}
-                                                        className="bg-transparent border border-black/10 dark:border-white/10 p-3 rounded-2xl flex items-center justify-center gap-2 hover:bg-black/5 dark:bg-white/5 transition-colors group"
-                                                    >
-                                                        <div className="p-1.5 bg-black/10 dark:bg-white/10 rounded-full">
-                                                            <ChevronRight className="w-4 h-4 text-black dark:text-white" />
-                                                        </div>
-                                                        <span className="font-bold text-black dark:text-white text-xs">View All</span>
-                                                    </button>
-                                                )}
                                             </div>
                                         </div>
+
                                     </motion.div>
                                 )}
 
-                                {/* VIEW: SECURITY (Change Password) */}
+                                {/* VIEW: SECURITY */}
                                 {currentView === 'security' && (
-                                    <motion.div
-                                        key="security"
-                                        initial={{ opacity: 0, x: 20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: -20 }}
-                                        className="max-w-lg mx-auto w-full"
-                                    >
-                                        <div className="bg-transparent border border-black dark:border-white rounded-[2rem] p-8">
-                                            <div className="flex items-center gap-4 mb-8">
-                                                <div className="p-3 bg-purple-500/20 rounded-2xl text-purple-400">
-                                                    <Shield className="w-8 h-8" />
-                                                </div>
-                                                <div>
-                                                    <h2 className="text-2xl font-bold text-black dark:text-white">Security Settings</h2>
-                                                    <p className="text-black dark:text-white/50 text-base">Manage your password and account security</p>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-6">
-                                                <div className="space-y-2">
-                                                    <label className="text-sm font-bold text-black dark:text-white/70 ml-1">Current Password</label>
-                                                    <input
-                                                        type="password"
-                                                        className="w-full bg-black/20 dark:bg-white/20 border border-black dark:border-white rounded-xl px-4 py-3 text-black dark:text-white focus:border-purple-500/50 focus:bg-black/40 transition-all outline-none text-base"
-                                                        value={passwordData.current || ""}
-                                                        onChange={e => setPasswordData({ ...passwordData, current: e.target.value })}
-                                                    />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <label className="text-sm font-bold text-black dark:text-white/70 ml-1">New Password</label>
-                                                    <input
-                                                        type="password"
-                                                        className="w-full bg-black/20 dark:bg-white/20 border border-black dark:border-white rounded-xl px-4 py-3 text-black dark:text-white focus:border-purple-500/50 focus:bg-black/40 transition-all outline-none text-base"
-                                                        value={passwordData.new || ""}
-                                                        onChange={e => setPasswordData({ ...passwordData, new: e.target.value })}
-                                                    />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <label className="text-sm font-bold text-black dark:text-white/70 ml-1">Confirm New Password</label>
-                                                    <input
-                                                        type="password"
-                                                        className="w-full bg-black/20 dark:bg-white/20 border border-black dark:border-white rounded-xl px-4 py-3 text-black dark:text-white focus:border-purple-500/50 focus:bg-black/40 transition-all outline-none text-base"
-                                                        value={passwordData.confirm || ""}
-                                                        onChange={e => setPasswordData({ ...passwordData, confirm: e.target.value })}
-                                                    />
-                                                </div>
-
-                                                <div className="pt-6 flex gap-3">
-                                                    <button onClick={handlePasswordChange} className="flex-1 py-3 bg-white text-black rounded-xl font-bold hover:bg-gray-200 transition-colors text-base">
-                                                        Update Password
-                                                    </button>
-                                                    <button onClick={() => setCurrentView('overview')} className="px-6 py-3 bg-black/5 dark:bg-white/5 text-black dark:text-white rounded-xl font-bold hover:bg-black/10 dark:bg-white/10 transition-colors text-base">
-                                                        Cancel
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </motion.div>
+                                    <SecuritySettings userEmail={profileData.email || user?.email || ''} />
                                 )}
 
                                 {/* VIEW: NOTIFICATIONS */}
@@ -685,6 +649,112 @@ export default function ProfilePage() {
                     </div>
                 </motion.div>
             </main>
+
+            {/* Collaborators Modal Overlay */}
+            <AnimatePresence>
+                {showCollaboratorsModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+                        onClick={() => setShowCollaboratorsModal(false)}
+                    >
+                        {/* Blur Backdrop */}
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" />
+
+                        {/* Modal Content */}
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            transition={{ type: "spring", bounce: 0.2 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="relative w-full max-w-2xl max-h-[80vh] overflow-hidden bg-black/80 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl"
+                            style={{ boxShadow: `0 0 60px ${themeColor}20` }}
+                        >
+                            {/* Modal Header */}
+                            <div className="flex items-center justify-between p-6 border-b border-white/10">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 rounded-xl" style={{ backgroundColor: `${themeColor}20` }}>
+                                        <Users className="w-5 h-5" style={{ color: themeColor }} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-bold text-white">Project Collaborators</h2>
+                                        <p className="text-white/50 text-xs">People who contribute to your projects</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowCollaboratorsModal(false)}
+                                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                                >
+                                    <X className="w-5 h-5 text-white/60" />
+                                </button>
+                            </div>
+
+                            {/* Modal Body */}
+                            <div className="p-6 overflow-y-auto max-h-[60vh] space-y-4">
+                                {collaborators.length === 0 ? (
+                                    // Placeholder Cards when no collaborators
+                                    <>
+                                        {[1, 2, 3].map((i) => (
+                                            <div
+                                                key={i}
+                                                className="flex items-center gap-4 p-4 bg-white/5 border border-white/10 rounded-2xl animate-pulse"
+                                            >
+                                                <div className="w-12 h-12 rounded-full bg-white/10" />
+                                                <div className="flex-1 space-y-2">
+                                                    <div className="h-4 bg-white/10 rounded w-1/3" />
+                                                    <div className="h-3 bg-white/10 rounded w-1/2" />
+                                                </div>
+                                                <div className="text-right space-y-2">
+                                                    <div className="h-5 bg-white/10 rounded-full w-16" />
+                                                    <div className="h-3 bg-white/10 rounded w-20" />
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <p className="text-center text-white/30 text-xs mt-4">
+                                            Collaborator data will be synced when you share projects
+                                        </p>
+                                    </>
+                                ) : (
+                                    // Actual Collaborators
+                                    collaborators.map((collab, i) => (
+                                        <div
+                                            key={i}
+                                            className="flex items-center gap-4 p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-colors"
+                                        >
+                                            <img
+                                                src={collab.avatar || `https://ui-avatars.com/api/?name=${collab.name}&background=random`}
+                                                alt={collab.name}
+                                                className="w-12 h-12 rounded-full object-cover border-2"
+                                                style={{ borderColor: themeColor }}
+                                            />
+                                            <div className="flex-1">
+                                                <h4 className="font-bold text-white">{collab.name}</h4>
+                                                <p className="text-white/50 text-sm">{collab.email}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <span
+                                                    className="px-3 py-1 rounded-full text-xs font-bold"
+                                                    style={{ backgroundColor: `${themeColor}20`, color: themeColor }}
+                                                >
+                                                    {collab.role || 'Contributor'}
+                                                </span>
+                                                {collab.lastEdited && (
+                                                    <p className="text-white/30 text-[10px] mt-1">
+                                                        Last edited: {new Date(collab.lastEdited).toLocaleDateString()}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </>
     )
 }

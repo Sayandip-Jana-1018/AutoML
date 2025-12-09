@@ -10,7 +10,7 @@ export function MacBook({ children, ...props }: any) {
     const [videoElement] = useState(() => {
         if (typeof document === 'undefined') return null
         const vid = document.createElement('video')
-        vid.src = '/doctor.mp4'
+        vid.src = '/macbook1.mp4'
         vid.loop = true
         vid.muted = true
         vid.playsInline = true
@@ -136,7 +136,7 @@ export function DualMacBook({ children, ...props }: any) {
     const [videoElement] = useState(() => {
         if (typeof document === 'undefined') return null
         const video = document.createElement('video')
-        video.src = '/doctor.mp4'
+        video.src = '/macbook1.mp4'
         video.loop = true
         video.muted = true
         video.playsInline = true

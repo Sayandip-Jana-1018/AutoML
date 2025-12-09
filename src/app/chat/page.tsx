@@ -7,7 +7,7 @@ import Aurora from "@/components/react-bits/Aurora"
 import { Navbar } from "@/components/navbar"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useAuth } from "@/context/auth-context"
-import { Send, Paperclip, Search, Sparkles, Server, Zap, FileText, Image as ImageIcon, Loader2, ChevronDown } from "lucide-react"
+import { Send, Paperclip, Search, Sparkles, Server, Zap, FileText, Image as ImageIcon, Loader2, ChevronDown, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
     DropdownMenu,
@@ -15,6 +15,8 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { collection, query, orderBy, onSnapshot } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 
 interface Model {
     id: string
@@ -61,7 +63,7 @@ function cleanMessage(text: string) {
 
 export default function ChatPage() {
     const { themeColor, setThemeColor } = useThemeColor()
-    const { user } = useAuth()
+    const { user, userTier } = useAuth()
 
     const [attachedFiles, setAttachedFiles] = useState<File[]>([])
     const [researchMode, setResearchMode] = useState(false)
@@ -69,13 +71,22 @@ export default function ChatPage() {
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [mounted, setMounted] = useState(false)
     const [deployedModels, setDeployedModels] = useState<Model[]>([])
-    const [genAiModels, setGenAiModels] = useState<Model[]>([
-        { id: "ai-1", name: "GPT-4 Turbo", type: "ai", endpoint: "api.openai.com/v1", latency: "24ms" },
-        { id: "ai-2", name: "Claude 3 Opus", type: "ai", endpoint: "api.anthropic.com/v1", latency: "32ms" },
-        { id: "ai-3", name: "Gemini Pro", type: "ai", endpoint: "generativelanguage.googleapis.com", latency: "45ms" },
-    ])
-    const [selectedModel, setSelectedModel] = useState<Model>(genAiModels[0])
+    const genAiModelsData = [
+        { id: "ai-3", name: "Gemini Pro", type: "ai", endpoint: "generativelanguage.googleapis.com", latency: "45ms", tier: 'free' as const },
+        { id: "ai-1", name: "GPT-4 Turbo", type: "ai", endpoint: "api.openai.com/v1", latency: "24ms", tier: 'silver' as const },
+        { id: "ai-2", name: "Claude 3 Opus", type: "ai", endpoint: "api.anthropic.com/v1", latency: "32ms", tier: 'gold' as const },
+    ]
+    const [genAiModels] = useState(genAiModelsData)
+    const [selectedModel, setSelectedModel] = useState<Model>(genAiModelsData[0] as Model)
     const [loadingModels, setLoadingModels] = useState(true)
+
+    // Tier access check - same logic as studio page
+    const canAccessModel = (modelTier: 'free' | 'silver' | 'gold') => {
+        if (modelTier === 'free') return true
+        if (modelTier === 'silver') return userTier === 'silver' || userTier === 'gold'
+        if (modelTier === 'gold') return userTier === 'gold'
+        return false
+    }
 
     // Custom chat state management
     const [messages, setMessages] = useState<Message[]>([])
@@ -151,52 +162,40 @@ export default function ChatPage() {
     }, [])
 
     // Fetch deployed models from API
+    // Fetch deployed models from Firestore
     useEffect(() => {
-        const fetchDeployedModels = async () => {
-            try {
-                const controller = new AbortController()
-                const timeoutId = setTimeout(() => controller.abort(), 10000)
+        if (!user) return
 
-                const res = await fetch('/api/proxy/models', { signal: controller.signal })
-                clearTimeout(timeoutId)
+        setLoadingModels(true)
+        const q = query(collection(db, "models"), orderBy("created_at", "desc"))
 
-                if (res.ok) {
-                    const data = await res.json()
-                    let models: Model[] = data.models || []
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const modelsList = snapshot.docs.map(doc => ({
+                model_id: doc.id,
+                ...doc.data()
+            })) as Model[]
 
-                    // Filter models by user email if available
-                    if (user?.email) {
-                        models = models.filter((m: Model) => m.user_email === user?.email)
-                    }
+            // Filter models by user email if available
+            const filtered = modelsList.filter((m: any) => m.user_email === user?.email)
 
-                    const mlModels = models.map((m: Model, idx: number) => ({
-                        id: `ml-${idx}`,
-                        name: `${m.target_column} Model`,
-                        type: "ml",
-                        algorithm: m.algorithm,
-                        model_id: m.model_id,
-                        latency: "N/A"
-                    }))
-                    setDeployedModels(mlModels)
-                } else {
-                    throw new Error('Failed to fetch')
-                }
-            } catch (error: any) {
-                if (error.name === 'AbortError') {
-                    console.error('Request timeout - backend may be down')
-                } else {
-                    console.error('Failed to fetch models:', error)
-                }
-                // Fallback mock data for trained models if API fails
-                setDeployedModels([
-                    { id: "ml-0", name: "Heart Disease Model", type: "ml", algorithm: "Random Forest", latency: "N/A" },
-                    { id: "ml-1", name: "Diabetes Predictor", type: "ml", algorithm: "XGBoost", latency: "N/A" },
-                ])
-            } finally {
-                setLoadingModels(false)
-            }
-        }
-        fetchDeployedModels()
+            const mlModels = filtered.map((m: any, idx: number) => ({
+                id: `ml-${idx}`,
+                name: `${m.target_column} Model`,
+                type: "ml",
+                algorithm: m.algorithm,
+                model_id: m.model_id,
+                latency: "N/A"
+            }))
+
+            setDeployedModels(mlModels)
+            setLoadingModels(false)
+        }, (err) => {
+            console.error("Error fetching models:", err)
+            setLoadingModels(false)
+            // Fallback/Empty state handled by UI
+        })
+
+        return () => unsubscribe()
     }, [user])
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -306,23 +305,44 @@ export default function ChatPage() {
                                             <ChevronDown className="w-4 h-4 opacity-50" />
                                         </button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="w-56 bg-black/90 border-white/10 backdrop-blur-xl text-white">
-                                        {genAiModels.map((model) => (
-                                            <DropdownMenuItem
-                                                key={model.id}
-                                                onClick={() => { setSelectedModel(model); setMessages([]) }}
-                                                className={cn(
-                                                    "cursor-pointer focus:bg-white/10 focus:text-white gap-2",
-                                                    selectedModel.id === model.id && "bg-white/10"
-                                                )}
-                                            >
-                                                <Sparkles className="w-4 h-4" style={{ color: themeColor }} />
-                                                <div className="flex flex-col">
-                                                    <span className="font-medium">{model.name}</span>
-                                                    <span className="text-[10px] text-white/40">{model.latency}</span>
-                                                </div>
-                                            </DropdownMenuItem>
-                                        ))}
+                                    <DropdownMenuContent align="end" className="w-64 bg-black/90 border-white/10 backdrop-blur-xl text-white">
+                                        {genAiModels.map((model: any) => {
+                                            const isLocked = !canAccessModel(model.tier)
+                                            return (
+                                                <DropdownMenuItem
+                                                    key={model.id}
+                                                    onClick={() => {
+                                                        if (!isLocked) {
+                                                            setSelectedModel(model)
+                                                            setMessages([])
+                                                        }
+                                                    }}
+                                                    className={cn(
+                                                        "cursor-pointer focus:bg-white/10 focus:text-white gap-2",
+                                                        selectedModel.id === model.id && "bg-white/10",
+                                                        isLocked && "opacity-50 pointer-events-none"
+                                                    )}
+                                                >
+                                                    {isLocked ? (
+                                                        <Lock className="w-4 h-4 text-white/40" />
+                                                    ) : (
+                                                        <Sparkles className="w-4 h-4" style={{ color: themeColor }} />
+                                                    )}
+                                                    <div className="flex flex-col flex-1">
+                                                        <span className="font-medium">{model.name}</span>
+                                                        <span className="text-[10px] text-white/40">{model.latency}</span>
+                                                    </div>
+                                                    <span className={cn(
+                                                        "text-[9px] px-2 py-0.5 rounded-full font-bold uppercase",
+                                                        model.tier === 'free' && "bg-green-500/20 text-green-400",
+                                                        model.tier === 'silver' && "bg-gray-400/20 text-gray-300",
+                                                        model.tier === 'gold' && "bg-yellow-500/20 text-yellow-400"
+                                                    )}>
+                                                        {model.tier}
+                                                    </span>
+                                                </DropdownMenuItem>
+                                            )
+                                        })}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </div>

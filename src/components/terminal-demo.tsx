@@ -16,7 +16,7 @@ function TerminalContent({ themeColor }: { themeColor: string }) {
     useEffect(() => {
         let timeout: NodeJS.Timeout
         const steps = [
-            { text: "Healthy ~ Fly init --project ml-model", type: 'command', delay: 1000 },
+            { text: "AutoForge ML init --project ml-model", type: 'command', delay: 1000 },
             { text: "Loading 3D assets...", type: 'process', delay: 800 },
             { text: "System ready.", type: 'success', delay: 1000 },
             { text: "Initializing neural engine...", type: 'process', delay: 1200 },
@@ -42,7 +42,7 @@ function TerminalContent({ themeColor }: { themeColor: string }) {
                     <div className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e]" />
                     <div className="w-2.5 h-2.5 rounded-full bg-[#27c93f]" />
                 </div>
-                <div className="text-white/30 text-[10px]">user@Healthy ~ Fly: ~</div>
+                <div className="text-white/30 text-[10px]">user@AutoForge ML: ~</div>
             </div>
             <div className="flex flex-col gap-2">
                 {lines.map((line) => (

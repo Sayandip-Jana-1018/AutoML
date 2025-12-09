@@ -23,7 +23,7 @@ export default function AuthSuccessHandler() {
         <SuccessModal
             isOpen={showSuccess}
             message="Successfully Signed In"
-            subMessage="Welcome back to Healthy ~ Fly"
+            subMessage="Welcome back to AutoForgeML Studio"
             onClose={() => setShowSuccess(false)}
         />
     )

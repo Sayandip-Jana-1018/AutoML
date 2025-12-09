@@ -1,449 +1,377 @@
-"use client"
+'use client';
 
-import { useState, useEffect, useRef } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { useThemeColor } from "@/context/theme-context"
-import { Navbar } from "@/components/navbar"
-import { ThemeToggle } from "@/components/theme-toggle"
-import GradientBlinds from "@/components/PrismaticBurst"
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Play, Settings, Database } from "lucide-react"
-import { GlassSelect } from "@/components/ui/glass-select"
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useAuth } from '@/context/auth-context';
+import { useThemeColor } from '@/context/theme-context';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
+import { Loader2, Plus, FolderOpen, ArrowRight, Sparkles, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import LightPillar from '@/components/react-bits/LightPillar';
+import { Navbar } from '@/components/navbar';
+import { ThemeToggle } from '@/components/theme-toggle';
 
-// Types
-interface DatasetResponse {
-    dataset_id: string
-    columns: string[]
-    message?: string
+interface Project {
+    id: string;
+    name: string;
+    created_at: any;
+    status: string;
+    datasetUploaded?: boolean;
 }
 
-interface JobStatus {
-    status: string
-    progress: number
-    result?: any
-    error?: string
-}
+export default function StudioEntryPage() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const { user } = useAuth();
+    const { themeColor } = useThemeColor();
+    const [loading, setLoading] = useState(true);
+    const [creating, setCreating] = useState(false);
+    const [recentProjects, setRecentProjects] = useState<Project[]>([]);
+    const [showNameModal, setShowNameModal] = useState(false);
+    const [projectName, setProjectName] = useState('');
 
-export default function StudioPage() {
-    const { themeColor, setThemeColor } = useThemeColor()
-    const [step, setStep] = useState(1)
-
-    // Form States
-    const [file, setFile] = useState<File | null>(null)
-    const [datasetName, setDatasetName] = useState("")
-    const [datasetInfo, setDatasetInfo] = useState<DatasetResponse | null>(null)
-    const [targetColumn, setTargetColumn] = useState("")
-    const [algorithm, setAlgorithm] = useState("auto")
-    const [jobId, setJobId] = useState<string | null>(null)
-    const [jobStatus, setJobStatus] = useState<JobStatus | null>(null)
-    const [error, setError] = useState("")
-
-    // Set default theme color to Gold on mount
     useEffect(() => {
-        setThemeColor("#e4c567ff")
-    }, [setThemeColor])
+        const checkDefaultProject = async () => {
+            if (!user?.email) return;
 
-    // Poll job status
-    useEffect(() => {
-        let interval: NodeJS.Timeout
-        if (jobId && step === 3) {
-            interval = setInterval(async () => {
+            try {
+                // If config param exists, always create new project (from Marketplace)
+                const configParam = searchParams?.get('config');
+                if (configParam) {
+                    await createNewProject('', configParam);
+                    return;
+                }
+
+                // Always load recent projects for picker (never auto-redirect)
+                const projectsQuery = query(
+                    collection(db, 'projects'),
+                    where('owner_email', '==', user.email),
+                    orderBy('created_at', 'desc'),
+                    limit(5)
+                );
+                const snapshot = await getDocs(projectsQuery);
+                const projects = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                })) as Project[];
+
+                setRecentProjects(projects);
+                setLoading(false);
+            } catch (error) {
+                console.error('Error loading projects:', error);
+                setLoading(false);
+            }
+        };
+
+        if (user) {
+            checkDefaultProject();
+        }
+    }, [user, router, searchParams]);
+
+    const createNewProject = async (name?: string, configParam?: string | null) => {
+        if (!user?.email) return;
+        setCreating(true);
+        setShowNameModal(false);
+
+        try {
+            let initialConfig: any = {};
+            if (configParam) {
                 try {
-                    const res = await fetch(`/api/proxy/jobs/${jobId}`)
-                    if (res.ok) {
-                        const status: JobStatus = await res.json()
-                        setJobStatus(status)
-                        if (status.status === 'completed') {
-                            clearInterval(interval)
-                        } else if (status.status === 'failed') {
-                            clearInterval(interval)
-                            setError(status.error || 'Training failed')
-                        }
-                    }
+                    initialConfig = JSON.parse(configParam);
                 } catch (e) {
-                    console.error(e)
+                    console.error("Invalid config param");
                 }
-            }, 2000)
-        }
-        return () => clearInterval(interval)
-    }, [jobId, step])
-
-
-    const [cleaningProgress, setCleaningProgress] = useState<string>("")
-    const [cleaningSummary, setCleaningSummary] = useState<any>(null)
-
-    const handleUpload = async () => {
-        if (!file || !datasetName) return
-        setError("")
-        setCleaningProgress("Analyzing data with AI...")
-
-        try {
-            // Step 1: Clean data with AI
-            const cleanFormData = new FormData()
-            cleanFormData.append('file', file)
-
-            setCleaningProgress("AI is analyzing your dataset...")
-            const cleanRes = await fetch('/api/clean-data', {
-                method: 'POST',
-                body: cleanFormData
-            })
-
-            if (!cleanRes.ok) {
-                console.warn('AI cleaning failed, uploading original data')
-                setCleaningProgress("")
             }
 
-            let fileToUpload = file
-            let cleaningInfo = null
+            const docRef = await addDoc(collection(db, 'projects'), {
+                name: name || `Untitled Project ${new Date().toLocaleDateString()}`,
+                owner_email: user.email,
+                created_at: serverTimestamp(),
+                collaborators: [user.email],
+                currentScript: initialConfig ? generateInitialScript(initialConfig) : DEFAULT_SCRIPT,
+                status: 'draft',
+                logs: []
+            });
 
-            if (cleanRes.ok) {
-                const cleanData = await cleanRes.json()
-                cleaningInfo = {
-                    original_rows: cleanData.original_rows,
-                    cleaned_rows: cleanData.cleaned_rows,
-                    issues: cleanData.issues,
-                    summary: cleanData.summary
-                }
-                setCleaningSummary(cleaningInfo)
+            // Set as default project - use setDoc with merge to create user doc if needed
+            await setDoc(doc(db, 'users', user.uid), {
+                defaultProjectId: docRef.id
+            }, { merge: true });
 
-                // Create cleaned file
-                const cleanedBlob = new Blob([cleanData.cleaned_data], { type: 'text/csv' })
-                fileToUpload = new File([cleanedBlob], file.name, { type: 'text/csv' })
-
-                setCleaningProgress(`✓ Data cleaned: ${cleanData.issues?.length || 0} issues fixed`)
-            }
-
-            // Step 2: Upload to backend
-            setCleaningProgress("Uploading to AWS...")
-            const formData = new FormData()
-            formData.append('file', fileToUpload)
-            formData.append('name', datasetName)
-
-            const res = await fetch('/api/proxy/upload', { method: 'POST', body: formData })
-            if (!res.ok) throw new Error('Upload failed')
-            const data = await res.json()
-            setDatasetInfo(data)
-            setCleaningProgress("")
-            setStep(2)
-        } catch (e) {
-            setError("Upload failed. Please check your file.")
-            setCleaningProgress("")
+            router.push(`/studio/${docRef.id}`);
+        } catch (error) {
+            console.error("Error creating project:", error);
+            setCreating(false);
         }
+    };
+
+    const selectProject = async (projectId: string) => {
+        if (!user?.uid) return;
+
+        // Set as default project - use setDoc with merge to create user doc if needed
+        await setDoc(doc(db, 'users', user.uid), {
+            defaultProjectId: projectId
+        }, { merge: true });
+
+        router.push(`/studio/${projectId}`);
+    };
+
+    // Loading state
+    if (loading || !user) {
+        return (
+            <div className="min-h-screen bg-[#020202] flex items-center justify-center text-white relative overflow-hidden">
+                <div className="fixed inset-0 z-0 opacity-80">
+                    <LightPillar topColor={themeColor} bottomColor={themeColor} intensity={1.5} pillarWidth={25} glowAmount={0.002} />
+                </div>
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="relative z-10 flex items-center gap-3"
+                >
+                    <Loader2 className="w-6 h-6 animate-spin" style={{ color: themeColor }} />
+                    <span className="text-white/70">Loading Studio...</span>
+                </motion.div>
+            </div>
+        );
     }
 
-    const handleTrain = async () => {
-        if (!datasetInfo || !targetColumn) return
-        setError("")
-        const payload = {
-            dataset_id: datasetInfo.dataset_id,
-            target_column: targetColumn,
-            algorithm,
-            test_size: 0.2
-        }
-        console.log("Starting training with payload:", payload)
-
-        try {
-            const res = await fetch('/api/proxy/train', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-            if (!res.ok) throw new Error('Training start failed')
-            const data = await res.json()
-            setJobId(data.job_id)
-            setStep(3)
-        } catch (e) {
-            setError("Failed to start training.")
-        }
-    }
-
+    // Project Picker UI
     return (
-        <main className="min-h-screen relative overflow-hidden bg-background selection:bg-primary/30 flex flex-col transition-colors duration-300">
-
-            {/* Top Right Theme Toggle */}
-            <div className="fixed top-0 right-0 z-50">
-                <ThemeToggle />
-            </div>
-
+        <div className="min-h-screen bg-[#020202] text-white relative overflow-hidden">
             {/* Navbar */}
-            <div className="relative z-40">
-                <Navbar />
-            </div>
+            <Navbar />
 
-            {/* Studio Content */}
-            <div className="relative w-full flex-1 flex flex-col items-center justify-start pt-32 pb-20 overflow-hidden min-h-screen">
-                {/* Gradient Blinds Background */}
-                <div className="absolute inset-0 w-full h-full z-0 [mask-image:linear-gradient(to_bottom,transparent,black_10%)]">
-                    <GradientBlinds
-                        gradientColors={themeColor === '#ffffff'
-                            ? ['#e0e0e0', '#ffffff', '#f5f5f5']
-                            : [themeColor, themeColor, themeColor]}
-                        angle={45}
-                        noise={0.2}
-                        blindCount={3}
-                        blindMinWidth={50}
-                        spotlightRadius={0.9}
-                        spotlightSoftness={0.6}
-                        spotlightOpacity={1.0}
-                        mouseDampening={0}
-                        distortAmount={0.2}
-                        shineDirection="left"
-                        mixBlendMode={themeColor === '#ffffff' ? 'multiply' : 'screen'}
-                    />
-                </div>
+            {/* Theme Toggle */}
+            <ThemeToggle />
 
-                {/* Content */}
-                <div className="relative z-10 w-full px-6 flex flex-col items-center max-w-4xl mx-auto">
-                    <div className="mb-12 text-center">
-                        <h1 className="text-5xl md:text-7xl font-black mb-6 tracking-tight drop-shadow-2xl">
-                            <span className="text-transparent bg-clip-text bg-gradient-to-b from-foreground to-foreground/50">
-                                Studio
-                            </span>
-                        </h1>
-                        <p className="text-xl md:text-2xl text-muted-foreground font-medium max-w-2xl mx-auto leading-relaxed">
-                            Build and train your custom AI models.
-                        </p>
-                    </div>
-
-                    {/* Stepper */}
-                    <div className="w-full flex items-center justify-between mb-12 relative">
-                        <div className="absolute top-1/2 left-0 w-full h-1 bg-white/10 -z-10 rounded-full" />
-                        <div className="absolute top-1/2 left-0 h-1 bg-white -z-10 rounded-full transition-all duration-500"
-                            style={{ width: `${((step - 1) / 2) * 100}%`, background: themeColor }} />
-
-                        {[
-                            { n: 1, label: "Upload", icon: Database },
-                            { n: 2, label: "Configure", icon: Settings },
-                            { n: 3, label: "Train", icon: Play }
-                        ].map((s) => (
-                            <div key={s.n} className="flex flex-col items-center gap-2">
-                                <div
-                                    className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${step >= s.n ? 'bg-black border-transparent shadow-lg' : 'bg-black/40 border-white/20'
-                                        }`}
-                                    style={{ borderColor: step >= s.n ? themeColor : undefined }}
-                                >
-                                    <s.icon className={`w-5 h-5 ${step >= s.n ? 'text-white' : 'text-white/40'}`} />
-                                </div>
-                                <span className={`text-xs font-bold ${step >= s.n ? 'text-white' : 'text-white/40'}`}>{s.label}</span>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Main Card */}
+            {/* Project Name Modal */}
+            <AnimatePresence>
+                {showNameModal && (
                     <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="w-full bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                        onClick={() => setShowNameModal(false)}
                     >
-                        {error && (
-                            <div className="bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-xl mb-6 text-sm flex items-center gap-2">
-                                <AlertCircle className="w-4 h-4" /> {error}
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 w-full max-w-md mx-4"
+                            style={{ boxShadow: `0 0 40px ${themeColor}20` }}
+                        >
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-xl font-bold text-white">New Project</h2>
+                                <button onClick={() => setShowNameModal(false)} className="text-white/50 hover:text-white">
+                                    <X className="w-5 h-5" />
+                                </button>
                             </div>
-                        )}
-
-                        <AnimatePresence mode="wait">
-                            {step === 1 && (
-                                <motion.div
-                                    key="step1"
-                                    initial={{ opacity: 0, x: 20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -20 }}
-                                    className="space-y-6"
+                            <input
+                                type="text"
+                                placeholder="Project name (optional)"
+                                value={projectName}
+                                onChange={(e) => setProjectName(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && createNewProject(projectName)}
+                                autoFocus
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/40 focus:outline-none focus:border-white/30 mb-4"
+                            />
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowNameModal(false)}
+                                    className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium transition-all"
                                 >
-                                    <div>
-                                        <label className="block text-sm font-bold text-white/80 mb-2">Dataset Name</label>
-                                        <input
-                                            type="text"
-                                            value={datasetName}
-                                            onChange={e => setDatasetName(e.target.value)}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-white/30 transition-all"
-                                            placeholder="e.g., Customer Churn Data"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-white/80 mb-2">CSV File</label>
-                                        <div className="border-2 border-dashed border-white/10 rounded-xl p-12 text-center hover:bg-white/5 transition-colors cursor-pointer relative group">
-                                            <input
-                                                type="file"
-                                                accept=".csv"
-                                                onChange={e => setFile(e.target.files?.[0] || null)}
-                                                className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                                            />
-                                            <div className="flex flex-col items-center gap-4">
-                                                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                                    <Upload className="w-8 h-8 text-white/40" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-lg font-bold text-white">{file ? file.name : "Drop your CSV here"}</p>
-                                                    <p className="text-sm text-white/40 mt-1">or click to browse</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Cleaning Progress */}
-                                    {cleaningProgress && (
-                                        <div className="bg-blue-500/10 border border-blue-500/20 text-blue-200 p-4 rounded-xl flex items-center gap-2">
-                                            <Loader2 className="w-4 h-4 animate-spin" /> {cleaningProgress}
-                                        </div>
-                                    )}
-
-                                    {/* Cleaning Summary */}
-                                    {cleaningSummary && (
-                                        <div className="bg-green-500/10 border border-green-500/20 text-green-200 p-4 rounded-xl">
-                                            <p className="font-bold mb-2">✓ AI Data Cleaning Complete</p>
-                                            <p className="text-sm text-green-300/80">{cleaningSummary.summary}</p>
-                                            <div className="mt-2 text-xs text-green-300/60">
-                                                <span>Rows: {cleaningSummary.original_rows} → {cleaningSummary.cleaned_rows}</span>
-                                                {cleaningSummary.issues?.length > 0 && (
-                                                    <span className="ml-3">Issues fixed: {cleaningSummary.issues.length}</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <button
-                                        onClick={handleUpload}
-                                        disabled={!file || !datasetName || !!cleaningProgress}
-                                        className="w-full py-4 rounded-xl font-bold text-black text-lg mt-4 disabled:opacity-50 hover:scale-[1.02] transition-all shadow-lg"
-                                        style={{ background: themeColor }}
-                                    >
-                                        {cleaningProgress ? 'Processing...' : 'Upload & Continue'}
-                                    </button>
-                                </motion.div>
-                            )}
-
-                            {step === 2 && datasetInfo && (
-                                <motion.div
-                                    key="step2"
-                                    initial={{ opacity: 0, x: 20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -20 }}
-                                    className="space-y-6"
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => createNewProject(projectName)}
+                                    className="flex-1 py-3 rounded-xl font-medium text-white transition-all"
+                                    style={{
+                                        background: `linear-gradient(135deg, ${themeColor}, ${themeColor}90)`,
+                                        boxShadow: `0 4px 15px ${themeColor}40`
+                                    }}
                                 >
-                                    {datasetInfo.message && (
-                                        <div className="bg-green-500/10 border border-green-500/20 text-green-200 p-4 rounded-xl flex items-center gap-2">
-                                            <CheckCircle className="w-4 h-4" /> {datasetInfo.message}
-                                        </div>
-                                    )}
-                                    <div>
-                                        <label className="block text-sm font-bold text-white/80 mb-2">Target Column (Prediction Goal)</label>
-                                        <div className="relative">
-                                            <GlassSelect
-                                                options={datasetInfo.columns.map(col => ({ value: col, label: col }))}
-                                                value={targetColumn}
-                                                onChange={setTargetColumn}
-                                                placeholder="Select Target Column"
-                                                themeColor={themeColor}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-white/80 mb-2">Algorithm</label>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {[
-                                                { id: 'auto', name: 'AutoML (Best)' },
-                                                { id: 'random_forest', name: 'Random Forest' },
-                                                { id: 'xgboost', name: 'XGBoost' },
-                                                { id: 'logistic_regression', name: 'Logistic Reg' }
-                                            ].map((algo) => (
-                                                <button
-                                                    key={algo.id}
-                                                    onClick={() => setAlgorithm(algo.id)}
-                                                    className={`p-4 rounded-xl border text-left transition-all ${algorithm === algo.id
-                                                        ? 'bg-white/10 border-white/40'
-                                                        : 'bg-white/5 border-white/10 hover:bg-white/10'
-                                                        }`}
-                                                >
-                                                    <span className="font-bold text-sm block">{algo.name}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={handleTrain}
-                                        disabled={!targetColumn}
-                                        className="w-full py-4 rounded-xl font-bold text-black text-lg mt-4 disabled:opacity-50 hover:scale-[1.02] transition-all shadow-lg"
-                                        style={{ background: themeColor }}
-                                    >
-                                        Start Training
-                                    </button>
-                                </motion.div>
-                            )}
-
-                            {step === 3 && (
-                                <motion.div
-                                    key="step3"
-                                    initial={{ opacity: 0, x: 20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -20 }}
-                                    className="text-center py-12"
-                                >
-                                    {jobStatus?.status === 'completed' ? (
-                                        <>
-                                            <div className="w-24 h-24 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6">
-                                                <CheckCircle className="w-12 h-12 text-green-500" />
-                                            </div>
-                                            <h3 className="text-3xl font-bold text-white mb-4">Training Complete!</h3>
-                                            <p className="text-white/60 mb-8 max-w-md mx-auto">
-                                                Your model has been successfully trained and is now ready for deployment.
-                                            </p>
-                                            <div className="flex gap-4 justify-center">
-                                                <a href="/deploy" className="px-8 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold transition-all">
-                                                    Go to Deployments
-                                                </a>
-                                                <a href="/chat" className="px-8 py-3 rounded-xl font-bold text-black transition-all hover:scale-105 shadow-lg" style={{ background: themeColor }}>
-                                                    Chat with Model
-                                                </a>
-                                            </div>
-                                        </>
-                                    ) : jobStatus?.status === 'failed' ? (
-                                        <>
-                                            <div className="w-24 h-24 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-6">
-                                                <AlertCircle className="w-12 h-12 text-red-500" />
-                                            </div>
-                                            <h3 className="text-3xl font-bold text-white mb-4">Training Failed</h3>
-                                            <p className="text-white/60 mb-4">{error}</p>
-                                            <div className="bg-white/5 border border-white/10 p-4 rounded-xl mb-8 text-sm text-white/50 max-w-md mx-auto">
-                                                <p className="font-bold text-white/70 mb-1">Troubleshooting Tips:</p>
-                                                <ul className="list-disc list-inside space-y-1 text-left">
-                                                    <li>Ensure your dataset has at least 50 rows.</li>
-                                                    <li>Do not select "ID" or unique identifier columns as the target.</li>
-                                                    <li>Check if the target column has valid values (not all null).</li>
-                                                </ul>
-                                            </div>
-                                            <button
-                                                onClick={() => setStep(2)}
-                                                className="px-8 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold transition-all"
-                                            >
-                                                Try Again
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="relative w-24 h-24 mx-auto mb-8">
-                                                <div className="absolute inset-0 rounded-full border-4 border-white/10" />
-                                                <div className="absolute inset-0 rounded-full border-4 border-t-transparent animate-spin" style={{ borderColor: `${themeColor} transparent transparent transparent` }} />
-                                                <div className="absolute inset-0 flex items-center justify-center">
-                                                    <span className="text-sm font-bold">{jobStatus?.progress || 0}%</span>
-                                                </div>
-                                            </div>
-                                            <h3 className="text-2xl font-bold text-white mb-2">Training in Progress...</h3>
-                                            <p className="text-white/60 mb-8">Optimizing model parameters</p>
-                                            <div className="w-full max-w-md mx-auto bg-white/10 rounded-full h-2 overflow-hidden">
-                                                <div
-                                                    className="h-full transition-all duration-500 ease-out"
-                                                    style={{ width: `${jobStatus?.progress || 0}%`, background: themeColor }}
-                                                />
-                                            </div>
-                                        </>
-                                    )}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                                    Create
+                                </button>
+                            </div>
+                        </motion.div>
                     </motion.div>
-                </div>
+                )}
+            </AnimatePresence>
+
+            {/* LightPillar Background */}
+            <div className="fixed inset-0 z-0 opacity-80">
+                <LightPillar topColor={themeColor} bottomColor={themeColor} intensity={1.5} pillarWidth={25} glowAmount={0.002} />
             </div>
 
-        </main>
-    )
+            {/* Ambient Glow */}
+            <div
+                className="absolute inset-0 z-[1]"
+                style={{ background: `radial-gradient(ellipse 60% 40% at 50% 50%, ${themeColor}15 0%, transparent 70%)` }}
+            />
+
+            {/* Centered Content Container */}
+            <div className="flex items-center justify-center min-h-screen pt-16">
+                {/* Project Picker Card */}
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    className="relative z-10 backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl mx-4"
+                    style={{ boxShadow: `0 0 60px ${themeColor}20` }}
+                >
+                    {/* Header */}
+                    <div className="text-center mb-8">
+                        <motion.div
+                            animate={{
+                                scale: [1, 1.05, 1],
+                                boxShadow: [
+                                    `0 0 20px ${themeColor}20`,
+                                    `0 0 30px ${themeColor}40`,
+                                    `0 0 20px ${themeColor}20`
+                                ]
+                            }}
+                            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                            className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center"
+                            style={{ background: `linear-gradient(135deg, ${themeColor}30, ${themeColor}10)` }}
+                        >
+                            <Sparkles className="w-8 h-8" style={{ color: themeColor }} />
+                        </motion.div>
+                        <h1 className="text-2xl font-bold text-white mb-2">Welcome to Studio</h1>
+                        <p className="text-white/50 text-sm">Create a new project or continue working</p>
+                    </div>
+
+                    {/* Create New Project Button */}
+                    <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => { setProjectName(''); setShowNameModal(true); }}
+                        disabled={creating}
+                        className="w-full py-4 px-6 rounded-xl mb-4 flex items-center justify-center gap-3 font-medium transition-all"
+                        style={{
+                            background: `linear-gradient(135deg, ${themeColor}, ${themeColor}90)`,
+                            boxShadow: `0 4px 20px ${themeColor}40`
+                        }}
+                    >
+                        {creating ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                            <Plus className="w-5 h-5" />
+                        )}
+                        <span>{creating ? 'Creating...' : 'Create New Project'}</span>
+                    </motion.button>
+
+                    {/* Recent Projects */}
+                    {recentProjects.length > 0 && (
+                        <div className="mt-6">
+                            <div className="flex items-center gap-2 mb-3 text-white/40 text-xs uppercase tracking-wider">
+                                <FolderOpen className="w-4 h-4" />
+                                <span>Recent Projects</span>
+                            </div>
+                            <div className="space-y-2">
+                                <AnimatePresence>
+                                    {recentProjects.map((project, index) => (
+                                        <motion.button
+                                            key={project.id}
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            whileHover={{ scale: 1.01, x: 4 }}
+                                            whileTap={{ scale: 0.99 }}
+                                            transition={{ delay: index * 0.1 }}
+                                            onClick={() => selectProject(project.id)}
+                                            className="w-full py-3 px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 flex items-center justify-between group transition-all duration-300"
+                                            style={{
+                                                boxShadow: 'none',
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                e.currentTarget.style.boxShadow = `0 0 20px ${themeColor}20, inset 0 0 20px ${themeColor}05`;
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.boxShadow = 'none';
+                                            }}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div
+                                                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/5 group-hover:bg-white/10 transition-all"
+                                                    style={{
+                                                        boxShadow: project.datasetUploaded ? `0 0 10px ${themeColor}30` : 'none'
+                                                    }}
+                                                >
+                                                    <FolderOpen className="w-4 h-4 text-white/50 group-hover:text-white/70" style={{ color: project.datasetUploaded ? themeColor : undefined }} />
+                                                </div>
+                                                <div className="text-left">
+                                                    <div className="text-white font-medium truncate max-w-[180px]">
+                                                        {project.name}
+                                                    </div>
+                                                    <div className="text-white/40 text-xs flex items-center gap-2">
+                                                        <span className="capitalize">{project.status}</span>
+                                                        {project.datasetUploaded && (
+                                                            <span style={{ color: `${themeColor}90` }}>• Dataset ready</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <ArrowRight
+                                                className="w-4 h-4 text-white/30 group-hover:translate-x-1 transition-all duration-300"
+                                                style={{ color: project.datasetUploaded ? themeColor : undefined }}
+                                            />
+                                        </motion.button>
+                                    ))}
+                                </AnimatePresence>
+                            </div>
+                        </div>
+                    )}
+                </motion.div>
+            </div>
+        </div>
+    );
 }
+
+const DEFAULT_SCRIPT = `# Welcome to AutoForgeML Studio
+# This script runs on Vertex AI. You can edit it live.
+
+import pandas as pd
+import sklearn
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+
+def train():
+    print("Loading dataset...")
+    # df = pd.read_csv("gs://your-bucket/dataset.csv")
+    
+    print("Preprocessing...")
+    # X_train, X_test, y_train, y_test = train_test_split(X, y)
+    
+    print("Training model...")
+    model = RandomForestClassifier(n_estimators=100)
+    # model.fit(X_train, y_train)
+    
+    print("Evaluating...")
+    # acc = accuracy_score(y_test, model.predict(X_test))
+    # print(f"Accuracy: {acc}")
+
+if __name__ == "__main__":
+    train()
+`;
+
+const generateInitialScript = (config: any) => {
+    return `# Generated Script based on Config
+# Algorithm: ${config.algorithm || 'Auto'}
+# Target: ${config.target || 'Unknown'}
+
+import pandas as pd
+import sklearn
+
+def train():
+    print("Initializing training for target: ${config.target}")
+    # TODO: Implement training logic
+    pass
+
+if __name__ == "__main__":
+    train()
+`;
+}
+

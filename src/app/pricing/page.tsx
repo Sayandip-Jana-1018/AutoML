@@ -10,6 +10,7 @@ import GradientBlinds from "@/components/PrismaticBurst"
 import { useAuth } from "@/context/auth-context"
 import { useRouter } from "next/navigation"
 import SuccessModal from "@/components/ui/success-modal"
+import { RESOURCE_POLICIES } from "@/lib/resource-policy"
 
 declare global {
     interface Window {
@@ -18,14 +19,19 @@ declare global {
 }
 
 export default function PricingPage() {
-    const { user } = useAuth()
+    const { user, userTier } = useAuth()
     const router = useRouter()
-    const { themeColor } = useThemeColor()
+    const { themeColor, setThemeColor } = useThemeColor()
     const [loading, setLoading] = useState(false)
     const [billingCycle, setBillingCycle] = useState<'monthly' | 'annually'>('monthly')
     const [showSuccessModal, setShowSuccessModal] = useState(false)
     const [paymentId, setPaymentId] = useState("")
     const [isPaymentOpen, setIsPaymentOpen] = useState(false)
+
+    // Set default theme color to Purple on mount
+    useEffect(() => {
+        setThemeColor("#8B5CF6")
+    }, [setThemeColor])
 
     const loadRazorpay = () => {
         return new Promise((resolve) => {
@@ -44,6 +50,32 @@ export default function PricingPage() {
         }
 
         setLoading(true)
+
+        // For free plan (Bronze), switch directly without payment
+        if (amount === 0) {
+            try {
+                const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
+                const { db } = await import('@/lib/firebase')
+
+                await setDoc(doc(db, 'users', user.uid), {
+                    tier: 'free',
+                    tierUpdatedAt: serverTimestamp(),
+                    plan: 'BRONZE',
+                    email: user.email
+                }, { merge: true })
+
+                console.log(`Tier updated to free for user ${user.uid}`)
+                setPaymentId('FREE_PLAN_SWITCH')
+                setShowSuccessModal(true)
+            } catch (err) {
+                console.error("Failed to switch to free plan:", err)
+                alert("Failed to switch plan. Please try again.")
+            } finally {
+                setLoading(false)
+            }
+            return
+        }
+
         const res = await loadRazorpay()
 
         if (!res) {
@@ -71,19 +103,50 @@ export default function PricingPage() {
             key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
             amount: order.amount,
             currency: order.currency,
-            name: "Healthy AI",
+            name: "AutoForgeML Studio",
             description: `${plan} Membership`,
             order_id: order.id,
             handler: async function (response: any) {
                 setIsPaymentOpen(false)
                 setPaymentId(response.razorpay_payment_id)
+
+                // Convert plan name to tier
+                const tierMap: Record<string, 'free' | 'silver' | 'gold'> = {
+                    'BRONZE': 'free',
+                    'SILVER': 'silver',
+                    'GOLD': 'gold'
+                }
+                const newTier = tierMap[plan] || 'free'
+
+                // Save tier to Firestore
+                if (user?.uid) {
+                    try {
+                        const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
+                        const { db } = await import('@/lib/firebase')
+
+                        await setDoc(doc(db, 'users', user.uid), {
+                            tier: newTier,
+                            tierUpdatedAt: serverTimestamp(),
+                            paymentId: response.razorpay_payment_id,
+                            plan: plan,
+                            email: user.email
+                        }, { merge: true })
+
+                        console.log(`Tier updated to ${newTier} for user ${user.uid}`)
+                    } catch (err) {
+                        console.error("Failed to update tier:", err)
+                    }
+                }
+
                 setShowSuccessModal(true)
-                // Verify payment on backend here
             },
             modal: {
                 ondismiss: function () {
                     setIsPaymentOpen(false)
-                }
+                },
+                backdropclose: false,
+                escape: true,
+                animation: true
             },
             prefill: {
                 name: user?.displayName,
@@ -91,7 +154,7 @@ export default function PricingPage() {
             },
             theme: {
                 color: "#6366f1",
-                backdrop_color: "#000000"
+                backdrop_color: "rgba(0,0,0,0.95)"
             },
         }
 
@@ -101,71 +164,124 @@ export default function PricingPage() {
         setLoading(false)
     }
 
+    // Fix for Razorpay Overlay Issue: Force dark background everywhere
+    useEffect(() => {
+        if (isPaymentOpen) {
+            document.body.style.overflow = 'hidden'
+            document.body.style.backgroundColor = '#020202'
+            document.documentElement.style.backgroundColor = '#020202'
+            // Force all razorpay containers to have dark backgrounds
+            const interval = setInterval(() => {
+                const razorpayFrames = document.querySelectorAll('.razorpay-container, .razorpay-backdrop, [class*="razorpay"]')
+                razorpayFrames.forEach(el => {
+                    (el as HTMLElement).style.backgroundColor = 'transparent'
+                })
+            }, 100)
+            return () => clearInterval(interval)
+        } else {
+            document.body.style.overflow = 'auto'
+        }
+    }, [isPaymentOpen])
+
     const plans = [
         {
             name: "BRONZE",
+            tier: "free" as const,
             price: 0,
             icon: Star,
             color: "from-orange-400 to-red-500",
             features: [
-                "Gemini Basic Access",
-                "Claude 2.5 Support",
+                "Gemini 1.5 Flash (Free)",
+                "Basic Code Gen",
                 "10 Summaries per day",
-                "Basic Analytics"
+                `${RESOURCE_POLICIES.free.maxTrainingHours} Hour Max Training`,
+                `${RESOURCE_POLICIES.free.maxEpochs} Epochs / ${RESOURCE_POLICIES.free.maxTrees} Trees Limit`,
+                `${RESOURCE_POLICIES.free.allowedMachineTypes[0]} Machine`
             ],
             missing: [
-                "Advanced AI Models",
-                "GPT-3.5 Integration",
-                "Grok 2 Capabilities"
+                "OpenAI GPT-4o",
+                "Claude 3.5 Sonnet",
+                "HPO Tuning"
             ]
         },
         {
             name: "SILVER",
+            tier: "silver" as const,
             price: billingCycle === 'monthly' ? 999 : 799,
             icon: Cpu,
             color: "from-gray-300 to-gray-500",
             features: [
-                "Gemini Basic Access",
-                "Claude 2.5 Support",
-                "Gemini 2.0 Advanced",
-                "Claude 3.5 Haiku",
-                "50 Summaries per day",
-                "GPT-3.5 Integration",
-                "Grok 2 Capabilities"
+                "Everything in Bronze",
+                "OpenAI GPT-4o Mini",
+                "Gemini 1.5 Pro",
+                `${RESOURCE_POLICIES.silver.maxTrainingHours} Hours Max Training`,
+                `${RESOURCE_POLICIES.silver.maxEpochs} Epochs / ${RESOURCE_POLICIES.silver.maxTrees} Trees Limit`,
+                `${RESOURCE_POLICIES.silver.allowedMachineTypes[1] || 'e2-standard-4'} Machine`,
+                `${RESOURCE_POLICIES.silver.maxHpoTrials} HPO Trials`
             ],
-            missing: []
+            missing: [
+                "Claude 3.5 Sonnet",
+                "Priority Support",
+                "50+ HPO Trials"
+            ]
         },
         {
             name: "GOLD",
+            tier: "gold" as const,
             price: billingCycle === 'monthly' ? 2999 : 2399,
             icon: CreditCard,
             color: "from-yellow-400 to-yellow-600",
             features: [
-                "All Silver Features",
-                "Claude 3.5 Opus",
-                "Grok 3 Advanced",
-                "Ultra-fast Processing",
-                "Dedicated Support",
-                "GPT-4 Turbo",
-                "Gemini Ultra"
+                "Everything in Silver",
+                "Claude 3.5 Sonnet (Best for Code)",
+                "GPT-4o (Full)",
+                "Gemini 1.5 Pro (2M Context)",
+                `${RESOURCE_POLICIES.gold.maxTrainingHours} Hours Max Training`,
+                `${RESOURCE_POLICIES.gold.maxEpochs} Epochs / ${RESOURCE_POLICIES.gold.maxTrees} Trees Limit`,
+                `${RESOURCE_POLICIES.gold.allowedMachineTypes.slice(-1)[0] || 'e2-standard-8'} Machine`,
+                `${RESOURCE_POLICIES.gold.maxHpoTrials} HPO Trials`,
+                "Priority Support"
             ],
             missing: []
         }
     ]
 
-    // Force body background to black on this page to prevent white bleed-through
+    // Force body AND html background to black on this page to prevent white bleed-through
     useEffect(() => {
         // Save original styles
-        const originalBg = document.body.style.backgroundColor
+        const originalBodyBg = document.body.style.backgroundColor
+        const originalHtmlBg = document.documentElement.style.backgroundColor
         const originalOverflow = document.body.style.overflow
 
-        // Apply dark theme styles
+        // Apply dark theme styles to both html and body
         document.body.style.backgroundColor = "#020202"
+        document.documentElement.style.backgroundColor = "#020202"
+
+        // Add style to hide Razorpay's default white backdrop
+        const style = document.createElement('style')
+        style.id = 'razorpay-fix'
+        style.innerHTML = `
+            .razorpay-container {
+                background: transparent !important;
+            }
+            .razorpay-backdrop {
+                background: rgba(0, 0, 0, 0.8) !important;
+                backdrop-filter: blur(8px) !important;
+            }
+            .razorpay-checkout-frame {
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8) !important;
+            }
+        `
+        document.head.appendChild(style)
 
         return () => {
             // Restore original styles
-            document.body.style.backgroundColor = originalBg
+            document.body.style.backgroundColor = originalBodyBg
+            document.documentElement.style.backgroundColor = originalHtmlBg
             document.body.style.overflow = originalOverflow
+            // Remove the style
+            const styleEl = document.getElementById('razorpay-fix')
+            if (styleEl) styleEl.remove()
         }
     }, [])
 
@@ -178,9 +294,9 @@ export default function PricingPage() {
                 <Navbar />
             </div>
 
-            {/* Custom Overlay for Razorpay */}
+            {/* Custom Overlay for Razorpay - transparent to show blur underneath */}
             {isPaymentOpen && (
-                <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-md transition-all duration-300" />
+                <div className="fixed inset-0 z-[60] backdrop-blur-sm bg-black/50 transition-all duration-300" />
             )}
 
             <main className="min-h-screen bg-[#020202] pt-24 pb-12 px-4 flex flex-col items-center relative overflow-hidden">
@@ -215,64 +331,89 @@ export default function PricingPage() {
                 </div>
 
                 <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl w-full px-4">
-                    {plans.map((plan, i) => (
-                        <motion.div
-                            key={i}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.1 }}
-                            className={`relative group bg-gradient-to-b ${i === 1 ? 'from-white/10 to-black/60 border-white/20' : 'from-white/5 to-black/60 border-white/10'} border rounded-[2rem] p-6 overflow-hidden hover:border-white/30 transition-all duration-300 flex flex-col`}
-                        >
-                            {/* Glow Effect */}
-                            <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-full h-32 bg-gradient-to-b ${plan.color} opacity-10 blur-[60px] group-hover:opacity-20 transition-opacity`} />
+                    {plans.map((plan, i) => {
+                        const isCurrentPlan = (plan.tier === 'free' && userTier === 'free') ||
+                            (plan.tier === 'silver' && userTier === 'silver') ||
+                            (plan.tier === 'gold' && userTier === 'gold');
 
-                            <div className="relative z-10 flex flex-col h-full items-center text-center">
-                                <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${plan.color} flex items-center justify-center mb-4 shadow-lg`}>
-                                    <plan.icon className="w-6 h-6 text-black" />
+                        return (
+                            <motion.div
+                                key={i}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: i * 0.1 }}
+                                className={`relative group bg-gradient-to-b ${i === 1 ? 'from-white/10 to-black/60 border-white/20' : 'from-white/5 to-black/60 border-white/10'} border rounded-[2rem] p-6 overflow-hidden hover:border-white/30 transition-all duration-300 flex flex-col`}
+                                style={isCurrentPlan ? {
+                                    outline: `2px solid ${themeColor}`,
+                                    outlineOffset: '-2px',
+                                    boxShadow: `0 0 30px ${themeColor}40`
+                                } : {}}
+                            >
+                                {/* Current Plan Badge */}
+                                {isCurrentPlan && (
+                                    <div
+                                        className="absolute top-4 right-4 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                                        style={{ backgroundColor: `${themeColor}30`, color: themeColor }}
+                                    >
+                                        ✓ Current Plan
+                                    </div>
+                                )}
+
+                                {/* Glow Effect */}
+                                <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-full h-32 bg-gradient-to-b ${plan.color} opacity-10 blur-[60px] group-hover:opacity-20 transition-opacity`} />
+
+                                <div className="relative z-10 flex flex-col h-full items-center text-center">
+                                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${plan.color} flex items-center justify-center mb-4 shadow-lg`}>
+                                        <plan.icon className="w-6 h-6 text-black" />
+                                    </div>
+
+                                    <h3 className="text-lg font-bold text-white tracking-widest mb-1">{plan.name}</h3>
+                                    <div className="text-[10px] text-white/50 uppercase tracking-widest mb-4">Membership</div>
+
+                                    <div className="mb-6">
+                                        <span className="text-4xl font-black text-white">₹{plan.price}</span>
+                                        <span className="text-white/40 text-xs block mt-1">billed {billingCycle}</span>
+                                    </div>
+
+                                    <div className="w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-6" />
+
+                                    <div className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-4">Plan Highlights</div>
+
+                                    <div className="space-y-3 w-full text-left mb-6 flex-1">
+                                        {plan.features.map((feat, j) => (
+                                            <div key={j} className="flex items-center gap-2 text-xs text-white/80">
+                                                <Check className={`w-3 h-3 ${i === 2 ? 'text-yellow-400' : i === 1 ? 'text-blue-400' : 'text-green-400'}`} />
+                                                {feat}
+                                            </div>
+                                        ))}
+                                        {plan.missing.map((feat, j) => (
+                                            <div key={j} className="flex items-center gap-2 text-xs text-white/30">
+                                                <X className="w-3 h-3 text-red-500/50" />
+                                                {feat}
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <button
+                                        onClick={() => handlePayment(plan.name, plan.price)}
+                                        disabled={loading || isCurrentPlan}
+                                        className={`w-full py-3 rounded-xl font-bold text-xs transition-all shadow-lg hover:scale-[1.02] active:scale-[0.98] ${isCurrentPlan
+                                            ? 'bg-white/5 border border-white/20 text-white/50 cursor-not-allowed'
+                                            : plan.price === 0
+                                                ? 'bg-white/5 border border-white/10 text-white hover:bg-white/10'
+                                                : i === 1
+                                                    ? 'bg-white text-black hover:bg-gray-200'
+                                                    : 'bg-gradient-to-r from-yellow-600 to-yellow-800 text-white hover:brightness-110'
+                                            }`}
+                                    >
+                                        {loading ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> :
+                                            isCurrentPlan ? "Current Plan" :
+                                                plan.price === 0 ? "Start for Free" : `Get ${plan.name}`}
+                                    </button>
                                 </div>
-
-                                <h3 className="text-lg font-bold text-white tracking-widest mb-1">{plan.name}</h3>
-                                <div className="text-[10px] text-white/50 uppercase tracking-widest mb-4">Membership</div>
-
-                                <div className="mb-6">
-                                    <span className="text-4xl font-black text-white">₹{plan.price}</span>
-                                    <span className="text-white/40 text-xs block mt-1">billed {billingCycle}</span>
-                                </div>
-
-                                <div className="w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-6" />
-
-                                <div className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-4">Plan Highlights</div>
-
-                                <div className="space-y-3 w-full text-left mb-6 flex-1">
-                                    {plan.features.map((feat, j) => (
-                                        <div key={j} className="flex items-center gap-2 text-xs text-white/80">
-                                            <Check className={`w-3 h-3 ${i === 2 ? 'text-yellow-400' : i === 1 ? 'text-blue-400' : 'text-green-400'}`} />
-                                            {feat}
-                                        </div>
-                                    ))}
-                                    {plan.missing.map((feat, j) => (
-                                        <div key={j} className="flex items-center gap-2 text-xs text-white/30">
-                                            <X className="w-3 h-3 text-red-500/50" />
-                                            {feat}
-                                        </div>
-                                    ))}
-                                </div>
-
-                                <button
-                                    onClick={() => handlePayment(plan.name, plan.price)}
-                                    disabled={loading}
-                                    className={`w-full py-3 rounded-xl font-bold text-xs transition-all shadow-lg hover:scale-[1.02] active:scale-[0.98] ${plan.price === 0
-                                        ? 'bg-white/5 border border-white/10 text-white hover:bg-white/10'
-                                        : i === 1
-                                            ? 'bg-white text-black hover:bg-gray-200'
-                                            : 'bg-gradient-to-r from-yellow-600 to-yellow-800 text-white hover:brightness-110'
-                                        }`}
-                                >
-                                    {loading ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : plan.price === 0 ? "Start for Free" : `Get ${plan.name}`}
-                                </button>
-                            </div>
-                        </motion.div>
-                    ))}
+                            </motion.div>
+                        )
+                    })}
                 </div>
 
             </main>

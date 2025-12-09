@@ -10,6 +10,8 @@ import { useAuth } from "@/context/auth-context"
 import {
     Rocket, Play, Terminal, X, Loader2, Sparkles
 } from "lucide-react"
+import { collection, query, orderBy, onSnapshot } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 
 // Types based on API
 interface Model {
@@ -41,61 +43,56 @@ export default function DeployPage() {
     }, [setThemeColor])
 
     // Fetch Models and enrich with feature counts
-    const fetchModels = async () => {
-        try {
-            const controller = new AbortController()
-            const timeoutId = setTimeout(() => controller.abort(), 10000)
+    // Fetch Models and enrich with feature counts
+    useEffect(() => {
+        if (!user) return
 
-            const [modelsRes, datasetsRes] = await Promise.all([
-                fetch('/api/proxy/models', { signal: controller.signal }),
-                fetch('/api/proxy/datasets', { signal: controller.signal })
-            ])
-            clearTimeout(timeoutId)
+        setLoading(true)
 
-            if (modelsRes.ok) {
-                const modelsData = await modelsRes.json()
-                let modelsList = modelsData.models || []
+        // Listen to both models and datasets
+        const modelsQuery = query(collection(db, "models"), orderBy("created_at", "desc"))
+        const datasetsQuery = query(collection(db, "datasets"), orderBy("created_at", "desc"))
 
-                // Enrich models with feature counts from datasets
-                if (datasetsRes.ok) {
-                    const datasetsData = await datasetsRes.json()
-                    const datasets = datasetsData.datasets || []
+        const unsubscribeModels = onSnapshot(modelsQuery, (modelsSnap) => {
+            const unsubscribeDatasets = onSnapshot(datasetsQuery, (datasetsSnap) => {
 
-                    modelsList = modelsList.map((model: Model) => {
-                        // Try to find matching dataset (most recent one)
-                        const dataset = datasets.find((d: any) => d.columns && d.columns.length > 0)
-                        if (dataset && dataset.columns) {
-                            // Filter out target column to get feature columns
-                            const featureColumns = dataset.columns.filter((col: string) => col !== model.target_column)
-                            return { ...model, feature_columns: featureColumns }
-                        }
-                        return model
-                    })
-                }
+                const datasets = datasetsSnap.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                })) as any[]
 
-                // Filter models by user email if available
+                let modelsList = modelsSnap.docs.map(doc => ({
+                    model_id: doc.id,
+                    ...doc.data()
+                })) as Model[]
+
+                // Filter models by user emai
                 if (user?.email) {
                     modelsList = modelsList.filter((m: any) => m.user_email === user?.email)
                 }
 
-                setModels(modelsList)
-            }
-        } catch (error: any) {
-            if (error.name === 'AbortError') {
-                console.error('Request timeout - backend may be down')
-            } else {
-                console.error('Failed to fetch models:', error)
-            }
-        } finally {
-            setLoading(false)
-        }
-    }
+                // Enrich with feature columns
+                modelsList = modelsList.map((model: Model) => {
+                    // Try to find matching dataset (most recent one or by linking ID if available - here heuristics)
+                    // Ideally model doc should have datasetId. Falling back to most recent compatible or similar heuristics
+                    const dataset = datasets.find((d: any) => d.columns && d.columns.length > 0)
 
-    useEffect(() => {
-        fetchModels()
-        const interval = setInterval(fetchModels, 10000)
-        return () => clearInterval(interval)
-    }, [])
+                    if (dataset && dataset.columns) {
+                        const featureColumns = dataset.columns.filter((col: string) => col !== model.target_column)
+                        return { ...model, feature_columns: featureColumns }
+                    }
+                    return model
+                })
+
+                setModels(modelsList)
+                setLoading(false)
+            })
+
+            return () => unsubscribeDatasets()
+        })
+
+        return () => unsubscribeModels()
+    }, [user])
 
     const getAccuracy = (model: Model) => {
         const acc = model.metrics?.accuracy

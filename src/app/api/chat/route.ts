@@ -2,62 +2,75 @@ import { openai } from '@ai-sdk/openai';
 import { google } from '@ai-sdk/google';
 import { anthropic } from '@ai-sdk/anthropic';
 import { streamText } from 'ai';
+import { adminDb } from '@/lib/firebase-admin';
 
+export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
-    const { messages, modelId } = await req.json();
+    const { messages, modelId, userId } = await req.json();
     console.log('Chat API called with modelId:', modelId, 'messages:', messages.length);
 
-    // Fetch context from EC2 with timeout
+    // Fetch context from Firestore instead of EC2
     let context = "";
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        // Fetch recent projects with datasets
+        const projectsSnapshot = await adminDb
+            .collection('projects')
+            .where('owner_email', '!=', null)
+            .orderBy('owner_email')
+            .orderBy('created_at', 'desc')
+            .limit(10)
+            .get();
 
-        const [datasetsRes, modelsRes] = await Promise.all([
-            fetch('http://3.239.173.255/datasets', { signal: controller.signal }).catch(e => ({ ok: false, json: async () => ({ datasets: [] }) })),
-            fetch('http://3.239.173.255/models', { signal: controller.signal }).catch(e => ({ ok: false, json: async () => ({ models: [] }) }))
-        ]);
+        const datasets: any[] = [];
+        for (const projectDoc of projectsSnapshot.docs) {
+            const datasetsRef = adminDb.collection('projects').doc(projectDoc.id).collection('datasets');
+            const datasetsSnap = await datasetsRef.orderBy('createdAt', 'desc').limit(3).get();
+            datasetsSnap.forEach(dsDoc => {
+                const data = dsDoc.data();
+                datasets.push({
+                    id: dsDoc.id,
+                    projectId: projectDoc.id,
+                    name: data.name,
+                    status: data.status,
+                    type: data.type,
+                    rowCount: data.schema?.rowCount,
+                    columnCount: data.schema?.columnCount
+                });
+            });
+        }
 
-        clearTimeout(timeoutId);
+        // Fetch recent models
+        const modelsSnapshot = await adminDb
+            .collection('models')
+            .orderBy('updatedAt', 'desc')
+            .limit(5)
+            .get();
 
-        // @ts-ignore
-        const datasetsData = datasetsRes.ok ? await datasetsRes.json() : { datasets: [] };
-        // @ts-ignore
-        const modelsData = modelsRes.ok ? await modelsRes.json() : { models: [] };
-
-        const datasets = (datasetsData.datasets || []).slice(0, 5).map((d: any) => ({
-            dataset_id: d.dataset_id,
-            name: d.name,
-            rows: d.rows,
-            columns: d.columns,
-            created_at: d.created_at
-        }));
-
-        const models = (modelsData.models || []).slice(0, 5).map((m: any) => ({
-            model_id: m.model_id,
-            target_column: m.target_column,
-            algorithm: m.algorithm,
-            accuracy: m.metrics?.accuracy,
-            created_at: m.created_at
-        }));
+        const models = modelsSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                name: data.name,
+                taskType: data.taskType,
+                algorithm: data.algorithm,
+                accuracy: data.metrics?.accuracy,
+                status: data.status
+            };
+        });
 
         context = `
-Available Datasets (showing first 5): ${JSON.stringify(datasets, null, 2)}
-Available Models (showing first 5): ${JSON.stringify(models, null, 2)}
+Available Datasets (showing recent): ${JSON.stringify(datasets.slice(0, 5), null, 2)}
+Available Models (showing recent): ${JSON.stringify(models, null, 2)}
         `;
     } catch (e: any) {
-        if (e.name === 'AbortError') {
-            console.error("Request timeout fetching context");
-        } else {
-            console.error("Failed to fetch context", e);
-        }
-        context = "Could not fetch current datasets/models status.";
+        console.error("Failed to fetch context from Firestore:", e);
+        context = "Could not fetch current datasets/models status from Firestore.";
     }
 
-    const system = `You are Healthy AI, an intelligent assistant for the Healthy AutoML platform.
-You help users understand their datasets and models.
+    const system = `You are AutoForgeML AI, an intelligent assistant for the AutoForgeML Studio platform.
+You help users understand their datasets and models, and guide them through ML workflows.
 
 Context:
 ${context}
@@ -71,7 +84,7 @@ Answer the user's questions based on this context. Be helpful and concise.`;
         model = anthropic('claude-3-opus-20240229');
         console.log('Using Claude model');
     } else if (id === 2) {
-        model = google('models/gemini-2.0-flash-exp');
+        model = google('models/gemini-2.5-pro');
         console.log('Using Gemini model');
     } else if (id === 3) {
         model = openai('gpt-4o-mini');
@@ -95,7 +108,7 @@ Answer the user's questions based on this context. Be helpful and concise.`;
         console.error('Primary model failed, falling back to Gemini:', error);
 
         const fallbackResult = await streamText({
-            model: google('models/gemini-2.0-flash-exp'),
+            model: google('models/gemini-2.5-pro'),
             system,
             messages,
         });

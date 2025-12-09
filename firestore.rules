@@ -1,0 +1,161 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ==========================================
+    // Helper Functions
+    // ==========================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+    
+    function isCollaborator(resource) {
+      return isAuthenticated() && 
+        resource.data.collaborators != null &&
+        request.auth.uid in resource.data.collaborators.map(c => c.uid);
+    }
+    
+    function hasRole(resource, role) {
+      return isAuthenticated() &&
+        resource.data.collaborators != null &&
+        resource.data.collaborators.filter(c => 
+          c.uid == request.auth.uid && c.role == role
+        ).size() > 0;
+    }
+    
+    function isPublic(resource) {
+      return resource.data.visibility == 'public';
+    }
+    
+    function canView(resource, ownerId) {
+      return isOwner(ownerId) || 
+             isCollaborator(resource) || 
+             isPublic(resource) ||
+             isAdmin();
+    }
+    
+    function canEdit(resource, ownerId) {
+      return isOwner(ownerId) || 
+             hasRole(resource, 'editor') ||
+             hasRole(resource, 'runner') ||
+             isAdmin();
+    }
+    
+    // ==========================================
+    // Users Collection
+    // ==========================================
+    
+    match /users/{userId} {
+      // Users can read/write their own document
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isAdmin();
+    }
+    
+    // ==========================================
+    // Projects Collection
+    // ==========================================
+    
+    match /projects/{projectId} {
+      allow read: if canView(resource, resource.data.ownerId);
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if canEdit(resource, resource.data.ownerId);
+      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+      
+      // Scripts subcollection
+      match /scripts/{scriptId} {
+        allow read: if canView(get(/databases/$(database)/documents/projects/$(projectId)), 
+                               get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId);
+        allow write: if canEdit(get(/databases/$(database)/documents/projects/$(projectId)),
+                                get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId);
+      }
+      
+      // Jobs subcollection
+      match /jobs/{jobId} {
+        allow read: if canView(get(/databases/$(database)/documents/projects/$(projectId)),
+                               get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId);
+        allow create: if canEdit(get(/databases/$(database)/documents/projects/$(projectId)),
+                                 get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId);
+        allow update: if canEdit(get(/databases/$(database)/documents/projects/$(projectId)),
+                                 get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId) ||
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt', 'metrics']);
+        allow delete: if isAdmin();
+      }
+    }
+    
+    // ==========================================
+    // Datasets Collection
+    // ==========================================
+    
+    match /datasets/{datasetId} {
+      allow read: if canView(resource, resource.data.ownerId);
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if canEdit(resource, resource.data.ownerId);
+      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+      
+      // Dataset versions subcollection
+      match /versions/{versionId} {
+        allow read: if canView(get(/databases/$(database)/documents/datasets/$(datasetId)),
+                               get(/databases/$(database)/documents/datasets/$(datasetId)).data.ownerId);
+        allow write: if canEdit(get(/databases/$(database)/documents/datasets/$(datasetId)),
+                                get(/databases/$(database)/documents/datasets/$(datasetId)).data.ownerId);
+      }
+    }
+    
+    // ==========================================
+    // Models Collection
+    // ==========================================
+    
+    match /models/{modelId} {
+      allow read: if canView(resource, resource.data.ownerId);
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if canEdit(resource, resource.data.ownerId);
+      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+      
+      // Model versions subcollection
+      match /versions/{versionId} {
+        allow read: if canView(get(/databases/$(database)/documents/models/$(modelId)),
+                               get(/databases/$(database)/documents/models/$(modelId)).data.ownerId);
+        allow write: if canEdit(get(/databases/$(database)/documents/models/$(modelId)),
+                                get(/databases/$(database)/documents/models/$(modelId)).data.ownerId);
+      }
+    }
+    
+    // ==========================================
+    // Telemetry Collection (Admin only)
+    // ==========================================
+    
+    match /telemetry/{document=**} {
+      allow read: if isAdmin();
+      allow write: if isAuthenticated(); // Server-side writes
+    }
+    
+    // ==========================================
+    // System Collection (Admin only)
+    // ==========================================
+    
+    match /system/{document=**} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+    
+    // ==========================================
+    // Health Check (anyone can write, no read)
+    // ==========================================
+    
+    match /_healthcheck/{docId} {
+      allow read: if false;
+      allow write: if true; // For health check pings
+    }
+  }
+}
