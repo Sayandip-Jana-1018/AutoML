@@ -14,17 +14,25 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
-        // Fetch job details to get artifact path
-        // For simplicity, we assume the job saved model to specific path or we assume a convention
-        // Convention: gs://bucket/projects/{projectId}/jobs/{jobId}/params/
-        // REALITY: We should read it from the Job object in Firestore if we stored it, or GCS.
-        // Let's assume the Training script was instructed to save to:
-        const trainingBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'automl-dc494.appspot.com';
-        // Note: Vertex AI usually exports to `model/` subdirectory if managed, or custom path.
-        // We'll stick to a convention for this studio:
-        const modelArtifactUri = `gs://${trainingBucket}/projects/${projectId}/jobs/${jobId}/model/`;
+        // Fetch job details to get the model output path
+        const jobDoc = await adminDb
+            .collection('projects').doc(projectId)
+            .collection('jobs').doc(jobId)
+            .get();
+
+        if (!jobDoc.exists) {
+            return NextResponse.json({ error: "Job not found" }, { status: 404 });
+        }
+
+        const jobData = jobDoc.data();
+
+        // Use stored modelOutputPath if available, otherwise fall back to convention
+        const trainingBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'mlforge-fluent-cable-480715-c8';
+        const modelArtifactUri = jobData?.modelOutputPath ||
+            `gs://${trainingBucket}/projects/${projectId}/jobs/${jobId}/model/`;
 
         console.log(`[Deploy API] Starting deployment for Job ${jobId}`);
+        console.log(`[Deploy API] Model artifact URI: ${modelArtifactUri}`);
 
         // Trigger Long-Running Deployment
         // In a real async system, we would return "Deploying..." and let a worker handle this.

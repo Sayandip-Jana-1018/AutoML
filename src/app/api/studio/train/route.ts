@@ -60,17 +60,33 @@ export async function POST(req: Request) {
         const scriptVersionId = scriptVersionRef.id;
         console.log(`[Train API] Created script version: ${scriptVersionId} (v${versionNumber})`);
 
-        // 4. Upload Script to GCS
+        // 4. Get dataset GCS path from project
+        const projectDoc = await adminDb.collection('projects').doc(projectId).get();
+        const projectData = projectDoc.data();
+        const datasetGcsPath = projectData?.datasetGcsPath || projectData?.dataset?.gcsPath || '';
+        console.log(`[Train API] Dataset GCS path: ${datasetGcsPath || 'Not found'}`);
+
+        // 5. Upload Script to GCS
         const gcsPath = await uploadScriptToGCS(projectId, script);
 
-        // 5. Submit Real Job to Vertex AI with tier-based limits
+        // 6. Generate a jobId for the Firestore record first so we can use it in Vertex
+        const jobRef = adminDb.collection('projects').doc(projectId).collection('jobs').doc();
+        const firestoreJobId = jobRef.id;
+
+        // 7. Submit Real Job to Vertex AI with tier-based limits and env vars
         const vertexJob = await submitVertexTrainingJob(projectId, gcsPath, {
             tier,
-            machineType: config.machineType
+            machineType: config.machineType,
+            datasetGcsPath,
+            jobId: firestoreJobId
         });
 
-        // 6. Create enriched Job Record in Firestore with full metadata
-        const jobRef = await adminDb.collection('projects').doc(projectId).collection('jobs').add({
+        // Calculate model output path for later deployment reference
+        const trainingBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'mlforge-fluent-cable-480715-c8';
+        const modelOutputPath = `gs://${trainingBucket}/projects/${projectId}/jobs/${firestoreJobId}/model/`;
+
+        // 8. Create enriched Job Record in Firestore with full metadata using pre-created jobRef
+        await jobRef.set({
             // Vertex AI Info
             vertexJobId: vertexJob.jobId,
             status: 'PROVISIONING',
@@ -82,9 +98,13 @@ export async function POST(req: Request) {
 
             // Dataset Versioning (optional)
             datasetVersionId,
+            datasetGcsPath,  // Path to dataset in GCS
 
             // Task Type
             taskType,
+
+            // Model Output (for deployment)
+            modelOutputPath,  // gs://{bucket}/projects/{projectId}/jobs/{jobId}/model/
 
             // Configuration Snapshot (for reproducibility)
             config: {

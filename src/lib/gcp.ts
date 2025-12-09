@@ -40,7 +40,8 @@ const client = privateKey && clientEmail ? new JobServiceClient({
 // Configuration
 export const GCP_PROJECT_ID = projectId;
 export const GCP_LOCATION = process.env.GCP_LOCATION || 'us-central1';
-export const TRAINING_BUCKET = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'automl-dc494.appspot.com';
+// ML Training bucket (NEW GCP project - NOT Firebase Storage)
+export const TRAINING_BUCKET = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'mlforge-fluent-cable-480715-c8';
 
 /**
  * Uploads the generated Python training script to Google Cloud Storage.
@@ -78,12 +79,16 @@ export async function submitVertexTrainingJob(
         tier?: SubscriptionTier;
         machineType?: string;
         imageUri?: string;
+        datasetGcsPath?: string;  // Path to dataset in GCS
+        jobId?: string;           // Job ID for model output path
     } = {}
 ) {
     const {
         tier = 'free',
         machineType = getDefaultMachineType(tier),
-        imageUri = 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest'
+        imageUri = 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest',
+        datasetGcsPath = '',
+        jobId = `job-${Date.now()}`
     } = options;
 
     if (!GCP_PROJECT_ID) throw new Error("GCP_PROJECT_ID is not defined.");
@@ -91,6 +96,18 @@ export async function submitVertexTrainingJob(
     const parent = `projects/${GCP_PROJECT_ID}/locations/${GCP_LOCATION}`;
     const displayName = `studio-job-${Date.now()}`;
     const timeoutSeconds = getMaxTrainingTimeout(tier);
+
+    // Model output path in GCS - this is where the training script will save the model
+    const gcsOutputPath = `gs://${TRAINING_BUCKET}/projects/${projectId}/jobs/${jobId}/model/`;
+
+    // Environment variables for the training container
+    const envVars = [
+        { name: 'GCS_OUTPUT_PATH', value: gcsOutputPath },
+        { name: 'DATASET_GCS_PATH', value: datasetGcsPath },
+        { name: 'PROJECT_ID', value: projectId },
+        { name: 'JOB_ID', value: jobId },
+        { name: 'TRAINING_BUCKET', value: TRAINING_BUCKET }
+    ];
 
     // Construct the CustomJob with resource limits
     const containerJob = {
@@ -105,7 +122,8 @@ export async function submitVertexTrainingJob(
                         "sh",
                         "-c",
                         `gsutil cp ${scriptGcsPath} train.py && python3 train.py`
-                    ]
+                    ],
+                    env: envVars
                 }
             }],
             // Apply timeout based on tier

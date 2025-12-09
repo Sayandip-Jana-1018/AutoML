@@ -75,6 +75,43 @@
 - Monthly/Annual billing toggle
 - Tier-based resource limits
 
+### 🤝 Collaboration
+- **Share Projects/Datasets/Models** with team members via email
+- **Visibility Levels**:
+  - `Private` - Only owner can see
+  - `Team` - Owner + invited collaborators
+  - `Public` - Everyone (appears in Marketplace)
+- **Permission Roles**:
+  - `View` - Can see data and scripts
+  - `Edit` - Can modify code
+  - `Run` - Can train models and deploy
+- Share via URL - same link works, access controlled by visibility
+
+### 💬 Two Chat Systems
+
+| Feature | **Studio Chat** (in `/studio`) | **Main Chat** (`/chat`) |
+|---------|--------------------------------|-------------------------|
+| Purpose | Modify training code | General AI conversation |
+| Commands | "set epochs to 100", "use XGBoost" | Open-ended questions |
+| Context | Your current training script | Your deployed models |
+| AI Model | GPT-4 / Claude / Gemini | Same options |
+
+**Studio Chat Commands:**
+```
+"set test size to 30%"          → Changes train/test split
+"use Random Forest"             → Changes algorithm
+"set epochs to 200"             → Updates max_iter/epochs
+"set learning rate to 0.01"     → Updates lr parameter
+"enable hyperparameter tuning"  → Adds GridSearch/HPO
+"add f1 metric"                 → Adds evaluation metric
+```
+
+### 📥 Code Export
+- **Copy to Clipboard**: Click the copy icon in DiffViewer/CodeEditor
+- **View Full Script**: Code is always visible in the Studio editor
+- **Download**: Right-click code area → "Save As" (browser feature)
+- **Script Versions**: All versions saved in Firestore under `projects/{id}/scripts`
+
 ---
 
 ## 🎨 Latest UI Innovations (v2.0)

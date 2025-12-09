@@ -93,14 +93,21 @@ export default function ProfilePage() {
                         // Fallback to Auth data is handled below
                     }
 
+                    // Debug: Log what we got from Firestore
+                    console.log('[Profile] Firestore data:', data);
+                    console.log('[Profile] Banner value:', (data as any).banner);
+
                     const mappedData = {
                         ...profileData,
                         ...data,
                         name: (data as any).displayName || (data as any).name || user.displayName || "User",
                         email: user.email || (data as any).email || "No email provided",
                         avatar: (data as any).photoURL || (data as any).avatar || user.photoURL || "",
+                        banner: (data as any).banner || (data as any).bannerURL || "",  // Check both possible field names
                         models: (data as any).models || []
                     }
+                    console.log('[Profile] Mapped banner:', mappedData.banner);
+
                     setProfileData(mappedData)
                     setTempData(mappedData)
                     // Use user's saved color or fallback to cyan
