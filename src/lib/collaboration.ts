@@ -178,8 +178,10 @@ export async function checkPermission(
         }
 
         // Permission hierarchy: run > edit > view
-        const permissionLevel = { view: 1, edit: 2, run: 3 };
-        return permissionLevel[collaborator.role] >= permissionLevel[requiredPermission];
+        const permissionLevel: Record<string, number> = { view: 1, edit: 2, run: 3 };
+        const collabRole = collaborator.role as string;
+        const reqPerm = requiredPermission as string;
+        return (permissionLevel[collabRole] || 0) >= (permissionLevel[reqPerm] || 0);
 
     } catch (error) {
         console.error('[Collaboration] Permission check failed:', error);
@@ -238,3 +240,315 @@ export async function getCollaborators(
         return [];
     }
 }
+
+// ==========================================
+// COLLABORATION LINKS
+// ==========================================
+
+export type CollabLinkMode = 'private' | 'public';
+export type CollabLinkRole = 'view' | 'edit';
+
+export interface CollabLink {
+    id: string;
+    projectId: string;
+    creatorId: string;
+    creatorEmail?: string;
+    mode: CollabLinkMode;
+    role: CollabLinkRole;
+    expiresAt: Date | null;
+    maxUses: number | null;
+    uses: number;
+    createdAt: Date;
+    revokedAt?: Date;
+}
+
+/**
+ * Generate a unique link ID (URL-safe)
+ */
+function generateLinkId(): string {
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let result = '';
+    for (let i = 0; i < 12; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+
+/**
+ * Create a shareable collaboration link
+ */
+export async function createCollabLink(params: {
+    projectId: string;
+    creatorId: string;
+    creatorEmail?: string;
+    mode: CollabLinkMode;
+    role: CollabLinkRole;
+    expiresInHours?: number;
+    maxUses?: number;
+}): Promise<{ success: boolean; linkId?: string; error?: string }> {
+    try {
+        // Verify project exists and creator owns it
+        const projectDoc = await adminDb.collection('projects').doc(params.projectId).get();
+        if (!projectDoc.exists) {
+            return { success: false, error: 'Project not found' };
+        }
+
+        const projectData = projectDoc.data();
+
+        // Check ownership - projects may use different field names
+        const isOwner =
+            projectData?.ownerId === params.creatorId ||
+            projectData?.createdBy === params.creatorId ||
+            projectData?.userId === params.creatorId ||
+            (params.creatorEmail && projectData?.owner_email === params.creatorEmail);
+
+        if (!isOwner) {
+            console.log('[Collaboration] Owner check failed:', {
+                projectOwnerId: projectData?.ownerId,
+                projectCreatedBy: projectData?.createdBy,
+                projectUserId: projectData?.userId,
+                projectOwnerEmail: projectData?.owner_email,
+                requestCreatorId: params.creatorId,
+                requestCreatorEmail: params.creatorEmail
+            });
+            return { success: false, error: 'Only project owner can create collaboration links' };
+        }
+
+        const linkId = generateLinkId();
+        const expiresAt = params.expiresInHours
+            ? new Date(Date.now() + params.expiresInHours * 60 * 60 * 1000)
+            : null;
+
+        await adminDb.collection('collab_links').doc(linkId).set({
+            projectId: params.projectId,
+            creatorId: params.creatorId,
+            creatorEmail: params.creatorEmail || null,
+            mode: params.mode,
+            role: params.role,
+            expiresAt,
+            maxUses: params.maxUses || null,
+            uses: 0,
+            createdAt: FieldValue.serverTimestamp(),
+            revokedAt: null
+        });
+
+        return { success: true, linkId };
+
+    } catch (error) {
+        console.error('[Collaboration] Failed to create collab link:', error);
+        return { success: false, error: 'Failed to create link' };
+    }
+}
+
+/**
+ * Validate a collaboration link (check if it's still valid)
+ */
+export async function validateCollabLink(linkId: string): Promise<{
+    valid: boolean;
+    link?: CollabLink;
+    project?: { id: string; name: string };
+    error?: string;
+}> {
+    try {
+        const linkDoc = await adminDb.collection('collab_links').doc(linkId).get();
+
+        if (!linkDoc.exists) {
+            return { valid: false, error: 'Link not found' };
+        }
+
+        const data = linkDoc.data()!;
+
+        // Check if revoked
+        if (data.revokedAt) {
+            return { valid: false, error: 'Link has been revoked' };
+        }
+
+        // Check expiration
+        if (data.expiresAt && data.expiresAt.toDate() < new Date()) {
+            return { valid: false, error: 'Link has expired' };
+        }
+
+        // Check max uses
+        if (data.maxUses && data.uses >= data.maxUses) {
+            return { valid: false, error: 'Link has reached maximum uses' };
+        }
+
+        // Get project info
+        const projectDoc = await adminDb.collection('projects').doc(data.projectId).get();
+        if (!projectDoc.exists) {
+            return { valid: false, error: 'Project no longer exists' };
+        }
+
+        const projectData = projectDoc.data()!;
+
+        return {
+            valid: true,
+            link: {
+                id: linkId,
+                projectId: data.projectId,
+                creatorId: data.creatorId,
+                creatorEmail: data.creatorEmail,
+                mode: data.mode,
+                role: data.role,
+                expiresAt: data.expiresAt?.toDate() || null,
+                maxUses: data.maxUses,
+                uses: data.uses,
+                createdAt: data.createdAt?.toDate() || new Date()
+            },
+            project: {
+                id: data.projectId,
+                name: projectData.name || 'Untitled Project'
+            }
+        };
+
+    } catch (error) {
+        console.error('[Collaboration] Failed to validate link:', error);
+        return { valid: false, error: 'Failed to validate link' };
+    }
+}
+
+/**
+ * Consume a collaboration link (increment uses and grant access)
+ */
+export async function consumeCollabLink(
+    linkId: string,
+    userId: string,
+    userEmail?: string
+): Promise<{ success: boolean; projectId?: string; role?: CollabLinkRole; error?: string }> {
+    try {
+        // First validate
+        const validation = await validateCollabLink(linkId);
+        if (!validation.valid) {
+            return { success: false, error: validation.error };
+        }
+
+        const link = validation.link!;
+
+        // For private links, user must be logged in
+        if (link.mode === 'private' && !userId) {
+            return { success: false, error: 'Login required to access this link' };
+        }
+
+        // Increment uses
+        await adminDb.collection('collab_links').doc(linkId).update({
+            uses: FieldValue.increment(1)
+        });
+
+        // Add user as collaborator if not already (for logged-in users)
+        if (userId && userId !== link.creatorId) {
+            const projectRef = adminDb.collection('projects').doc(link.projectId);
+            const projectDoc = await projectRef.get();
+            const existingCollabs = projectDoc.data()?.collaborators || [];
+
+            const alreadyCollab = existingCollabs.some((c: any) => c.uid === userId);
+            if (!alreadyCollab) {
+                await projectRef.update({
+                    collaborators: FieldValue.arrayUnion({
+                        uid: userId,
+                        email: userEmail || '',
+                        role: link.role,
+                        addedAt: new Date(),
+                        addedBy: link.creatorId,
+                        addedViaLink: linkId
+                    }),
+                    updatedAt: FieldValue.serverTimestamp()
+                });
+            }
+        }
+
+        return {
+            success: true,
+            projectId: link.projectId,
+            role: link.role
+        };
+
+    } catch (error) {
+        console.error('[Collaboration] Failed to consume link:', error);
+        return { success: false, error: 'Failed to use link' };
+    }
+}
+
+/**
+ * Revoke a collaboration link
+ */
+export async function revokeCollabLink(
+    linkId: string,
+    userId: string
+): Promise<{ success: boolean; error?: string }> {
+    try {
+        const linkDoc = await adminDb.collection('collab_links').doc(linkId).get();
+
+        if (!linkDoc.exists) {
+            return { success: false, error: 'Link not found' };
+        }
+
+        const data = linkDoc.data()!;
+
+        // Only creator can revoke
+        if (data.creatorId !== userId) {
+            return { success: false, error: 'Only link creator can revoke' };
+        }
+
+        await adminDb.collection('collab_links').doc(linkId).update({
+            revokedAt: FieldValue.serverTimestamp()
+        });
+
+        return { success: true };
+
+    } catch (error) {
+        console.error('[Collaboration] Failed to revoke link:', error);
+        return { success: false, error: 'Failed to revoke link' };
+    }
+}
+
+/**
+ * Get all active links for a project
+ */
+export async function getProjectCollabLinks(
+    projectId: string,
+    creatorId: string
+): Promise<CollabLink[]> {
+    try {
+        // Simple query - only filter by projectId to avoid composite index requirement
+        const snapshot = await adminDb
+            .collection('collab_links')
+            .where('projectId', '==', projectId)
+            .limit(100)
+            .get();
+
+        // Filter by creatorId and remove revoked links in memory
+        const filteredDocs = snapshot.docs.filter(doc => {
+            const data = doc.data();
+            return data.creatorId === creatorId && !data.revokedAt;
+        });
+
+        // Sort by createdAt and limit
+        return filteredDocs
+            .sort((a, b) => {
+                const aTime = a.data().createdAt?.toMillis?.() || 0;
+                const bTime = b.data().createdAt?.toMillis?.() || 0;
+                return bTime - aTime;
+            })
+            .slice(0, 20)
+            .map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    projectId: data.projectId,
+                    creatorId: data.creatorId,
+                    creatorEmail: data.creatorEmail,
+                    mode: data.mode,
+                    role: data.role,
+                    expiresAt: data.expiresAt?.toDate?.() || null,
+                    maxUses: data.maxUses,
+                    uses: data.uses,
+                    createdAt: data.createdAt?.toDate?.() || new Date()
+                };
+            });
+
+    } catch (error) {
+        console.error('[Collaboration] Failed to get project links:', error);
+        return [];
+    }
+}
+

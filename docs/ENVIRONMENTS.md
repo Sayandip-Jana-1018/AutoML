@@ -8,20 +8,20 @@ Create the following files for each environment:
 ```env
 # Firebase Client
 NEXT_PUBLIC_FIREBASE_API_KEY=your-dev-api-key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=adhyay-dev.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=adhyay-dev
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=adhyay-dev.appspot.com
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=autoforge-dev.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=autoforge-dev
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=autoforge-dev.appspot.com
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
 NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
 
 # Firebase Admin (Server-side)
-FIREBASE_PROJECT_ID=adhyay-dev
-FIREBASE_CLIENT_EMAIL=firebase-adminsdk@adhyay-dev.iam.gserviceaccount.com
+FIREBASE_PROJECT_ID=autoforge-dev
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk@autoforge-dev.iam.gserviceaccount.com
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 
 # GCP
-GOOGLE_CLOUD_PROJECT=adhyay-dev
-GCS_BUCKET=adhyay-dev-datasets
+GOOGLE_CLOUD_PROJECT=autoforge-dev
+GCS_BUCKET=autoforge-dev-datasets
 
 # Vertex AI
 VERTEX_REGION=us-central1
@@ -32,17 +32,31 @@ NODE_ENV=development
 
 ### Staging (`.env.staging`)
 ```env
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=adhyay-staging
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=adhyay-staging.appspot.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=autoforge-staging
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=autoforge-staging.appspot.com
 # ... (same structure, different values)
 NODE_ENV=staging
 ```
 
 ### Production (`.env.production`)
 ```env
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=adhyay-prod
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=adhyay-prod.appspot.com
-# ... (same structure, production values)
+# Firebase (User data, Auth)
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=automl-dc494
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=automl-dc494.appspot.com
+NEXT_PUBLIC_FIREBASE_USER_STORAGE_BUCKET=automl-dc494.firebasestorage.app
+
+# Firebase Admin
+FIREBASE_PROJECT_ID=automl-dc494
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk@automl-dc494.iam.gserviceaccount.com
+
+# GCP (ML Training)
+GOOGLE_CLOUD_PROJECT=mlforge-fluent-cable-480715-c8
+GCS_BUCKET=mlforge-fluent-cable-480715-c8
+TRAINING_BUCKET=mlforge-fluent-cable-480715-c8
+
+# Vertex AI
+VERTEX_REGION=us-central1
+
 NODE_ENV=production
 ```
 

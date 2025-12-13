@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Save, Loader2 } from 'lucide-react';
+import { Save, Loader2, Play, WrapText, ZoomIn, ZoomOut, Settings2, RefreshCw } from 'lucide-react';
 import { GlassCard } from './GlassCard';
 import { useThemeColor } from '@/context/theme-context';
 
@@ -9,7 +9,11 @@ interface CodeEditorProps {
     code: string;
     onChange: (val: string) => void;
     onSave: () => void;
+    onRun?: () => void;
+    onSyncVSCode?: () => void;
     saving: boolean;
+    running?: boolean;
+    syncing?: boolean;
 }
 
 // Python syntax highlighting colors (Jupyter style)
@@ -125,11 +129,13 @@ function highlightLine(line: string): React.ReactNode[] {
     return tokens;
 }
 
-export const CodeEditor = ({ code, onChange, onSave, saving }: CodeEditorProps) => {
+export const CodeEditor = ({ code, onChange, onSave, onRun, onSyncVSCode, saving, running, syncing }: CodeEditorProps) => {
     const { themeColor } = useThemeColor();
     const [displayedLines, setDisplayedLines] = useState<string[]>([]);
     const [isAnimating, setIsAnimating] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
+    const [wordWrap, setWordWrap] = useState(false);
+    const [fontSize, setFontSize] = useState(13);
     const lastCodeLengthRef = useRef<number>(0);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const animationRef = useRef<NodeJS.Timeout | null>(null);
@@ -205,40 +211,147 @@ export const CodeEditor = ({ code, onChange, onSave, saving }: CodeEditorProps) 
                     </div>
                 </div>
 
-                {/* Save Button */}
-                <button
-                    onClick={onSave}
-                    disabled={saving}
-                    className="flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50 hover:brightness-110"
-                    style={{
-                        backgroundColor: `${themeColor}20`,
-                        color: themeColor,
-                        border: `1px solid ${themeColor}30`
-                    }}
-                >
-                    {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                    {saving ? 'Syncing...' : 'Save'}
-                </button>
+                {/* Editor Controls */}
+                <div className="flex items-center gap-2">
+                    {/* Font Size Controls */}
+                    <div className="flex items-center gap-1 mr-2">
+                        <button
+                            onClick={() => setFontSize(s => Math.max(10, s - 1))}
+                            className="p-1.5 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                            title="Decrease font size"
+                        >
+                            <ZoomOut className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="text-[10px] text-white/40 w-6 text-center">{fontSize}</span>
+                        <button
+                            onClick={() => setFontSize(s => Math.min(20, s + 1))}
+                            className="p-1.5 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                            title="Increase font size"
+                        >
+                            <ZoomIn className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+
+                    {/* Word Wrap Toggle */}
+                    <button
+                        onClick={() => setWordWrap(!wordWrap)}
+                        className={`p-1.5 rounded transition-colors ${wordWrap ? 'bg-white/20 text-white' : 'hover:bg-white/10 text-white/50'}`}
+                        title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
+                    >
+                        <WrapText className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Save Button */}
+                    <button
+                        onClick={onSave}
+                        disabled={saving}
+                        className="flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50 hover:brightness-110"
+                        style={{
+                            backgroundColor: `${themeColor}20`,
+                            color: themeColor,
+                            border: `1px solid ${themeColor}30`
+                        }}
+                        title="Save script (Ctrl+S)"
+                    >
+                        {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                        {saving ? 'Syncing...' : 'Save'}
+                    </button>
+
+                    {/* VS Code Sync Button */}
+                    {onSyncVSCode && (
+                        <button
+                            onClick={onSyncVSCode}
+                            disabled={syncing}
+                            className="flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50 hover:brightness-110"
+                            style={{
+                                backgroundColor: '#3b82f620',
+                                color: '#3b82f6',
+                                border: '1px solid #3b82f630'
+                            }}
+                            title="Sync from VS Code"
+                        >
+                            {syncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                            {syncing ? 'Syncing...' : 'Sync'}
+                        </button>
+                    )}
+
+                    {/* Run Training Button */}
+                    {onRun && (
+                        <button
+                            onClick={onRun}
+                            disabled={running}
+                            className="flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-bold transition-all disabled:opacity-50 hover:brightness-110"
+                            style={{
+                                backgroundColor: running ? '#f59e0b' : '#22c55e',
+                                color: 'white'
+                            }}
+                            title="Run training on VM"
+                        >
+                            {running ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                            {running ? 'Training...' : 'Run'}
+                        </button>
+                    )}
+                </div>
             </div>
 
-            {/* Code Area with Syntax Highlighting - SINGLE SCROLLABLE CONTAINER */}
-            <div className="flex-1 overflow-y-auto bg-[#0d0d0d]">
-                <div className="flex min-h-full">
-                    {/* Line Numbers */}
-                    <div className="flex-shrink-0 py-4 px-3 bg-[#0a0a0a] border-r border-white/5 select-none sticky left-0">
-                        <div className="font-mono text-xs leading-6 text-right" style={{ color: `${themeColor}60` }}>
+            {/* Code Area with Syntax Highlighting - Single theme-colored scrollbar */}
+            <style dangerouslySetInnerHTML={{
+                __html: `
+                #code-editor-scroll::-webkit-scrollbar {
+                    width: 8px;
+                    height: 8px;
+                }
+                #code-editor-scroll::-webkit-scrollbar-track {
+                    background: rgba(0, 0, 0, 0.2);
+                    border-radius: 4px;
+                }
+                #code-editor-scroll::-webkit-scrollbar-thumb {
+                    background: ${themeColor}40;
+                    border-radius: 4px;
+                }
+                #code-editor-scroll::-webkit-scrollbar-thumb:hover {
+                    background: ${themeColor}80;
+                }
+                #code-editor-scroll::-webkit-scrollbar-corner {
+                    background: transparent;
+                }
+            `}} />
+            <div
+                id="code-editor-scroll"
+                className="flex-1 bg-[#0d0d0d]"
+                style={{
+                    overflow: 'auto',
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: `${themeColor}40 rgba(0,0,0,0.2)`,
+                }}
+            >
+                <div className="flex" style={{ minHeight: '100%' }}>
+                    {/* Line Numbers - Sticky */}
+                    <div
+                        className="flex-shrink-0 py-4 px-3 bg-[#0a0a0a] border-r border-white/5 select-none sticky left-0 z-10"
+                    >
+                        <div className="font-mono text-right" style={{ color: `${themeColor}60`, fontSize: `${fontSize}px`, lineHeight: '1.6' }}>
                             {displayedLines.map((_, i) => (
-                                <div key={i} className="h-6">{i + 1}</div>
+                                <div key={i} style={{ height: `${fontSize * 1.6}px` }}>{i + 1}</div>
                             ))}
                         </div>
                     </div>
 
-                    {/* Code Content - Editable */}
-                    <div className="flex-1 relative">
-                        {/* Syntax Highlighted Display (read-only overlay) */}
-                        <pre className="absolute inset-0 py-4 px-4 font-mono text-sm leading-6 whitespace-pre-wrap pointer-events-none">
+                    {/* Code Content - Relative positioning for proper scroll */}
+                    <div className="relative" style={{ minWidth: wordWrap ? '0' : 'fit-content', flex: wordWrap ? 1 : 'none' }}>
+                        {/* Syntax Highlighted Display */}
+                        <pre
+                            className="py-4 px-4 font-mono pointer-events-none"
+                            style={{
+                                whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
+                                wordBreak: wordWrap ? 'break-word' : 'normal',
+                                fontSize: `${fontSize}px`,
+                                lineHeight: '1.6',
+                                minWidth: wordWrap ? '100%' : 'max-content'
+                            }}
+                        >
                             {displayedLines.map((line, i) => (
-                                <div key={i} className="h-6">
+                                <div key={i} style={{ minHeight: `${fontSize * 1.6}px` }}>
                                     {highlightLine(line)}
                                     {isAnimating && i === displayedLines.length - 1 && (
                                         <span className="animate-pulse text-white">▊</span>
@@ -247,16 +360,23 @@ export const CodeEditor = ({ code, onChange, onSave, saving }: CodeEditorProps) 
                             ))}
                         </pre>
 
-                        {/* Editable Textarea */}
+                        {/* Editable Textarea - Positioned on top */}
                         <textarea
                             ref={textareaRef}
                             value={code}
                             onChange={handleTextChange}
                             onFocus={handleFocus}
                             onBlur={handleBlur}
-                            className="w-full min-h-full overflow-hidden bg-transparent text-transparent caret-white py-4 px-4 font-mono text-sm resize-none focus:outline-none leading-6"
+                            className="absolute inset-0 py-4 px-4 bg-transparent text-transparent caret-white font-mono resize-none focus:outline-none"
                             spellCheck={false}
-                            style={{ tabSize: 4, caretColor: themeColor }}
+                            style={{
+                                tabSize: 4,
+                                caretColor: themeColor,
+                                whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
+                                wordBreak: wordWrap ? 'break-word' : 'normal',
+                                fontSize: `${fontSize}px`,
+                                lineHeight: '1.6'
+                            }}
                         />
                     </div>
                 </div>
@@ -270,9 +390,12 @@ export const CodeEditor = ({ code, onChange, onSave, saving }: CodeEditorProps) 
                         Python
                     </span>
                     <span>UTF-8</span>
+                    <span className="text-white/30">Ctrl+S to save</span>
                 </div>
                 <div className="flex items-center gap-4">
                     <span>Ln {displayedLines.length}</span>
+                    <span>{wordWrap ? 'Wrap: On' : 'Wrap: Off'}</span>
+                    <span>Size: {fontSize}px</span>
                     {isAnimating && (
                         <span className="text-yellow-400 animate-pulse">● Generating...</span>
                     )}

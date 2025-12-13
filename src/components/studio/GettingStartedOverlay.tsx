@@ -58,7 +58,7 @@ export function GettingStartedOverlay({ onClose, onComplete }: GettingStartedOve
 
     useEffect(() => {
         // Check if already dismissed
-        const dismissed = localStorage.getItem('adhyay_getting_started_dismissed');
+        const dismissed = localStorage.getItem('mlforge_getting_started_dismissed');
         if (dismissed === 'true') {
             setIsDismissed(true);
             onComplete();
@@ -74,13 +74,13 @@ export function GettingStartedOverlay({ onClose, onComplete }: GettingStartedOve
     };
 
     const handleComplete = () => {
-        localStorage.setItem('adhyay_getting_started_dismissed', 'true');
+        localStorage.setItem('mlforge_getting_started_dismissed', 'true');
         setIsDismissed(true);
         onComplete();
     };
 
     const handleSkip = () => {
-        localStorage.setItem('adhyay_getting_started_dismissed', 'true');
+        localStorage.setItem('mlforge_getting_started_dismissed', 'true');
         onClose();
     };
 

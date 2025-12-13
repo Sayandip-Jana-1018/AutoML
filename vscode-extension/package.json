@@ -1,0 +1,114 @@
+{
+    "name": "mlforge-studio",
+    "displayName": "MLForge Studio",
+    "description": "Real-time collaboration with MLForge Studio - sync code, share cursors, and push to cloud",
+    "version": "0.1.0",
+    "publisher": "mlforge",
+    "engines": {
+        "vscode": "^1.80.0"
+    },
+    "categories": [
+        "Machine Learning",
+        "Other"
+    ],
+    "keywords": [
+        "mlforge",
+        "machine learning",
+        "collaboration",
+        "ai",
+        "automl"
+    ],
+    "activationEvents": [],
+    "main": "./out/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "mlforge.connect",
+                "title": "MLForge: Connect to Project"
+            },
+            {
+                "command": "mlforge.disconnect",
+                "title": "MLForge: Disconnect"
+            },
+            {
+                "command": "mlforge.commit",
+                "title": "MLForge: Save Version"
+            },
+            {
+                "command": "mlforge.push",
+                "title": "MLForge: Push to Cloud"
+            },
+            {
+                "command": "mlforge.showStatus",
+                "title": "MLForge: Show Connection Status"
+            }
+        ],
+        "configuration": {
+            "title": "MLForge Studio",
+            "properties": {
+                "mlforge.serverUrl": {
+                    "type": "string",
+                    "default": "http://localhost:4000",
+                    "description": "URL of the MLForge MCP server"
+                },
+                "mlforge.apiBaseUrl": {
+                    "type": "string",
+                    "default": "http://localhost:3000",
+                    "description": "URL of the MLForge web application"
+                },
+                "mlforge.autoConnect": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Automatically connect when opening a linked file"
+                }
+            }
+        },
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "mlforge",
+                    "title": "MLForge",
+                    "icon": "resources/icon.svg"
+                }
+            ]
+        },
+        "views": {
+            "mlforge": [
+                {
+                    "id": "mlforgeCollaborators",
+                    "name": "Collaborators"
+                },
+                {
+                    "id": "mlforgeVersions",
+                    "name": "Versions"
+                }
+            ]
+        },
+        "uriHandlers": [
+            {
+                "scheme": "vscode",
+                "authority": "mlforge.mlforge-studio"
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "lint": "eslint src --ext ts"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.0",
+        "@types/vscode": "^1.80.0",
+        "@types/ws": "^8.5.10",
+        "eslint": "^8.56.0",
+        "typescript": "^5.3.3"
+    },
+    "dependencies": {
+        "lib0": "^0.2.114",
+        "ws": "^8.16.0",
+        "y-protocols": "^1.0.6",
+        "y-websocket": "^1.5.4",
+        "yjs": "^13.6.11"
+    }
+}

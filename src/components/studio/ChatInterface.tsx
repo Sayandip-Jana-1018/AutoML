@@ -11,12 +11,14 @@ import { Message } from './types';
 interface ChatInterfaceProps {
     projectId: string;
     currentScript: string;
+    currentScriptVersion?: number;
+    currentVersionId?: string;
     datasetType?: string;
     schema?: any;
     themeColor: string;
 }
 
-export const ChatInterface = ({ projectId, currentScript, datasetType, schema, themeColor }: ChatInterfaceProps) => {
+export const ChatInterface = ({ projectId, currentScript, currentScriptVersion, currentVersionId, datasetType, schema, themeColor }: ChatInterfaceProps) => {
     const { user, userTier } = useAuth();
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
@@ -35,7 +37,7 @@ export const ChatInterface = ({ projectId, currentScript, datasetType, schema, t
 
     // Load saved model from localStorage on mount
     useEffect(() => {
-        const savedModel = localStorage.getItem('adhyay_selected_model') as 'gemini' | 'openai' | 'claude' | null;
+        const savedModel = localStorage.getItem('mlforge_selected_model') as 'gemini' | 'openai' | 'claude' | null;
         if (savedModel && modelAccess[savedModel]) {
             setSelectedModel(savedModel);
         }
@@ -102,6 +104,8 @@ export const ChatInterface = ({ projectId, currentScript, datasetType, schema, t
                     projectId,
                     message: input,
                     currentScript,
+                    currentScriptVersion,
+                    currentVersionId,
                     datasetType,
                     model: selectedModel,
                     schema,
@@ -152,7 +156,7 @@ export const ChatInterface = ({ projectId, currentScript, datasetType, schema, t
                             const value = e.target.value as 'gemini' | 'openai' | 'claude';
                             if (modelAccess[value]) {
                                 setSelectedModel(value);
-                                localStorage.setItem('adhyay_selected_model', value);
+                                localStorage.setItem('mlforge_selected_model', value);
                             }
                         }}
                         className="appearance-none bg-black/40 backdrop-blur-sm border rounded-lg px-3 py-1.5 text-[11px] font-medium focus:outline-none cursor-pointer transition-all hover:bg-black/60"
@@ -183,7 +187,34 @@ export const ChatInterface = ({ projectId, currentScript, datasetType, schema, t
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Chat Messages - Fixed height with themed scrollbar */}
+            <style dangerouslySetInnerHTML={{
+                __html: `
+                #chat-messages-scroll::-webkit-scrollbar {
+                    width: 6px;
+                }
+                #chat-messages-scroll::-webkit-scrollbar-track {
+                    background: rgba(0, 0, 0, 0.2);
+                    border-radius: 3px;
+                }
+                #chat-messages-scroll::-webkit-scrollbar-thumb {
+                    background: ${themeColor}40;
+                    border-radius: 3px;
+                }
+                #chat-messages-scroll::-webkit-scrollbar-thumb:hover {
+                    background: ${themeColor}80;
+                }
+            `}} />
+            <div
+                id="chat-messages-scroll"
+                className="flex-1 p-4 space-y-4"
+                style={{
+                    overflow: 'auto',
+                    maxHeight: '260px',
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: `${themeColor}40 rgba(0,0,0,0.2)`,
+                }}
+            >
                 {messages.length === 0 && (
                     <div className="text-center text-black/30 dark:text-white/30 text-sm mt-10">
                         <p>Tell me how to change your model.</p>
@@ -193,19 +224,32 @@ export const ChatInterface = ({ projectId, currentScript, datasetType, schema, t
                 )}
                 {messages.map((msg, i) => (
                     <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                        <div className={`max-w-[85%] rounded-xl p-3 text-sm ${msg.role === 'user'
-                            ? 'bg-blue-600/20 text-blue-100 border border-blue-600/30'
-                            : 'bg-white/10 dark:bg-white/10 text-black dark:text-gray-200 border border-white/10 dark:border-white/10'
-                            }`}>
+                        <div
+                            className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm backdrop-blur-sm ${msg.role === 'user'
+                                    ? 'text-white'
+                                    : 'bg-white/5 text-white/90 border border-white/10'
+                                }`}
+                            style={msg.role === 'user' ? {
+                                background: `linear-gradient(135deg, ${themeColor}50 0%, ${themeColor}30 100%)`,
+                                border: `1px solid ${themeColor}40`,
+                                boxShadow: `0 2px 12px ${themeColor}20`
+                            } : undefined}
+                        >
                             {msg.content}
                         </div>
                     </div>
                 ))}
                 {sending && (
                     <div className="flex items-start">
-                        <div className="bg-white/10 dark:bg-white/10 rounded-xl p-3 flex items-center gap-2 border border-white/10 dark:border-white/10">
-                            <Loader2 className="w-4 h-4 animate-spin text-black/50 dark:text-white/50" />
-                            <span className="text-xs text-black/50 dark:text-white/50">Processing code changes...</span>
+                        <div
+                            className="rounded-2xl px-4 py-2.5 flex items-center gap-2 backdrop-blur-sm"
+                            style={{
+                                background: `linear-gradient(135deg, ${themeColor}20 0%, ${themeColor}10 100%)`,
+                                border: `1px solid ${themeColor}30`
+                            }}
+                        >
+                            <Loader2 className="w-4 h-4 animate-spin" style={{ color: themeColor }} />
+                            <span className="text-xs text-white/70">Generating code...</span>
                         </div>
                     </div>
                 )}

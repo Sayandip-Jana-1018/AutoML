@@ -29,12 +29,60 @@ export async function GET(req: Request) {
                     .limit(50)
                     .get();
 
-                const models = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    createdAt: doc.data().createdAt?.toDate?.() || null,
-                    updatedAt: doc.data().updatedAt?.toDate?.() || null
-                }));
+                // Get unique owner IDs and emails to fetch their display names
+                const ownerIds = [...new Set(snapshot.docs.map(doc => doc.data().ownerId).filter(Boolean))];
+                const ownerEmails = [...new Set(snapshot.docs.map(doc => doc.data().ownerEmail || doc.data().user_email).filter(Boolean))];
+
+                // Fetch owner names and photos in batch
+                const ownerData: Record<string, { name: string | null; photoURL: string | null }> = {};
+                const emailToData: Record<string, { name: string | null; photoURL: string | null }> = {};
+
+                // Lookup by ownerId
+                if (ownerIds.length > 0) {
+                    const userPromises = ownerIds.map(async (ownerId) => {
+                        try {
+                            const userDoc = await adminDb.collection('users').doc(ownerId).get();
+                            if (userDoc.exists) {
+                                const userData = userDoc.data();
+                                console.log(`[Registry] User ${ownerId} data:`, {
+                                    displayName: userData?.displayName,
+                                    name: userData?.name,
+                                    email: userData?.email,
+                                    photoURL: userData?.photoURL,
+                                    avatar: userData?.avatar
+                                });
+                                const name = userData?.displayName || userData?.name || userData?.email?.split('@')[0] || null;
+                                const photoURL = userData?.photoURL || userData?.avatar || null;
+                                ownerData[ownerId] = { name, photoURL };
+                                if (userData?.email) {
+                                    emailToData[userData.email] = { name, photoURL };
+                                }
+                            }
+                        } catch (e) {
+                            console.log(`[Registry] User lookup error for ${ownerId}:`, e);
+                        }
+                    });
+                    await Promise.all(userPromises);
+                }
+
+                const models = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    // Try ownerId first, then email fallback
+                    let owner = ownerData[data.ownerId] || { name: null, photoURL: null };
+                    if (!owner.name && (data.ownerEmail || data.user_email)) {
+                        const email = data.ownerEmail || data.user_email;
+                        owner = emailToData[email] || owner;
+                    }
+                    return {
+                        id: doc.id,
+                        ...data,
+                        // Use fetched owner name and photo, fall back to stored values
+                        ownerName: owner.name || data.ownerName || null,
+                        ownerPhotoURL: owner.photoURL || data.ownerPhotoURL || null,
+                        createdAt: data.createdAt?.toDate?.() || null,
+                        updatedAt: data.updatedAt?.toDate?.() || null
+                    };
+                });
 
                 return NextResponse.json({ models: models || [] });
             } catch (indexError: any) {

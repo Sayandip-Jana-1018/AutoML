@@ -243,7 +243,10 @@ export async function POST(req: Request) {
             'dataset.columnTypes': Object.fromEntries(
                 schema.columns.map(c => [c.name, c.type || 'unknown'])
             ),
-            'dataset.rowCount': schema.rowCount || 0
+            'dataset.rowCount': schema.rowCount || 0,
+            'dataset.storageUrl': gcsPath,  // Critical: This is needed for training!
+            'dataset.gcsPath': gcsPath,     // Also store as gcsPath for compatibility
+            'dataset.fileSize': fileSize || 0
         });
 
         // 6. Create user_datasets entry for cross-project deduplication

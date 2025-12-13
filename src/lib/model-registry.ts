@@ -91,18 +91,50 @@ export interface LineageEdge {
  */
 export async function registerModel(data: {
     name: string;
-    description: string;
-    taskType: 'classification' | 'regression';
+    description?: string;
+    taskType: 'classification' | 'regression' | string;
     projectId: string;
     ownerId: string;
+    // Optional fields for auto-registration
+    ownerEmail?: string;
+    ownerName?: string;
+    ownerPhotoURL?: string;
+    version?: number | string;
+    metrics?: Record<string, number>;
+    gcsPath?: string;
+    visibility?: 'private' | 'team' | 'public';
+    status?: 'training' | 'ready' | 'deployed' | 'archived';
+    trainedAt?: string;
+    jobId?: string;
+    // Feature columns for prediction forms
+    feature_columns?: string[];
+    target_column?: string;
+    algorithm?: string;
 }): Promise<string> {
     const modelRef = await adminDb.collection('models').add({
-        ...data,
+        name: data.name,
+        description: data.description || `Trained model for ${data.name}`,
+        taskType: data.taskType,
+        projectId: data.projectId,
+        ownerId: data.ownerId,
+        ownerEmail: data.ownerEmail || null,
+        ownerName: data.ownerName || null,
+        ownerPhotoURL: data.ownerPhotoURL || null,
+        version: data.version || 1,
+        metrics: data.metrics || null,
+        gcsPath: data.gcsPath || null,
+        jobId: data.jobId || null,
+        trainedAt: data.trainedAt || null,
         bestVersionId: null,
-        bestMetricValue: null,
-        totalVersions: 0,
-        visibility: 'private',
+        bestMetricValue: data.metrics?.accuracy || null,
+        totalVersions: 1,
+        visibility: data.visibility || 'private',
+        status: data.status || 'ready',
         collaborators: [],
+        // Feature columns for prediction forms
+        feature_columns: data.feature_columns || [],
+        target_column: data.target_column || 'target',
+        algorithm: data.algorithm || 'Unknown',
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp()
     });

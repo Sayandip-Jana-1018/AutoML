@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { motion } from "framer-motion"
-import { Sparkles, Home, Grid, User, MessageCircle, Rocket, CreditCard } from "lucide-react"
+import { Sparkles, Home, Grid, User, MessageCircle, Rocket, CreditCard, BarChart3 } from "lucide-react"
 import Link from "next/link"
 import { useThemeColor } from "@/context/theme-context"
 import { cn } from "@/lib/utils"
@@ -13,11 +13,12 @@ import { usePathname } from "next/navigation"
 const PAGE_COLORS: Record<string, string> = {
   "/": "#0cb322",           // Home - Green
   "/studio": "#3B82F6",     // Studio - Blue
-  "/marketplace": "#06B6D4", // Marketplace - Orange/Amber
+  "/visualize": "#8B5CF6",  // Visualize - Purple
+  "/marketplace": "#06B6D4", // Marketplace - Cyan
   "/chat": "#E947F5",       // Chat - Pink
   "/deploy": "#6f510b",     // Deploy - Gold
   "/pricing": "#8B5CF6",    // Pricing - Purple
-  "/profile": "#F59E0B",    // Profile - Cyan
+  "/profile": "#F59E0B",    // Profile - Amber
 }
 
 export function Navbar() {
@@ -28,6 +29,7 @@ export function Navbar() {
   const navItems = [
     { name: "Home", icon: Home, href: "/", defaultColor: PAGE_COLORS["/"] },
     { name: "Studio", icon: Sparkles, href: "/studio", defaultColor: PAGE_COLORS["/studio"] },
+    { name: "Visualize", icon: BarChart3, href: "/visualize", defaultColor: PAGE_COLORS["/visualize"] },
     { name: "Marketplace", icon: Grid, href: "/marketplace", defaultColor: PAGE_COLORS["/marketplace"] },
     { name: "Chat", icon: MessageCircle, href: "/chat", defaultColor: PAGE_COLORS["/chat"] },
     { name: "Deploy", icon: Rocket, href: "/deploy", defaultColor: PAGE_COLORS["/deploy"] },

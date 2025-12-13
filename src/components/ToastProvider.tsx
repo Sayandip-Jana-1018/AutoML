@@ -65,7 +65,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             {children}
 
             {/* Toast Container */}
-            <div className="fixed top-20 right-4 z-[100] flex flex-col gap-3 max-w-md">
+            <div className="fixed top-20 right-4 z-[100] flex flex-col gap-3 max-w-sm w-full">
                 <AnimatePresence>
                     {toasts.map(toast => {
                         const colors = getColors(toast.type);
@@ -83,9 +83,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                                     <div className="flex-shrink-0 mt-0.5">
                                         {getIcon(toast.type)}
                                     </div>
-                                    <div className="flex-1 min-w-0">
+                                    <div className="flex-1 min-w-0 text-left">
                                         <h4 className="font-bold text-white text-sm">{toast.title}</h4>
-                                        <p className="text-white/70 text-sm mt-1 whitespace-pre-line">{toast.message}</p>
+                                        <p className="text-white/70 text-sm mt-1 whitespace-pre-line leading-relaxed">{toast.message}</p>
                                     </div>
                                     <button
                                         onClick={() => hideToast(toast.id)}

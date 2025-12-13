@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { useThemeColor } from '@/context/theme-context';
-import { doc, getDoc, onSnapshot, updateDoc, collection, orderBy, query, serverTimestamp } from 'firebase/firestore';
+import { useTraining } from '@/context/training-context';
+import { doc, getDoc, onSnapshot, updateDoc, collection, orderBy, query, serverTimestamp, addDoc, getDocs, limit, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Loader2, BarChart3, Terminal, History, Code } from 'lucide-react';
+import { Loader2, BarChart3, Terminal, History, Code, Clock, Globe, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Navbar } from '@/components/navbar';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -26,16 +27,23 @@ import {
     DatasetTriggerButton,
     WorkflowTimeline,
     StudioHeader,
+    SuggestionPanel,
+    ScriptVersionsView,
+    CollabLinkModal,
+    GitHubPushModal,
     type Project,
     type Job
 } from '@/components/studio';
 import { TrainingConfigOverlay, TrainingConfigTrigger, type TrainingConfig } from '@/components/studio/TrainingConfigOverlay';
 import { TrainingProgressOverlay, type TrainingStep } from '@/components/studio/TrainingProgressOverlay';
+import { TrainingSuccessOverlay } from '@/components/studio/TrainingSuccessOverlay';
+
 import { RESOURCE_POLICIES } from '@/lib/resource-policy';
 
 // --- Main Page ---
 export default function StudioPage() {
     const params = useParams();
+    const searchParams = useSearchParams();
     const { user, userTier } = useAuth();
     const { themeColor } = useThemeColor();
     const { showToast } = useToast();
@@ -52,8 +60,20 @@ export default function StudioPage() {
     const [allJobs, setAllJobs] = useState<Job[]>([]);
     const [activeDataset, setActiveDataset] = useState<any>(null);
     const [activeTab, setActiveTab] = useState<'terminal' | 'versions' | 'journey' | 'metrics'>('terminal');
+    const [projectModel, setProjectModel] = useState<{ id: string; visibility: 'public' | 'private' } | null>(null);
     const [userAvatar, setUserAvatar] = useState<string | null>(null);
     const [isAutoMLRunning, setIsAutoMLRunning] = useState(false);
+
+    // Share modal state
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [showGitHubModal, setShowGitHubModal] = useState(false);
+
+    // VS Code connection state
+    const [isConnectingVSCode, setIsConnectingVSCode] = useState(false);
+    const [vsCodeConnected, setVsCodeConnected] = useState(false);
+    const [isSyncingVSCode, setIsSyncingVSCode] = useState(false);
+    const [showMCPModal, setShowMCPModal] = useState(false);
+    const [mcpError, setMcpError] = useState<string | null>(null);
 
     // Dataset overlay state
     const [showDatasetOverlay, setShowDatasetOverlay] = useState(false);
@@ -71,10 +91,57 @@ export default function StudioPage() {
         };
     });
 
-    // Training progress overlay state
+    // Training progress overlay state - synced with global context
+    const training = useTraining();
     const [showTrainingProgress, setShowTrainingProgress] = useState(false);
     const [trainingStep, setTrainingStep] = useState<TrainingStep>('preparing');
     const [trainingError, setTrainingError] = useState<string | null>(null);
+
+    // Sync overlay visibility with global context on mount
+    useEffect(() => {
+        if (training.activeJob && ['running', 'provisioning', 'installing', 'downloading', 'training', 'RUNNING', 'PROVISIONING'].includes(training.activeJob.status)) {
+            setShowTrainingProgress(true);
+        }
+    }, [training.activeJob]);
+
+    // Training success celebration state
+    const [showSuccessCelebration, setShowSuccessCelebration] = useState(false);
+    const [completedJobInfo, setCompletedJobInfo] = useState<{ modelName: string; version: string; metrics?: { accuracy?: number; loss?: number } } | null>(null);
+    const prevJobStatusRef = React.useRef<string | null>(null);
+
+    // Sync status state
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    // Suggestion panel state (from Chat page)
+    const [showSuggestionPanel, setShowSuggestionPanel] = useState(false);
+    const [suggestionData, setSuggestionData] = useState<{
+        id: string;
+        text: string;
+        extractedCode: string;
+        createdAt?: string;
+    } | null>(null);
+    const [suggestionLoading, setSuggestionLoading] = useState(false);
+
+    // Load suggestion from URL if present
+    useEffect(() => {
+        const suggestionId = searchParams?.get('suggestionId');
+        if (suggestionId && !suggestionData) {
+            setSuggestionLoading(true);
+            fetch(`/api/studio/suggestions/${suggestionId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.suggestion) {
+                        setSuggestionData(data.suggestion);
+                        setShowSuggestionPanel(true);
+                    }
+                })
+                .catch(err => {
+                    console.error('Failed to load suggestion:', err);
+                    showToast({ type: 'error', title: 'Error', message: 'Failed to load suggestion' });
+                })
+                .finally(() => setSuggestionLoading(false));
+        }
+    }, [searchParams, suggestionData, showToast]);
 
     // Fetch user avatar
     useEffect(() => {
@@ -135,6 +202,27 @@ export default function StudioPage() {
         return () => unsubscribe();
     }, [projectId]);
 
+    // Fetch latest model for this project (for visibility toggle)
+    useEffect(() => {
+        if (!projectId) return;
+        const q = query(
+            collection(db, 'models'),
+            where('projectId', '==', projectId),
+            orderBy('createdAt', 'desc'),
+            limit(1)
+        );
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            if (!snapshot.empty) {
+                const doc = snapshot.docs[0];
+                setProjectModel({
+                    id: doc.id,
+                    visibility: (doc.data().visibility as 'public' | 'private') || 'private'
+                });
+            }
+        });
+        return () => unsubscribe();
+    }, [projectId]);
+
     // Sync jobs
     useEffect(() => {
         if (!projectId) return;
@@ -149,7 +237,31 @@ export default function StudioPage() {
             if (jobs.length > 0) {
                 const latest = jobs[0];
                 setActiveJob(latest);
-                if (['provisioning', 'running'].includes(latest.status)) {
+
+                // Check if job just completed - trigger celebration!
+                const prevStatus = prevJobStatusRef.current;
+                const isNowComplete = ['succeeded', 'completed'].includes(latest.status);
+                const wasRunning = prevStatus && ['provisioning', 'running', 'PROVISIONING', 'RUNNING', 'installing', 'downloading', 'training'].includes(prevStatus);
+
+                console.log('[Studio] Job status check:', { prevStatus, currentStatus: latest.status, isNowComplete, wasRunning });
+
+                // Trigger celebration ONLY if status just changed from running -> completed
+                // DO NOT show on fresh page load even if job is complete (prevents showing every time page opens)
+                if (wasRunning && isNowComplete) {
+                    console.log('[Studio] 🎉 Triggering celebration!');
+                    setCompletedJobInfo({
+                        modelName: project?.name || 'Model',
+                        version: `v${latest.scriptVersion || '1'}`,
+                        metrics: latest.metrics
+                    });
+                    setShowSuccessCelebration(true);
+
+                    // Auto-clear activeJob from global context
+                    training.completeTraining();
+                }
+                prevJobStatusRef.current = latest.status;
+
+                if (['provisioning', 'running', 'PROVISIONING', 'RUNNING', 'installing', 'downloading', 'training'].includes(latest.status)) {
                     setIsRunning(true);
                 } else {
                     setIsRunning(false);
@@ -159,17 +271,124 @@ export default function StudioPage() {
         return () => unsubscribe();
     }, [projectId]);
 
+    // Poll for job completion from GCS (every 10 seconds when running)
+    useEffect(() => {
+        if (!projectId || !activeJob) return;
+
+        const shouldPoll = ['provisioning', 'running', 'PROVISIONING', 'RUNNING', 'installing', 'downloading', 'training'].includes(activeJob.status);
+        if (!shouldPoll) return;
+
+        console.log(`[Studio] Starting auto-poll for job ${activeJob.id} (status: ${activeJob.status})`);
+
+        const pollCompletion = async () => {
+            try {
+                console.log(`[Studio] Polling job ${activeJob.id}...`);
+                const res = await fetch(`/api/studio/jobs/${activeJob.id}/complete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ projectId })
+                });
+                const data = await res.json();
+                console.log(`[Studio] Poll result:`, data);
+
+                // Update training step based on current status from GCS
+                if (data.status === 'installing') {
+                    setTrainingStep('installing');
+                } else if (data.status === 'downloading') {
+                    setTrainingStep('installing'); // Same step for downloading
+                } else if (data.status === 'running' || data.status === 'training') {
+                    setTrainingStep('training');
+                }
+
+                if (data.status === 'succeeded' || data.status === 'completed') {
+                    console.log('[Studio] Job completed! Status:', data.status, 'Metrics:', data.metrics);
+                    setTrainingStep('completed');
+                    // Keep overlay open - it will close when celebration shows
+                    // Firestore listener will pick up the change and trigger celebration
+                } else if (data.status === 'failed') {
+                    console.log('[Studio] Job failed!');
+                    setTrainingStep('failed');
+                    setTrainingError(data.error || 'Training failed');
+                }
+            } catch (error) {
+                console.error('[Studio] Poll completion failed:', error);
+            }
+        };
+
+        // Poll every 10 seconds for faster detection
+        const interval = setInterval(pollCompletion, 10000);
+        // Initial poll after 10 seconds (give VM time to start)
+        const initialTimeout = setTimeout(pollCompletion, 10000);
+
+        return () => {
+            clearInterval(interval);
+            clearTimeout(initialTimeout);
+        };
+    }, [projectId, activeJob?.id, activeJob?.status]);
+
     // --- Handlers ---
-    const handleSave = async () => {
-        if (!projectId) return;
+    const handleSave = async (forTraining = false) => {
+        if (!projectId || !localCode) return;
         setIsSaving(true);
         try {
+            // Update current script
             await updateDoc(doc(db, 'projects', projectId), {
                 currentScript: localCode,
                 lastUpdated: serverTimestamp()
             });
+
+            // Check for duplicate - compare with last saved version
+            const scriptsRef = collection(db, 'projects', projectId, 'scripts');
+            const scriptsSnapshot = await getDocs(query(scriptsRef, orderBy('version', 'desc'), limit(1)));
+
+            const lastVersion = scriptsSnapshot.docs.length > 0
+                ? scriptsSnapshot.docs[0].data().version || 0
+                : 0;
+            const lastContent = scriptsSnapshot.docs.length > 0
+                ? scriptsSnapshot.docs[0].data().content || ''
+                : '';
+
+            // Check if content is same as last version (normalize whitespace)
+            const normalizedLocal = localCode.trim();
+            const normalizedLast = lastContent.trim();
+
+            // If saving for training, always save (skip duplicate check message)
+            // If manual save, check for duplicates and show message
+            if (normalizedLocal === normalizedLast && lastVersion > 0) {
+                if (!forTraining) {
+                    showToast({
+                        type: 'info',
+                        title: "Version Already Exists",
+                        message: `This code is identical to v${lastVersion}`,
+                    });
+                }
+                // For training, silently use existing version
+            } else {
+                // Add new script version
+                await addDoc(scriptsRef, {
+                    version: lastVersion + 1,
+                    content: localCode,
+                    createdAt: serverTimestamp(),
+                    createdBy: user?.email || 'unknown',
+                    source: forTraining ? 'training' : 'manual',
+                    notes: forTraining ? `Training v${lastVersion + 1}` : `Script v${lastVersion + 1}`
+                });
+
+                if (!forTraining) {
+                    showToast({
+                        type: 'success',
+                        title: "Script Saved!",
+                        message: `Version ${lastVersion + 1} saved to history`,
+                    });
+                }
+            }
         } catch (err) {
             console.error("Failed to save", err);
+            showToast({
+                type: 'error',
+                title: "Save Failed",
+                message: "Could not save script",
+            });
         } finally {
             setIsSaving(false);
         }
@@ -190,7 +409,7 @@ export default function StudioPage() {
         setTrainingStep('preparing');
 
         try {
-            await handleSave();
+            await handleSave(true); // Save silently when training
 
             // Step 2: Uploading
             setTrainingStep('uploading');
@@ -204,7 +423,14 @@ export default function StudioPage() {
                 body: JSON.stringify({
                     projectId,
                     script: localCode,
-                    config: trainingConfig
+                    config: trainingConfig,
+                    // Dataset info from project
+                    originalFilename: project?.dataset?.filename || 'dataset.csv',
+                    datasetFilename: project?.dataset?.filename || 'dataset.csv',
+                    datasetSizeMB: project?.dataset?.fileSize ? Math.round(project.dataset.fileSize / (1024 * 1024) * 100) / 100 : 5,
+                    datasetRows: project?.dataset?.rowCount || 0,
+                    taskType: project?.inferredTaskType || 'classification',
+                    tier: userTier || 'free'
                 })
             });
 
@@ -213,19 +439,30 @@ export default function StudioPage() {
                 throw new Error(errorData.error || 'Failed to start training');
             }
 
+            // Parse response to get job ID
+            const data = await res.json();
+
+            // Persist to global context for navigation persistence
+            if (data.jobId) {
+                training.setActiveJob({
+                    id: data.jobId,
+                    projectId,
+                    status: 'training',
+                    phase: 'training'
+                });
+            }
+
             // Step 4: Training started
             setTrainingStep('training');
             setActiveTab('terminal');
 
-            // Close overlay after a short delay to show training started
-            setTimeout(() => {
-                setShowTrainingProgress(false);
-            }, 2000);
+            // Keep overlay visible - it shows progress throughout training
 
         } catch (err: any) {
             console.error(err);
             setTrainingStep('failed');
             setTrainingError(err.message || 'Training failed');
+            training.failTraining(err.message || 'Training failed');
             setIsRunning(false);
         }
     };
@@ -285,9 +522,9 @@ export default function StudioPage() {
             }
             showToast({
                 type: 'automl',
-                title: 'AutoML Complete!',
-                message: `Algorithm: ${data.algorithm}\nReason: ${data.algorithmReason}\n\nScript generated and ready to train!`,
-                duration: 7000
+                title: '🤖 AutoML Model Selected!',
+                message: `📊 Algorithm: ${data.algorithm}\n💡 ${data.algorithmReason || 'Best model for your data'}\n\n✅ Script generated and ready to train!`,
+                duration: 10000
             });
         } catch (error) {
             console.error('AutoML failed:', error);
@@ -299,6 +536,53 @@ export default function StudioPage() {
             });
         } finally {
             setIsAutoMLRunning(false);
+        }
+    };
+
+    // Sync all job statuses from GCS
+    const handleSyncStatus = async () => {
+        setIsSyncing(true);
+        try {
+            const res = await fetch('/api/studio/sync-all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectId })
+            });
+            const data = await res.json();
+            console.log('[Studio] Sync result:', data);
+
+            if (data.modelsRegistered > 0) {
+                showToast({
+                    type: 'success',
+                    title: '🎉 Models Found!',
+                    message: `${data.modelsRegistered} model(s) registered. Check Profile page!`,
+                    duration: 5000
+                });
+            } else if (data.jobsUpdated > 0) {
+                showToast({
+                    type: 'success',
+                    title: '✅ Jobs Synced',
+                    message: `Updated ${data.jobsUpdated} job status(es) from GCS`,
+                    duration: 3000
+                });
+            } else {
+                showToast({
+                    type: 'info',
+                    title: 'ℹ️ No Updates',
+                    message: 'All jobs already in sync',
+                    duration: 3000
+                });
+            }
+        } catch (error) {
+            console.error('[Studio] Sync failed:', error);
+            showToast({
+                type: 'error',
+                title: 'Sync Failed',
+                message: error instanceof Error ? error.message : 'Unknown error',
+                duration: 5000
+            });
+        } finally {
+            setIsSyncing(false);
         }
     };
 
@@ -424,6 +708,243 @@ export default function StudioPage() {
             });
         } catch (error) {
             console.error('Failed to reset dataset:', error);
+        }
+    };
+
+    // Export script as Jupyter Notebook
+    const handleExportNotebook = () => {
+        const notebookContent = {
+            nbformat: 4,
+            nbformat_minor: 5,
+            metadata: {
+                kernelspec: {
+                    display_name: "Python 3",
+                    language: "python",
+                    name: "python3"
+                },
+                language_info: {
+                    name: "python",
+                    version: "3.10.0"
+                },
+                mlforge_project: projectId,
+                mlforge_name: project?.name
+            },
+            cells: [
+                {
+                    cell_type: "markdown",
+                    metadata: {},
+                    source: [`# ${project?.name || 'MLForge Project'}\n\nExported from MLForge Studio`]
+                },
+                {
+                    cell_type: "code",
+                    metadata: {},
+                    source: localCode.split('\n').map((line: string, i: number, arr: string[]) =>
+                        i === arr.length - 1 ? line : line + '\n'
+                    ),
+                    execution_count: null,
+                    outputs: []
+                }
+            ]
+        };
+
+        const blob = new Blob([JSON.stringify(notebookContent, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${project?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'train'}.ipynb`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast({
+            type: 'success',
+            title: 'Notebook Exported',
+            message: 'Your script has been exported as a Jupyter notebook',
+            duration: 4000
+        });
+    };
+
+    // Import Jupyter Notebook
+    const handleImportNotebook = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.ipynb';
+        input.onchange = async (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                const notebook = JSON.parse(text);
+
+                // Extract Python code from cells
+                const codeCells = notebook.cells?.filter((cell: any) => cell.cell_type === 'code') || [];
+                const code = codeCells
+                    .map((cell: any) => {
+                        const source = Array.isArray(cell.source) ? cell.source.join('') : cell.source;
+                        return source;
+                    })
+                    .join('\n\n');
+
+                if (code.trim()) {
+                    setLocalCode(code);
+                    showToast({
+                        type: 'success',
+                        title: 'Notebook Imported',
+                        message: `Imported ${codeCells.length} code cell(s) from ${file.name}`,
+                        duration: 5000
+                    });
+                } else {
+                    showToast({
+                        type: 'error',
+                        title: 'No Code Found',
+                        message: 'The notebook contains no Python code cells',
+                        duration: 5000
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to import notebook:', err);
+                showToast({
+                    type: 'error',
+                    title: 'Import Failed',
+                    message: 'Could not parse the notebook file',
+                    duration: 5000
+                });
+            }
+        };
+        input.click();
+    };
+
+    // Open project in VS Code with one-click connection
+    const handleOpenVSCode = async () => {
+        setIsConnectingVSCode(true);
+        setMcpError(null);
+
+        try {
+            // Step 1: Check MCP server health
+            let healthRes = await fetch('/api/mcp/health');
+
+            // If MCP not running, try to auto-start it
+            if (!healthRes.ok) {
+                showToast({
+                    type: 'info',
+                    title: 'Starting MCP Server...',
+                    message: 'Please wait while we start the collaboration server',
+                    duration: 3000
+                });
+
+                // Try to start MCP server
+                const startRes = await fetch('/api/mcp/start', { method: 'POST' });
+                if (startRes.ok) {
+                    // Wait and retry health check
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    healthRes = await fetch('/api/mcp/health');
+                }
+
+                // If still not healthy, show modal  
+                if (!healthRes.ok) {
+                    const healthData = await healthRes.json();
+                    setMcpError(healthData.instructions || 'Could not start MCP server automatically. Please start manually.');
+                    setShowMCPModal(true);
+                    setIsConnectingVSCode(false);
+                    return;
+                }
+
+                showToast({ type: 'success', title: 'MCP Server Started!', message: 'Connecting to VS Code...' });
+            }
+
+            // Step 2: Get auth token
+            const idToken = await user?.getIdToken();
+            if (!idToken) {
+                showToast({ type: 'error', title: 'Auth Error', message: 'Please log in again' });
+                setIsConnectingVSCode(false);
+                return;
+            }
+
+            // Step 3: Create MCP session with JWT
+            const sessionRes = await fetch('/api/mcp/session/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`
+                },
+                body: JSON.stringify({
+                    projectId,
+                    initialScript: localCode
+                })
+            });
+
+            if (!sessionRes.ok) {
+                const error = await sessionRes.json();
+                throw new Error(error.error || 'Failed to create session');
+            }
+
+            const { wsUrl, token } = await sessionRes.json();
+
+            // Step 4: Build VS Code URI
+            const vscodeUri = `vscode://mlforge.mlforge-studio/connect?projectId=${encodeURIComponent(projectId)}&wsUrl=${encodeURIComponent(wsUrl)}&token=${encodeURIComponent(token)}`;
+
+            showToast({
+                type: 'success',
+                title: 'Opening VS Code...',
+                message: 'Launching your project in VS Code',
+                duration: 3000
+            });
+
+            // Step 5: Try to open VS Code
+            window.location.href = vscodeUri;
+
+            // Mark VS Code as connected
+            setVsCodeConnected(true);
+
+            // Just reset the loading state after a moment
+            setTimeout(() => {
+                setIsConnectingVSCode(false);
+            }, 1500);
+
+        } catch (error: any) {
+            console.error('[VS Code Connect] Error:', error);
+            setMcpError(error.message || 'Connection failed');
+            setShowMCPModal(true);
+            setIsConnectingVSCode(false);
+        }
+    };
+
+    // Sync code from VS Code - fetches latest script from project
+    const handleSyncFromVSCode = async () => {
+        setIsSyncingVSCode(true);
+        try {
+            // Fetch the latest script from Firestore
+            const projectDoc = await getDoc(doc(db, 'projects', projectId));
+            if (projectDoc.exists()) {
+                const data = projectDoc.data();
+                if (data.script && data.script !== localCode) {
+                    setLocalCode(data.script);
+                    showToast({
+                        type: 'success',
+                        title: 'Synced!',
+                        message: 'Code synced from VS Code',
+                        duration: 2000
+                    });
+                } else {
+                    showToast({
+                        type: 'info',
+                        title: 'Already in sync',
+                        message: 'Your code is already up to date',
+                        duration: 2000
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('[VS Code Sync] Error:', error);
+            showToast({
+                type: 'error',
+                title: 'Sync Failed',
+                message: 'Could not sync from VS Code'
+            });
+        } finally {
+            setIsSyncingVSCode(false);
         }
     };
 
@@ -578,11 +1099,46 @@ export default function StudioPage() {
                 error={trainingError}
             />
 
+            {/* Training Success Celebration with Confetti */}
+            <TrainingSuccessOverlay
+                isOpen={showSuccessCelebration}
+                onClose={() => setShowSuccessCelebration(false)}
+                modelName={completedJobInfo?.modelName}
+                version={completedJobInfo?.version}
+                metrics={completedJobInfo?.metrics}
+            />
+
+            {/* Collaboration Share Modal */}
+            <CollabLinkModal
+                isOpen={showShareModal}
+                onClose={() => setShowShareModal(false)}
+                projectId={projectId}
+            />
+
+            {/* GitHub Push Modal */}
+            <GitHubPushModal
+                isOpen={showGitHubModal}
+                onClose={() => setShowGitHubModal(false)}
+                projectId={projectId}
+                code={localCode}
+            />
+
+
             {/* Workflow Timeline */}
             {project.datasetUploaded && (
                 <WorkflowTimeline
-                    currentStep={project.workflow?.step ?? 5}
-                    status={project.workflow?.status || 'success'}
+                    currentStep={
+                        // Calculate step based on actual job status
+                        allJobs.some(j => j.status === 'deployed') ? 7 :
+                            allJobs.some(j => j.status === 'succeeded') ? 6 :
+                                allJobs.some(j => j.status === 'running' || j.status === 'provisioning') ? 5 :
+                                    project.workflow?.step ?? 4
+                    }
+                    status={
+                        allJobs.some(j => j.status === 'failed') ? 'error' :
+                            allJobs.some(j => j.status === 'succeeded' || j.status === 'deployed') ? 'success' :
+                                'pending'
+                    }
                     errorMessage={project.workflow?.errorMessage || project.workflow?.error}
                 />
             )}
@@ -601,11 +1157,28 @@ export default function StudioPage() {
                     isDeploying={isDeploying}
                     isAutoMLRunning={isAutoMLRunning}
                     hasActiveJob={!!activeJob}
+                    trainingStatus={activeJob?.status && ['installing', 'downloading', 'running', 'training', 'PROVISIONING', 'RUNNING'].includes(activeJob.status) ? activeJob.status : undefined}
+                    trainingStep={activeJob?.status ? (
+                        activeJob.status === 'installing' ? 'Installing Dependencies' :
+                            activeJob.status === 'downloading' ? 'Downloading Data' :
+                                activeJob.status === 'running' || activeJob.status === 'training' ? 'Training Model' :
+                                    activeJob.status === 'PROVISIONING' ? 'Provisioning VM' :
+                                        activeJob.status === 'RUNNING' ? 'Training...' :
+                                            'Processing...'
+                    ) : undefined}
                     onSaveName={handleSaveName}
                     onRunTraining={handleRunTraining}
                     onAutoML={handleAutoML}
                     onDeploy={handleDeploy}
                     onResetDataset={handleResetDataset}
+                    onSyncStatus={handleSyncStatus}
+                    isSyncing={isSyncing}
+                    onShare={() => setShowShareModal(true)}
+                    onGitHubPush={() => setShowGitHubModal(true)}
+                    onExportNotebook={handleExportNotebook}
+                    onImportNotebook={handleImportNotebook}
+                    onOpenVSCode={handleOpenVSCode}
+                    isConnectingVSCode={isConnectingVSCode}
                 />
 
                 {/* Main Grid */}
@@ -615,92 +1188,148 @@ export default function StudioPage() {
                         code={localCode}
                         onChange={(val) => setLocalCode(val)}
                         onSave={handleSave}
+                        onSyncVSCode={vsCodeConnected ? handleSyncFromVSCode : undefined}
                         saving={isSaving}
+                        syncing={isSyncingVSCode}
                     />
 
                     {/* Right: Split View */}
-                    <div className="flex flex-col gap-6 h-full">
+                    <div className="flex flex-col gap-4 h-full">
                         {/* Terminal / History Tabs - All top level */}
-                        <div className="flex-1 min-h-0">
+                        <div className="h-[280px]">
                             <div className="h-full flex flex-col">
                                 {/* Single Row of 4 Tabs - Center Aligned */}
                                 <GlassCard className="px-4 py-2 mb-4 flex items-center justify-center gap-2" hover={false}>
                                     <button
                                         onClick={() => setActiveTab('terminal')}
-                                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'terminal' ? `text-white` : 'text-white/40 hover:text-white/70'}`}
-                                        style={activeTab === 'terminal' ? { backgroundColor: `${themeColor}30`, color: themeColor } : {}}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'terminal' ? 'bg-emerald-500/20 ring-1 ring-emerald-500/40' : 'text-white/40 hover:text-white/70 hover:bg-white/5'}`}
                                     >
-                                        <Terminal className="w-3.5 h-3.5" /> Terminal
+                                        <Terminal className={`w-4 h-4 ${activeTab === 'terminal' ? 'text-emerald-400' : 'text-emerald-500/60'}`} />
+                                        <span className={activeTab === 'terminal' ? 'text-emerald-300' : ''}>Terminal</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('versions')}
-                                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'versions' ? `text-white` : 'text-white/40 hover:text-white/70'}`}
-                                        style={activeTab === 'versions' ? { backgroundColor: `${themeColor}30`, color: themeColor } : {}}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'versions' ? 'bg-violet-500/20 ring-1 ring-violet-500/40' : 'text-white/40 hover:text-white/70 hover:bg-white/5'}`}
                                     >
-                                        <Code className="w-3.5 h-3.5" /> Versions
+                                        <Code className={`w-4 h-4 ${activeTab === 'versions' ? 'text-violet-400' : 'text-violet-500/60'}`} />
+                                        <span className={activeTab === 'versions' ? 'text-violet-300' : ''}>Versions</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('journey')}
-                                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'journey' ? `text-white` : 'text-white/40 hover:text-white/70'}`}
-                                        style={activeTab === 'journey' ? { backgroundColor: `${themeColor}30`, color: themeColor } : {}}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'journey' ? 'bg-amber-500/20 ring-1 ring-amber-500/40' : 'text-white/40 hover:text-white/70 hover:bg-white/5'}`}
                                     >
-                                        <History className="w-3.5 h-3.5" /> Journey
+                                        <History className={`w-4 h-4 ${activeTab === 'journey' ? 'text-amber-400' : 'text-amber-500/60'}`} />
+                                        <span className={activeTab === 'journey' ? 'text-amber-300' : ''}>Journey</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('metrics')}
-                                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'metrics' ? `text-white` : 'text-white/40 hover:text-white/70'}`}
-                                        style={activeTab === 'metrics' ? { backgroundColor: `${themeColor}30`, color: themeColor } : {}}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'metrics' ? 'bg-cyan-500/20 ring-1 ring-cyan-500/40' : 'text-white/40 hover:text-white/70 hover:bg-white/5'}`}
                                     >
-                                        <BarChart3 className="w-3.5 h-3.5" /> Metrics
+                                        <BarChart3 className={`w-4 h-4 ${activeTab === 'metrics' ? 'text-cyan-400' : 'text-cyan-500/60'}`} />
+                                        <span className={activeTab === 'metrics' ? 'text-cyan-300' : ''}>Metrics</span>
                                     </button>
                                 </GlassCard>
 
-                                {/* Content - Center Aligned */}
-                                <div className="flex-1 min-h-0 flex justify-center">
-                                    <div className="w-full">
+                                {/* Content - Fixed Height with Scroll */}
+                                <div className="flex-1 min-h-0 overflow-hidden flex justify-center">
+                                    <div className="w-full h-full overflow-y-auto">
                                         {activeTab === 'terminal' && (
-                                            <TerminalView logs={activeJob?.logs} status={activeJob?.status} />
+                                            <TerminalView
+                                                logs={activeJob?.logs}
+                                                status={activeJob?.status}
+                                                projectId={projectId}
+                                                jobId={activeJob?.id}
+                                                themeColor={themeColor}
+                                                jobMetadata={activeJob ? {
+                                                    originalFilename: activeJob.originalFilename || activeJob.datasetFilename || project?.dataset?.filename,
+                                                    datasetRows: activeJob.datasetRows || project?.dataset?.rowCount,
+                                                    datasetSizeMB: activeJob.datasetSizeMB,
+                                                    taskType: activeJob.taskType || project?.inferredTaskType,
+                                                    algorithm: activeJob.algorithm || activeJob.config?.algorithm,
+                                                    vmName: activeJob.vmName,
+                                                    consoleUrl: activeJob.consoleUrl,
+                                                    config: activeJob.config,
+                                                    actualRuntimeSeconds: activeJob.actualRuntimeSeconds,
+                                                    actualCostUsd: activeJob.actualCostUsd,
+                                                    actualCostInr: activeJob.actualCostInr,
+                                                    estimatedMinutes: activeJob.estimatedMinutes,
+                                                    estimatedTotalCost: activeJob.estimatedTotalCost,
+                                                    currentPhase: activeJob.currentPhase || activeJob.status,
+                                                    phaseProgress: activeJob.phaseProgress
+                                                } : undefined}
+                                            />
                                         )}
                                         {activeTab === 'versions' && (
-                                            <GlassCard className="h-full p-4" hover={false}>
-                                                <div className="text-center text-white/40 text-sm">
-                                                    Script version history coming soon...
-                                                </div>
-                                            </GlassCard>
+                                            <ScriptVersionsView
+                                                projectId={projectId}
+                                                onVersionSelect={(content, version) => {
+                                                    setLocalCode(content);
+                                                    showToast({
+                                                        type: 'info',
+                                                        title: 'Version Loaded',
+                                                        message: `Loaded script version ${version}`
+                                                    });
+                                                }}
+                                                themeColor={themeColor}
+                                            />
                                         )}
+                                        {/* Journey tab - Training History with Visibility Toggle */}
                                         {activeTab === 'journey' && (
-                                            <VisualizationView jobs={allJobs} />
-                                        )}
-                                        {activeTab === 'metrics' && (
                                             <GlassCard className="h-full p-4" hover={false}>
-                                                <div className="text-center text-white/40 text-sm">
-                                                    {allJobs.length > 0 ? (
-                                                        <div className="space-y-4">
-                                                            <h3 className="text-white/60 font-medium">Latest Training Metrics</h3>
-                                                            {allJobs[0]?.metrics ? (
-                                                                <div className="grid grid-cols-2 gap-4">
-                                                                    <div className="bg-white/5 rounded-xl p-4">
-                                                                        <div className="text-xs text-white/40">Accuracy</div>
-                                                                        <div className="text-2xl font-bold" style={{ color: themeColor }}>
-                                                                            {(allJobs[0].metrics.accuracy * 100).toFixed(1)}%
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="bg-white/5 rounded-xl p-4">
-                                                                        <div className="text-xs text-white/40">Loss</div>
-                                                                        <div className="text-2xl font-bold text-red-400">
-                                                                            {allJobs[0].metrics.loss?.toFixed(4) || 'N/A'}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            ) : (
-                                                                <p>No metrics available yet.</p>
-                                                            )}
-                                                        </div>
-                                                    ) : (
-                                                        'No training runs yet. Run training to see metrics.'
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <h4 className="text-sm font-semibold text-white/60 flex items-center gap-2">
+                                                        <Clock className="w-4 h-4" />
+                                                        Training History
+                                                    </h4>
+                                                    {projectModel?.id && (
+                                                        <button
+                                                            onClick={async () => {
+                                                                const newVis = projectModel.visibility === 'public' ? 'private' : 'public';
+                                                                try {
+                                                                    await updateDoc(doc(db, 'models', projectModel.id), { visibility: newVis });
+                                                                    setProjectModel(prev => prev ? { ...prev, visibility: newVis } : null);
+                                                                } catch (err) { console.error(err); }
+                                                            }}
+                                                            title={projectModel.visibility === 'public' ? 'Public model' : 'Private model'}
+                                                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                                                            style={{
+                                                                background: projectModel.visibility === 'public' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
+                                                                color: projectModel.visibility === 'public' ? '#22c55e' : '#ef4444'
+                                                            }}
+                                                        >
+                                                            {projectModel.visibility === 'public' ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                                                            {projectModel.visibility === 'public' ? 'Public' : 'Private'}
+                                                        </button>
                                                     )}
                                                 </div>
+                                                {allJobs.length > 0 ? (
+                                                    <div className="relative pl-4 border-l border-white/10 space-y-4">
+                                                        {allJobs.slice(0, 5).map((job, i) => (
+                                                            <motion.div key={job.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }} className="relative pl-5">
+                                                                <div className={`absolute -left-[9px] top-1 w-2.5 h-2.5 rounded-full ${job.status === 'succeeded' ? 'bg-green-500' : job.status === 'failed' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'}`} />
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-xs text-white/50">v{allJobs.length - i}</span>
+                                                                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${job.status === 'succeeded' ? 'bg-green-500/20 text-green-400' : job.status === 'failed' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{job.status}</span>
+                                                                </div>
+                                                                {job.metrics?.accuracy !== undefined && <div className="text-xs text-white/40 mt-1">Accuracy: {(job.metrics.accuracy * 100).toFixed(1)}%</div>}
+                                                            </motion.div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center py-8 text-white/40"><Clock className="w-8 h-8 mx-auto mb-2 opacity-50" /><p className="text-sm">No training jobs yet</p></div>
+                                                )}
                                             </GlassCard>
+                                        )}
+
+                                        {/* Metrics tab - VisualizationView */}
+                                        {activeTab === 'metrics' && (
+                                            <VisualizationView
+                                                jobs={allJobs}
+                                                themeColor={themeColor}
+                                                modelId={projectModel?.id}
+                                                currentVisibility={projectModel?.visibility}
+                                                onVisibilityChange={(v) => setProjectModel(prev => prev ? { ...prev, visibility: v } : null)}
+                                            />
                                         )}
                                     </div>
                                 </div>
@@ -720,6 +1349,149 @@ export default function StudioPage() {
                     </div>
                 </div>
             </main>
+
+            {/* Suggestion Panel from Chat */}
+            <SuggestionPanel
+                isOpen={showSuggestionPanel}
+                onClose={() => {
+                    setShowSuggestionPanel(false);
+                    // Clear URL param without reload
+                    window.history.replaceState({}, '', `/studio/${projectId}`);
+                }}
+                suggestion={suggestionData}
+                currentScript={localCode}
+                onApply={(mergedCode) => {
+                    setLocalCode(mergedCode);
+                    setShowSuggestionPanel(false);
+                    showToast({ type: 'success', title: 'Applied', message: 'Suggestion applied to your script' });
+                    // Mark suggestion as applied
+                    if (suggestionData?.id && user?.uid) {
+                        fetch(`/api/studio/suggestions/${suggestionData.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                appliedBy: user.uid,
+                                appliedByEmail: user.email,
+                                extractedCode: suggestionData.extractedCode
+                            })
+                        }).catch(console.error);
+                    }
+                    window.history.replaceState({}, '', `/studio/${projectId}`);
+                }}
+                onRetrain={() => {
+                    // Apply suggestion first, then trigger training
+                    if (suggestionData?.extractedCode) {
+                        const mergedCode = localCode + '\n\n# === AI Improvement Suggestion ===\n' + suggestionData.extractedCode;
+                        setLocalCode(mergedCode);
+                    }
+                    setShowSuggestionPanel(false);
+                    // Open training config to let user start training
+                    setShowTrainingConfig(true);
+                    window.history.replaceState({}, '', `/studio/${projectId}`);
+                }}
+                loading={suggestionLoading}
+            />
+
+            {/* MCP/VS Code Fallback Modal */}
+            <AnimatePresence>
+                {showMCPModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowMCPModal(false)}>
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="relative w-full max-w-md rounded-2xl p-6 backdrop-blur-xl"
+                            style={{
+                                background: 'rgba(0,0,0,0.8)',
+                                border: `1px solid ${themeColor}30`,
+                                boxShadow: `0 8px 32px rgba(0,0,0,0.4), 0 0 60px ${themeColor}10`
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                <Code className="w-5 h-5" style={{ color: themeColor }} />
+                                Open in VS Code
+                            </h3>
+
+                            {mcpError && (
+                                <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                                    {mcpError}
+                                </div>
+                            )}
+
+                            <div className="space-y-4 text-sm text-white/70">
+                                <div>
+                                    <p className="font-semibold text-white mb-2">1. Start MCP Server</p>
+                                    <div
+                                        className="bg-black/50 rounded-lg p-3 font-mono text-xs cursor-pointer hover:bg-white/5 transition-colors flex items-center justify-between"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText('cd mcp-server && npm start');
+                                            showToast({ type: 'success', title: 'Copied!', message: 'Command copied to clipboard' });
+                                        }}
+                                    >
+                                        <span>cd mcp-server && npm start</span>
+                                        <span className="text-white/40 text-[10px]">Click to copy</span>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="font-semibold text-white mb-2">2. Open VS Code Extension</p>
+                                    <div
+                                        className="bg-black/50 rounded-lg p-3 font-mono text-xs cursor-pointer hover:bg-white/5 transition-colors flex items-center justify-between"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText('cd vscode-extension && code . && npm run compile');
+                                            showToast({ type: 'success', title: 'Copied!', message: 'Command copied to clipboard' });
+                                        }}
+                                    >
+                                        <span>cd vscode-extension && code .</span>
+                                        <span className="text-white/40 text-[10px]">Click to copy</span>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="font-semibold text-white mb-2">3. Connect to Project</p>
+                                    <p className="text-white/50 text-xs mb-2">Press F5 in VS Code, then Ctrl+Shift+P → "MLForge: Connect"</p>
+                                    <div
+                                        className="bg-black/50 rounded-lg p-3 font-mono text-xs cursor-pointer hover:bg-white/5 transition-colors flex items-center justify-between"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(projectId);
+                                            showToast({ type: 'success', title: 'Copied!', message: 'Project ID copied' });
+                                        }}
+                                    >
+                                        <span>Project ID: {projectId}</span>
+                                        <span className="text-white/40 text-[10px]">Click to copy</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-6 flex gap-3">
+                                <button
+                                    onClick={() => setShowMCPModal(false)}
+                                    className="flex-1 px-4 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 transition-colors"
+                                >
+                                    Close
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const blob = new Blob([localCode], { type: 'text/x-python' });
+                                        const url = URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
+                                        a.href = url;
+                                        a.download = `${project?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'train'}.py`;
+                                        a.click();
+                                        URL.revokeObjectURL(url);
+                                    }}
+                                    className="flex-1 px-4 py-2 rounded-lg text-white text-sm transition-colors"
+                                    style={{ background: themeColor }}
+                                >
+                                    Download Script
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

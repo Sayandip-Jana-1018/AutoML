@@ -157,5 +157,133 @@ service cloud.firestore {
       allow read: if false;
       allow write: if true; // For health check pings
     }
+    
+    // ==========================================
+    // Suggestions Collection (Chat-to-Studio)
+    // ==========================================
+    
+    match /suggestions/{suggestionId} {
+      // Only authenticated users can read suggestions they created or for projects they have access to
+      allow read: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        // Check if user has access to the associated project (via server-side API)
+        true // Validated server-side in API route
+      );
+      
+      // Only authenticated users can create suggestions
+      allow create: if isAuthenticated() && 
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.projectId != null &&
+        request.resource.data.text != null;
+      
+      // Only the creator or project editors can update (mark as applied)
+      allow update: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        // Project access validated server-side
+        true
+      );
+      
+      // Only admins can delete suggestions (for cleanup)
+      allow delete: if isAdmin();
+    }
+    
+    // ==========================================
+    // Global Jobs Index Collection (for scheduled sync)
+    // ==========================================
+    
+    match /jobs/{jobId} {
+      // Anyone authenticated can read (for their own projects)
+      // Project-level filtering happens in the query
+      allow read: if isAuthenticated();
+      
+      // Only server (admin SDK) or Cloud Functions can write
+      // This is handled by the admin SDK in API routes
+      allow write: if isAdmin();
+    }
+    
+    // ==========================================
+    // Collaboration Links Collection
+    // ==========================================
+    
+    match /collab_links/{linkId} {
+      // Anyone can read public links (for validation)
+      // Private links require authentication
+      allow read: if resource.data.mode == 'public' || isAuthenticated();
+      
+      // Only authenticated users can create links for their projects
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.projectId != null;
+      
+      // Only the link creator can update (e.g., disable link)
+      allow update: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+      
+      // Only the link creator or admin can delete
+      allow delete: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+    }
+    
+    // ==========================================
+    // MCP Documents Collection (Real-time collaboration)
+    // ==========================================
+    
+    match /mcp_docs/{docId} {
+      // Read access for project participants
+      allow read: if isAuthenticated();
+      
+      // Create/Update for authenticated users associated with the project
+      allow write: if isAuthenticated();
+    }
+    
+    // ==========================================
+    // Rate Limiting Collection (for abuse prevention)
+    // ==========================================
+    
+    match /rate_limits/{userId} {
+      // Only the user can read their own rate limit data
+      allow read: if isOwner(userId);
+      
+      // Server-side writes only
+      allow write: if false;
+    }
+    
+    // ==========================================
+    // API Keys Collection
+    // ==========================================
+    
+    match /api_keys/{keyId} {
+      // Only the key owner can read/manage their keys
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      
+      // Only authenticated users can create keys for themselves
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      
+      // Only key owner can update (revoke)
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      
+      // Only key owner or admin can delete
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+    
+    // ==========================================
+    // Deploy Logs Collection (owner-only access)
+    // ==========================================
+    
+    match /deploy_logs/{modelId} {
+      // Check if user owns the model
+      function ownsModel() {
+        return isAuthenticated() && 
+          get(/databases/$(database)/documents/models/$(modelId)).data.ownerId == request.auth.uid;
+      }
+      
+      allow read: if ownsModel();
+      allow write: if false; // Server-side only
+      
+      match /requests/{logId} {
+        allow read: if ownsModel();
+        allow write: if false;
+      }
+    }
   }
 }

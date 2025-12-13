@@ -132,18 +132,21 @@ export default function ProfilePage() {
         // Listen to models collection filtered by user email
         const modelsQuery = query(
             collection(db, 'models'),
-            where('user_email', '==', user.email),
-            orderBy('created_at', 'desc')
+            where('ownerEmail', '==', user.email),
+            orderBy('createdAt', 'desc')
         )
 
         const unsubModels = onSnapshot(modelsQuery, (snapshot) => {
             const models = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data(),
-                name: doc.data().target_column ? `${doc.data().target_column} Model` : 'Untitled Model',
-                type: doc.data().algorithm || 'Unknown',
+                name: doc.data().name || (doc.data().target_column ? `${doc.data().target_column} Predictor` : 'Trained Model'),
+                type: doc.data().algorithm || doc.data().taskType || 'ML Model',
+                algorithm: doc.data().algorithm || 'Unknown',
+                target_column: doc.data().target_column,
+                projectId: doc.data().projectId,
                 status: 'Deployed',
-                accuracy: doc.data().metrics?.accuracy
+                accuracy: doc.data().metrics?.accuracy ?? doc.data().bestMetricValue
             }))
             setUserModels(models)
             setLoadingAssets(false)
@@ -389,176 +392,163 @@ export default function ProfilePage() {
                         <input type="file" ref={bannerInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileSelect(e, 'banner')} />
                     </div>
 
-                    {/* --- 2. Profile Header & Content --- */}
-                    <div className="flex flex-col lg:flex-row flex-1 relative z-10">
+                    {/* --- 2. Profile Header - HORIZONTAL LAYOUT --- */}
+                    <div className="flex flex-col flex-1 relative z-10 p-6 mt-3">
 
-                        {/* --- LEFT COLUMN: Profile Info & Stats --- */}
-                        <div className="lg:w-1/3 p-6 -mt-36 relative z-20 flex flex-col gap-5">
+                        {/* --- Unified Header Card (Avatar + Info + Stats + Actions) --- */}
+                        <div className="bg-black/5 dark:bg-white/5 backdrop-blur-md border border-black/10 dark:border-white/10 rounded-3xl p-6 pt-16 shadow-xl -mt-8 relative z-20">
+                            <div className="flex flex-col lg:flex-row items-center gap-6">
 
-                            {/* Avatar & Basic Info Card */}
-                            <div className="bg-black/5 dark:bg-white/5 backdrop-blur-md border border-black/10 dark:border-white/10 rounded-3xl p-6 shadow-xl flex flex-col items-center text-center">
-                                {/* Avatar */}
-                                <div className="relative group mb-4">
-                                    <div className="w-48 h-48 rounded-full border-4 border-black dark:border-white shadow-2xl overflow-hidden bg-black/5 dark:bg-white/5 relative">
+                                {/* Compact Avatar (128px) */}
+                                <div className="relative group flex-shrink-0 -mt-24">
+                                    <div className="w-56 h-56 -mt-8 rounded-full border-4 border-black dark:border-white shadow-2xl overflow-hidden bg-black/5 dark:bg-white/5 relative">
                                         {tempData.avatar ? (
-                                            <img src={tempData.avatar} className="w-full h-full object-cover" />
+                                            <img src={tempData.avatar} className="w-full h-full object-cover" alt="Avatar" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center bg-black/5 dark:bg-white/5">
-                                                <User className="w-20 h-20 text-black dark:text-white/30" />
+                                                <User className="w-16 h-16 text-black dark:text-white/30" />
                                             </div>
                                         )}
                                         <div
                                             className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                             onClick={() => fileInputRef.current?.click()}
                                         >
-                                            <Camera className="w-10 h-10 text-black dark:text-white" />
+                                            <Camera className="w-8 h-8 text-white" />
                                         </div>
                                     </div>
                                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileSelect(e, 'avatar')} />
                                 </div>
 
-                                {/* Name & Role */}
-                                {editMode ? (
-                                    <div className="space-y-3 w-full">
-                                        <input
-                                            value={tempData.name || ""}
-                                            onChange={(e) => setTempData({ ...tempData, name: e.target.value })}
-                                            className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-xl px-4 py-2 text-lg font-bold text-black dark:text-white w-full text-center focus:bg-black/10 dark:bg-white/10 transition-colors"
-                                            placeholder="Name"
-                                        />
-                                        <div className="flex flex-col gap-2">
-                                            <div className="relative">
-                                                <Briefcase className="absolute left-3 top-2.5 w-4 h-4 text-black/40 dark:text-white/40" />
-                                                <input
-                                                    value={tempData.role || ""}
-                                                    onChange={(e) => setTempData({ ...tempData, role: e.target.value })}
-                                                    className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-xl pl-10 pr-4 py-2 text-black dark:text-white/70 w-full text-left focus:bg-black/10 dark:bg-white/10 transition-colors"
-                                                    placeholder="Role (e.g. AI Researcher)"
-                                                />
-                                            </div>
-                                            <div className="relative">
-                                                <MapPin className="absolute left-3 top-2.5 w-4 h-4 text-black/40 dark:text-white/40" />
-                                                <input
-                                                    value={tempData.location || ""}
-                                                    onChange={(e) => setTempData({ ...tempData, location: e.target.value })}
-                                                    className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-xl pl-10 pr-4 py-2 text-black dark:text-white/70 w-full text-left focus:bg-black/10 dark:bg-white/10 transition-colors"
-                                                    placeholder="Location (e.g. San Francisco)"
-                                                />
+                                {/* Name, Email, Role, Location */}
+                                <div className="flex-1 text-center lg:text-left">
+                                    {editMode ? (
+                                        <div className="space-y-2 max-w-md">
+                                            <input
+                                                value={tempData.name || ""}
+                                                onChange={(e) => setTempData({ ...tempData, name: e.target.value })}
+                                                className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-xl px-4 py-2 text-lg font-bold text-black dark:text-white w-full focus:bg-black/10 dark:focus:bg-white/10 transition-colors"
+                                                placeholder="Name"
+                                            />
+                                            <div className="flex gap-2">
+                                                <div className="relative flex-1">
+                                                    <Briefcase className="absolute left-3 top-2.5 w-4 h-4 text-black/40 dark:text-white/40" />
+                                                    <input
+                                                        value={tempData.role || ""}
+                                                        onChange={(e) => setTempData({ ...tempData, role: e.target.value })}
+                                                        className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-xl pl-10 pr-4 py-2 text-sm text-black dark:text-white/70 w-full"
+                                                        placeholder="Role"
+                                                    />
+                                                </div>
+                                                <div className="relative flex-1">
+                                                    <MapPin className="absolute left-3 top-2.5 w-4 h-4 text-black/40 dark:text-white/40" />
+                                                    <input
+                                                        value={tempData.location || ""}
+                                                        onChange={(e) => setTempData({ ...tempData, location: e.target.value })}
+                                                        className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-xl pl-10 pr-4 py-2 text-sm text-black dark:text-white/70 w-full"
+                                                        placeholder="Location"
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <h1 className="text-2xl font-bold text-black dark:text-white mb-1">{profileData.name || "User Name"}</h1>
-                                        <p className="text-black/60 dark:text-white/40 text-sm mb-4 font-medium">{profileData.email}</p>
+                                    ) : (
+                                        <>
+                                            <h1 className="text-3xl font-bold mb-1" style={{ color: themeColor }}>{profileData.name || "User Name"}</h1>
+                                            <p className="text-black/60 dark:text-white/40 text-sm mb-2 font-medium">{profileData.email}</p>
+                                            <div className="flex flex-wrap gap-2 justify-center lg:justify-start">
+                                                {profileData.role && (
+                                                    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-full text-xs text-black/80 dark:text-white/70">
+                                                        <Briefcase className="w-3 h-3" />
+                                                        <span>{profileData.role}</span>
+                                                    </div>
+                                                )}
+                                                {profileData.location && (
+                                                    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-full text-xs text-black/80 dark:text-white/70">
+                                                        <MapPin className="w-3 h-3" />
+                                                        <span>{profileData.location}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
 
-                                        <div className="flex flex-wrap gap-2 justify-center mb-6">
-                                            {profileData.role && (
-                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-full text-sm text-black/80 dark:text-white/70 backdrop-blur-sm">
-                                                    <Briefcase className="w-3.5 h-3.5" />
-                                                    <span>{profileData.role}</span>
-                                                </div>
-                                            )}
-                                            {profileData.location && (
-                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-full text-sm text-black/80 dark:text-white/70 backdrop-blur-sm">
-                                                    <MapPin className="w-3.5 h-3.5" />
-                                                    <span>{profileData.location}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </>
-                                )}
+                                {/* Inline Stats */}
+                                <div className="flex items-center gap-4 px-4 py-2 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/10 dark:border-white/10">
+                                    <div className="text-center pr-4 border-r border-black/10 dark:border-white/10">
+                                        <div className="text-xl font-black" style={{ color: themeColor }}>{userDatasets.length}</div>
+                                        <div className="text-[9px] text-black/60 dark:text-white/50 uppercase tracking-wider font-bold">Datasets</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-xl font-black" style={{ color: themeColor }}>{userModels.length}</div>
+                                        <div className="text-[9px] text-black/60 dark:text-white/50 uppercase tracking-wider font-bold">Models</div>
+                                    </div>
+                                </div>
 
                                 {/* Action Buttons */}
-                                <div className="flex gap-2 mt-2 w-full">
+                                <div className="flex items-center gap-2">
                                     {editMode ? (
                                         <>
-                                            <button onClick={handleSave} className="flex-1 py-2 bg-white text-black rounded-xl font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 text-sm">
+                                            <button onClick={handleSave} className="px-4 py-2 bg-white text-black rounded-xl font-bold hover:bg-gray-200 transition-colors flex items-center gap-2 text-sm">
                                                 <Check className="w-4 h-4" /> Save
                                             </button>
-                                            <button onClick={handleCancel} className="flex-1 py-2 bg-black/10 dark:bg-white/10 text-black dark:text-white rounded-xl font-bold hover:bg-white/20 transition-colors flex items-center justify-center gap-2 text-sm">
+                                            <button onClick={handleCancel} className="px-4 py-2 bg-black/10 dark:bg-white/10 text-black dark:text-white rounded-xl font-bold hover:bg-white/20 transition-colors flex items-center gap-2 text-sm">
                                                 <X className="w-4 h-4" /> Cancel
                                             </button>
                                         </>
                                     ) : (
-                                        <div className="flex gap-2 w-full">
-                                            <button onClick={() => setEditMode(true)} className="flex-1 py-2 bg-black/10 dark:bg-white/10 border border-black dark:border-white text-black dark:text-white rounded-xl font-bold hover:bg-white/20 transition-colors flex items-center justify-center gap-2 text-sm">
-                                                <Edit2 className="w-4 h-4" /> Edit Profile
+                                        <>
+                                            <button onClick={() => setEditMode(true)} className="px-4 py-2 bg-black/10 dark:bg-white/10 border border-black dark:border-white text-black dark:text-white rounded-xl font-bold hover:bg-white/20 transition-colors flex items-center gap-2 text-sm">
+                                                <Edit2 className="w-4 h-4" /> Edit
                                             </button>
                                             <button
-                                                onClick={() => setCurrentView(currentView === 'security' ? 'overview' : 'security')}
-                                                className={`p-2 rounded-xl border transition-colors ${currentView === 'security' ? 'bg-white text-black border-white' : 'bg-black/5 dark:bg-white/5 border-black dark:border-white text-black dark:text-white hover:bg-black/10 dark:bg-white/10'}`}
+                                                onClick={logout}
+                                                className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 font-bold hover:bg-red-500/20 transition-colors flex items-center gap-2 text-sm"
                                             >
-                                                <Settings className="w-5 h-5" />
+                                                <LogOut className="w-4 h-4" /> Sign Out
                                             </button>
-                                        </div>
+                                        </>
                                     )}
                                 </div>
                             </div>
-
-                            {/* Stats Card */}
-                            <div className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-3xl p-5 flex justify-between items-center">
-                                <div className="text-center flex-1 border-r border-black dark:border-white">
-                                    <div className="text-2xl font-black text-black dark:text-white">{profileData.datasets?.length || 0}</div>
-                                    <div className="text-[10px] text-black/70 dark:text-white/50 uppercase tracking-wider font-bold mt-1">Datasets</div>
-                                </div>
-                                <div className="text-center flex-1">
-                                    <div className="text-2xl font-black text-black dark:text-white">{profileData.models?.length || 0}</div>
-                                    <div className="text-[10px] text-black/70 dark:text-white/50 uppercase tracking-wider font-bold mt-1">Models</div>
-                                </div>
-                            </div>
-
-                            {/* Navigation / Menu */}
-                            <div className="bg-black/5 dark:bg-white/5 border border-black dark:border-white rounded-3xl overflow-hidden">
-                                <button
-                                    onClick={() => setCurrentView('overview')}
-                                    className={`w-full p-3.5 flex items-center justify-between transition-colors ${currentView === 'overview' ? 'bg-black/10 dark:bg-white/10 text-black dark:text-white' : 'text-black dark:text-white/60 hover:bg-black/5 dark:bg-white/5 hover:text-black dark:text-white'}`}
-                                >
-                                    <span className="flex items-center gap-3 font-medium text-sm"><Database className="w-4 h-4" /> Overview</span>
-                                    {currentView === 'overview' && <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />}
-                                </button>
-                                <div className="h-px bg-black/5 dark:bg-white/5" />
-                                <button
-                                    onClick={() => setCurrentView('security')}
-                                    className={`w-full p-3.5 flex items-center justify-between transition-colors ${currentView === 'security' ? 'bg-black/10 dark:bg-white/10 text-black dark:text-white' : 'text-black dark:text-white/60 hover:bg-black/5 dark:bg-white/5 hover:text-black dark:text-white'}`}
-                                >
-                                    <span className="flex items-center gap-3 font-medium text-sm"><Lock className="w-4 h-4" /> Security</span>
-                                    {currentView === 'security' && <div className="w-1.5 h-1.5 bg-purple-500 rounded-full" />}
-                                </button>
-                                <div className="h-px bg-black/5 dark:bg-white/5" />
-                                <button
-                                    onClick={() => setCurrentView('notifications')}
-                                    className={`w-full p-3.5 flex items-center justify-between transition-colors ${currentView === 'notifications' ? 'bg-black/10 dark:bg-white/10 text-black dark:text-white' : 'text-black dark:text-white/60 hover:bg-black/5 dark:bg-white/5 hover:text-black dark:text-white'}`}
-                                >
-                                    <span className="flex items-center gap-3 font-medium text-sm"><Bell className="w-4 h-4" /> Notifications</span>
-                                    {currentView === 'notifications' && <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />}
-                                </button>
-                            </div>
-
                         </div>
 
-                        {/* --- RIGHT COLUMN: Dynamic Content --- */}
-                        <div className="lg:w-2/3 p-6 pt-4 lg:pt-6 flex flex-col justify-center min-h-[500px]">
+                        {/* --- Horizontal Navigation Tabs --- */}
+                        <div className="flex items-center justify-center gap-2 mt-6 border-b border-black/10 dark:border-white/10 pb-4 overflow-x-auto">
+                            {[
+                                { key: 'overview', label: 'Overview', icon: Database },
+                                { key: 'security', label: 'Security', icon: Lock },
+                                { key: 'notifications', label: 'Notifications', icon: Bell },
+                            ].map(({ key, label, icon: Icon }) => (
+                                <button
+                                    key={key}
+                                    onClick={() => setCurrentView(key as any)}
+                                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${currentView === key
+                                        ? 'bg-black/10 dark:bg-white/10 text-black dark:text-white'
+                                        : 'text-black/50 dark:text-white/50 hover:bg-black/5 dark:hover:bg-white/5'
+                                        }`}
+                                    style={currentView === key ? { borderBottom: `2px solid ${themeColor}` } : {}}
+                                >
+                                    <Icon className="w-4 h-4" />
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* --- Full-Width Content Area --- */}
+                        <div className="mt-6 min-h-[400px]">
                             <AnimatePresence mode="wait">
 
-                                {/* VIEW: OVERVIEW (Models Only) */}
+                                {/* VIEW: OVERVIEW (Models + Datasets + Collaborators) */}
                                 {currentView === 'overview' && (
                                     <motion.div
                                         key="overview"
-                                        initial={{ opacity: 0, x: 20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: -20 }}
-                                        className="space-y-6 h-full flex flex-col"
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
+                                        className="space-y-6"
                                     >
-                                        {/* Sign Out (Moved to Top) */}
-                                        <div className="flex justify-end">
-                                            <button onClick={logout} className="px-6 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 font-bold hover:bg-red-500/20 transition-colors flex items-center gap-2 group text-sm">
-                                                <LogOut className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> Sign Out
-                                            </button>
-                                        </div>
-
                                         {/* Using ModelsGrid Component */}
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 content-start">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <ModelsGrid
                                                 models={userModels}
                                                 loading={loadingAssets}
@@ -659,109 +649,111 @@ export default function ProfilePage() {
 
             {/* Collaborators Modal Overlay */}
             <AnimatePresence>
-                {showCollaboratorsModal && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-                        onClick={() => setShowCollaboratorsModal(false)}
-                    >
-                        {/* Blur Backdrop */}
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" />
-
-                        {/* Modal Content */}
+                {
+                    showCollaboratorsModal && (
                         <motion.div
-                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                            transition={{ type: "spring", bounce: 0.2 }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="relative w-full max-w-2xl max-h-[80vh] overflow-hidden bg-black/80 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl"
-                            style={{ boxShadow: `0 0 60px ${themeColor}20` }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+                            onClick={() => setShowCollaboratorsModal(false)}
                         >
-                            {/* Modal Header */}
-                            <div className="flex items-center justify-between p-6 border-b border-white/10">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 rounded-xl" style={{ backgroundColor: `${themeColor}20` }}>
-                                        <Users className="w-5 h-5" style={{ color: themeColor }} />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-xl font-bold text-white">Project Collaborators</h2>
-                                        <p className="text-white/50 text-xs">People who contribute to your projects</p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setShowCollaboratorsModal(false)}
-                                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
-                                >
-                                    <X className="w-5 h-5 text-white/60" />
-                                </button>
-                            </div>
+                            {/* Blur Backdrop */}
+                            <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" />
 
-                            {/* Modal Body */}
-                            <div className="p-6 overflow-y-auto max-h-[60vh] space-y-4">
-                                {collaborators.length === 0 ? (
-                                    // Placeholder Cards when no collaborators
-                                    <>
-                                        {[1, 2, 3].map((i) => (
+                            {/* Modal Content */}
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                                transition={{ type: "spring", bounce: 0.2 }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="relative w-full max-w-2xl max-h-[80vh] overflow-hidden bg-black/80 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl"
+                                style={{ boxShadow: `0 0 60px ${themeColor}20` }}
+                            >
+                                {/* Modal Header */}
+                                <div className="flex items-center justify-between p-6 border-b border-white/10">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 rounded-xl" style={{ backgroundColor: `${themeColor}20` }}>
+                                            <Users className="w-5 h-5" style={{ color: themeColor }} />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-xl font-bold text-white">Project Collaborators</h2>
+                                            <p className="text-white/50 text-xs">People who contribute to your projects</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowCollaboratorsModal(false)}
+                                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                                    >
+                                        <X className="w-5 h-5 text-white/60" />
+                                    </button>
+                                </div>
+
+                                {/* Modal Body */}
+                                <div className="p-6 overflow-y-auto max-h-[60vh] space-y-4">
+                                    {collaborators.length === 0 ? (
+                                        // Placeholder Cards when no collaborators
+                                        <>
+                                            {[1, 2, 3].map((i) => (
+                                                <div
+                                                    key={i}
+                                                    className="flex items-center gap-4 p-4 bg-white/5 border border-white/10 rounded-2xl animate-pulse"
+                                                >
+                                                    <div className="w-12 h-12 rounded-full bg-white/10" />
+                                                    <div className="flex-1 space-y-2">
+                                                        <div className="h-4 bg-white/10 rounded w-1/3" />
+                                                        <div className="h-3 bg-white/10 rounded w-1/2" />
+                                                    </div>
+                                                    <div className="text-right space-y-2">
+                                                        <div className="h-5 bg-white/10 rounded-full w-16" />
+                                                        <div className="h-3 bg-white/10 rounded w-20" />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <p className="text-center text-white/30 text-xs mt-4">
+                                                Collaborator data will be synced when you share projects
+                                            </p>
+                                        </>
+                                    ) : (
+                                        // Actual Collaborators
+                                        collaborators.map((collab, i) => (
                                             <div
                                                 key={i}
-                                                className="flex items-center gap-4 p-4 bg-white/5 border border-white/10 rounded-2xl animate-pulse"
+                                                className="flex items-center gap-4 p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-colors"
                                             >
-                                                <div className="w-12 h-12 rounded-full bg-white/10" />
-                                                <div className="flex-1 space-y-2">
-                                                    <div className="h-4 bg-white/10 rounded w-1/3" />
-                                                    <div className="h-3 bg-white/10 rounded w-1/2" />
+                                                <img
+                                                    src={collab.avatar || `https://ui-avatars.com/api/?name=${collab.name}&background=random`}
+                                                    alt={collab.name}
+                                                    className="w-12 h-12 rounded-full object-cover border-2"
+                                                    style={{ borderColor: themeColor }}
+                                                />
+                                                <div className="flex-1">
+                                                    <h4 className="font-bold text-white">{collab.name}</h4>
+                                                    <p className="text-white/50 text-sm">{collab.email}</p>
                                                 </div>
-                                                <div className="text-right space-y-2">
-                                                    <div className="h-5 bg-white/10 rounded-full w-16" />
-                                                    <div className="h-3 bg-white/10 rounded w-20" />
+                                                <div className="text-right">
+                                                    <span
+                                                        className="px-3 py-1 rounded-full text-xs font-bold"
+                                                        style={{ backgroundColor: `${themeColor}20`, color: themeColor }}
+                                                    >
+                                                        {collab.role || 'Contributor'}
+                                                    </span>
+                                                    {collab.lastEdited && (
+                                                        <p className="text-white/30 text-[10px] mt-1">
+                                                            Last edited: {new Date(collab.lastEdited).toLocaleDateString()}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
-                                        ))}
-                                        <p className="text-center text-white/30 text-xs mt-4">
-                                            Collaborator data will be synced when you share projects
-                                        </p>
-                                    </>
-                                ) : (
-                                    // Actual Collaborators
-                                    collaborators.map((collab, i) => (
-                                        <div
-                                            key={i}
-                                            className="flex items-center gap-4 p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-colors"
-                                        >
-                                            <img
-                                                src={collab.avatar || `https://ui-avatars.com/api/?name=${collab.name}&background=random`}
-                                                alt={collab.name}
-                                                className="w-12 h-12 rounded-full object-cover border-2"
-                                                style={{ borderColor: themeColor }}
-                                            />
-                                            <div className="flex-1">
-                                                <h4 className="font-bold text-white">{collab.name}</h4>
-                                                <p className="text-white/50 text-sm">{collab.email}</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <span
-                                                    className="px-3 py-1 rounded-full text-xs font-bold"
-                                                    style={{ backgroundColor: `${themeColor}20`, color: themeColor }}
-                                                >
-                                                    {collab.role || 'Contributor'}
-                                                </span>
-                                                {collab.lastEdited && (
-                                                    <p className="text-white/30 text-[10px] mt-1">
-                                                        Last edited: {new Date(collab.lastEdited).toLocaleDateString()}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </motion.div>
                         </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                    )
+                }
+            </AnimatePresence >
         </>
     )
 }

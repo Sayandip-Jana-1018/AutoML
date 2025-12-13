@@ -5,6 +5,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 import { AuthProvider } from "@/context/auth-context";
 import { ToastProvider } from "@/components/ToastProvider";
+import { ThemeColorProvider } from "@/context/theme-context";
+import { TrainingProvider } from "@/context/training-context";
 
 const outfit = Outfit({ subsets: ["latin"] });
 
@@ -27,11 +29,15 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          <AuthProvider>
-            <ToastProvider>
-              {children}
-            </ToastProvider>
-          </AuthProvider>
+          <ThemeColorProvider>
+            <AuthProvider>
+              <TrainingProvider>
+                <ToastProvider>
+                  {children}
+                </ToastProvider>
+              </TrainingProvider>
+            </AuthProvider>
+          </ThemeColorProvider>
         </ThemeProvider>
       </body>
     </html>

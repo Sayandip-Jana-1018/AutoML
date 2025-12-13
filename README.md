@@ -1,10 +1,10 @@
-# 🚀 Adhyay ML Studio
+# 🚀 AutoForge ML Studio
 
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-success)
 ![Stack](https://img.shields.io/badge/Stack-Next.js%2015%20%7C%20Firebase%20%7C%20Vertex%20AI-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-**Adhyay ML Studio** is a production-grade, no-code/low-code Machine Learning platform that enables users to upload datasets, train models on Google Cloud Vertex AI, and deploy them with one click. Built with Next.js 15, Firebase, and a glassmorphic UI.
+**AutoForge ML Studio** is a production-grade, no-code/low-code Machine Learning platform that enables users to upload datasets, train models on Google Cloud Vertex AI, and deploy them with one click. Built with Next.js 15, Firebase, and a glassmorphic UI.
 
 ---
 
@@ -149,6 +149,317 @@ All Studio outputs consolidated into a single, accessible row:
 - **Micro-animations** for enhanced engagement
 - **Spring physics** for natural, fluid motion
 - **Accessibility-first** with proper focus states
+
+---
+
+## 🆕 V5.0 Features (December 2024)
+
+### 🔗 Real-Time Collaboration System
+
+#### MCP Server (`/mcp-server`)
+A WebSocket server for real-time code synchronization between MLForge Studio and VS Code.
+
+**Setup:**
+```bash
+cd mcp-server
+npm install
+npm run build    # Compile TypeScript
+npm start        # Start server on port 4000
+```
+
+**Endpoints:**
+| Endpoint | Purpose |
+|----------|---------|
+| `http://localhost:4000` | Health check |
+| `ws://localhost:4000/ws` | WebSocket for Yjs sync |
+
+**Features:**
+- Yjs CRDT for conflict-free editing
+- Firebase Auth integration
+- Room-based project isolation
+
+---
+
+#### VS Code Extension (`/vscode-extension`)
+Connect VS Code to MLForge for seamless code synchronization.
+
+**Setup:**
+```bash
+cd vscode-extension
+npm install
+npm run compile    # Compile TypeScript
+npx vsce package --allow-missing-repository  # Build VSIX
+code --install-extension mlforge-studio-0.1.0.vsix  # Install
+```
+
+**One-Click Connection:**
+1. Open your project in MLForge Studio
+2. Click the **VS Code icon** in the header
+3. VS Code opens and connects automatically
+4. Edit in either place - changes sync via Firestore
+
+**Commands (Ctrl+Shift+P):**
+| Command | Action |
+|---------|--------|
+| `MLForge: Connect to Project` | Manual connection to a project |
+| `MLForge: Disconnect` | End sync session |
+| `MLForge: Push to Cloud` | Manually sync current code |
+| `MLForge: Show Connection Status` | View connection state |
+
+**Auto-Sync Features:**
+- ✅ **Auto-sync on save** - Press Ctrl+S and code syncs automatically
+- ✅ **Jupyter Notebook support** - Syncs all code cells
+- ✅ **Persistent connection** - Survives VS Code reloads
+- ✅ **Version history** - Each sync creates a new version
+
+**Sync Flow:**
+```mermaid
+flowchart LR
+    A[Studio: Open in VS Code] --> B[VS Code: URI Handler]
+    B --> C[Connection Persisted]
+    C --> D[Edit Code in VS Code]
+    D --> E[Save - Ctrl+S]
+    E --> F[Auto-Sync to Firestore]
+    F --> G[Studio: Click Sync Button]
+    G --> H[Code Updated in Studio]
+```
+
+**API Endpoint:**
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/mcp/sync-script` | POST | Sync code from VS Code to Firestore |
+
+---
+
+
+### 💬 Chat History Persistence
+
+All chat conversations are now saved to Firestore and can be accessed later.
+
+**Sidebar Tabs:**
+| Tab | Content |
+|-----|---------|
+| **Models** | Your trained ML models |
+| **History** | Past chat sessions |
+
+**Features:**
+- Auto-save messages as you chat
+- Session titles from first message
+- Click any session to restore
+- "New Chat" button for fresh start
+
+**Firestore Structure:**
+```
+chat_sessions/{sessionId}
+  ├── userEmail: "user@email.com"
+  ├── title: "How to improve accuracy..."
+  ├── lastMessage: "..."
+  └── messages/{messageId}
+        ├── role: "user" | "assistant"
+        ├── content: "..."
+        └── createdAt: timestamp
+```
+
+---
+
+### ⚡ Apply & Retrain Feature
+
+When AI suggests improvements in Chat, two action buttons appear:
+
+| Button | Action |
+|--------|--------|
+| **View in Studio** | Opens suggestion as-is in Studio |
+| **Apply & Retrain** ⚡ | GenAI generates Python code, then opens Studio |
+
+**Detection Keywords:**
+- `feature engineering`, `hyperparameter`, `cross-validation`
+- `normalize`, `scale`, `random forest`, `xgboost`
+- `epochs`, `learning rate`, `batch size`
+
+---
+
+### 📊 Feature Importance Chart
+
+New component in Studio Metrics tab showing feature importance visualization.
+
+**File:** `src/components/studio/FeatureImportance.tsx`
+
+**Usage:**
+```tsx
+<FeatureImportance features={[
+  { name: 'age', importance: 0.35 },
+  { name: 'income', importance: 0.25 }
+]} />
+```
+
+---
+
+### 🎯 Dataset Quality Score
+
+AI-powered dataset grading system with actionable insights.
+
+**File:** `src/components/studio/DatasetQualityScore.tsx`
+
+**Metrics Analyzed:**
+- Missing values percentage
+- Duplicate rows
+- High cardinality columns
+- Feature correlations
+
+**Grades:** A (90-100) → F (0-59)
+
+---
+
+### 📓 Export to Jupyter Notebook
+
+Export training configuration as a ready-to-run `.ipynb` file.
+
+**API:** `POST /api/export/notebook`
+
+**Request:**
+```json
+{
+  "projectName": "Titanic Survival",
+  "algorithm": "random_forest",
+  "targetColumn": "Survived",
+  "featureColumns": ["Age", "Fare", "Pclass"],
+  "testSize": 0.2
+}
+```
+
+**Response:** Downloads `Titanic_Survival_training.ipynb`
+
+---
+
+### 🐛 Bug Fixes (V5.0)
+- Fixed `auth` import error in notebook export route
+- Improved model name/algorithm fallback logic in Chat
+- Deleted duplicate `.agent/` folder (use root `/mcp-server` and `/vscode-extension`)
+- Added proper closing tags in Chat history UI
+
+---
+
+## 🆕 V4.0 Features (Latest Session)
+
+### Profile Page Redesign
+- **Horizontal Header Layout** - Avatar + Info + Stats + Actions in single row
+- **224px Breakout Avatar** - Profile photo breaks out of header card
+- **Theme-Matched Colors** - All text, icons, and badges use theme color
+- **Centered Tabs** - Overview | Security | Notifications centered
+
+### Collaborative Editing (MCP)
+| File | Purpose |
+|------|---------|
+| `src/hooks/useCollaboration.ts` | Yjs integration for real-time sync |
+| `src/components/studio/CollaboratorCursors.tsx` | Shows remote user cursors |
+| `src/components/studio/ConnectionStatus.tsx` | Sync indicator |
+
+### Marketplace Fork Button
+- Fork any public model into your account
+- API: `POST /api/marketplace/{modelId}/fork`
+- Creates copy of model metadata + redirects to new project
+
+### API Key System
+| Endpoint | Function |
+|----------|----------|
+| `POST /api/keys` | Create HMAC-hashed API key |
+| `GET /api/keys` | List user's keys |
+| `DELETE /api/keys` | Revoke key |
+
+### Bug Fixes
+- **NaN JSON Parsing** - Metrics with NaN/Infinity now parse correctly
+- **BadgeCheck Error** - Fixed TypeScript prop error in Marketplace
+- **Models Not Showing** - Fixed field name `ownerEmail` mismatch
+- **Stats 0/0** - Now shows real `userModels.length`/`userDatasets.length`
+- **Training Overlay** - Added backdrop blur + darken effect
+
+---
+
+## 🚀 V3.0 Features (Latest)
+
+### Sprint 1: Core Automation
+
+#### 📡 Scheduled Metrics Sync
+- Cloud Function runs every 5 minutes (`scheduledMetricsSync`)
+- Queries global `/jobs` collection for running/pending jobs
+- Fetches `metrics.json` from GCS training bucket
+- Updates Firestore job documents with latest metrics
+
+#### 📜 Real-Time Training Logs
+- **TerminalView** polls `/api/studio/jobs/[id]/logs` every 5 seconds
+- 64KB chunked responses with offset-based pagination
+- Color-coded output (red=errors, yellow=warnings, green=success)
+- Auto-scroll with manual refresh button
+
+#### 🔄 Retry Training Button
+- Separate "Retry Training" and "Close" buttons on failure
+- Quota-specific messaging with orange styling
+- Tracks `retryOf`, `retryReason`, `retryCount` in job document
+- Writes to global `/jobs` index for cross-project queries
+
+### Sprint 2: Suggestion System
+
+#### 🎯 Version-Aware Suggestions
+- Suggestions store `targetScriptVersion` and `targetVersionId`
+- **SuggestionPanel** shows orange "Version Mismatch" warning
+- ChatInterface passes current version when creating suggestions
+
+#### 📦 Diff-Based Code Storage
+- `src/lib/diff-utils.ts`: `generateDiff()`, `applyDiffPatch()`, `hashText()`
+- PATCH API stores `appliedPatch: { diff }` for rollback
+- Keeps `currentScriptBeforeApply` for undo functionality
+
+#### 🔍 Duplicate Prevention
+- DJB2 hash (`textHash`) generated for each suggestion
+- Checks for existing unapplied suggestions before creating
+- Returns `{ isDuplicate: true, suggestionId }` if duplicate found
+
+### Sprint 3: Analytics & Visualization
+
+#### 📊 Model Comparison Tab
+- ComparisonTab component with version selector (max 5)
+- Animated bar charts for Accuracy, Loss, RMSE, Duration
+- Handles null metrics with "No metrics available" alert
+- Shows 🤖 badge for AI-generated versions
+
+#### 📄 Model Card Generator
+- Route: `/studio/[projectId]/model-card`
+- Sections: Overview, Metrics, Config, Version History, Limitations
+- Export (print) and Share (copy URL) buttons
+- Glassmorphic cards matching studio theme
+
+### Sprint 4: Platform Features
+
+#### ⌨️ Keyboard Shortcuts
+```tsx
+import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
+
+useKeyboardShortcuts({
+  shortcuts: [
+    { ...COMMON_SHORTCUTS.save, handler: handleSave },      // ⌘S / Ctrl+S
+    { ...COMMON_SHORTCUTS.train, handler: handleTrain },    // ⌘Enter / Ctrl+Enter
+    { ...COMMON_SHORTCUTS.closePanel, handler: closePanel } // Escape
+  ]
+});
+```
+- `getShortcutDisplay()` shows "⌘S" on Mac, "Ctrl+S" on Windows
+- Skips input fields automatically (except Escape)
+
+#### 🔒 API Standardization (RFC 7807)
+```tsx
+import { validateRequestBody, CommonSchemas } from '@/lib/api-validation';
+
+const result = await validateRequestBody(req, schema);
+if ('error' in result) return result.error; // RFC 7807 response
+```
+- Zod validation with typed responses
+- Problem Details helpers: `validationErrorResponse()`, `forbiddenResponse()`, etc.
+
+#### 🔗 Shareable Links
+- Route: `/share/[shareId]` - public model card view
+- No authentication required
+- Copy link button with success feedback
+- Fetches from `shared_models` collection
 
 ---
 
@@ -301,7 +612,7 @@ flowchart TB
 ## 📁 Project Structure
 
 ```
-adhyay/
+autoforge/
 ├── src/
 │   ├── app/                    # Next.js App Router
 │   │   ├── api/                # API Routes
@@ -315,6 +626,8 @@ adhyay/
 │   │   │   ├── registry/       # Model registry
 │   │   │   ├── share/          # Collaboration
 │   │   │   ├── studio/         # Studio APIs (upload, train, deploy, chat)
+│   │   │   ├── mcp/            # VS Code sync API
+│   │   │   │   └── sync-script/route.ts
 │   │   │   └── templates/      # Pipeline templates
 │   │   ├── admin/              # Admin dashboard
 │   │   ├── auth/               # Login/Register pages
@@ -351,6 +664,16 @@ adhyay/
 │       ├── data-cleaning.ts    # Data preprocessing
 │       ├── chat-commands.ts    # AI chat commands
 │       └── sample-datasets.ts  # Playground datasets
+├── vscode-extension/           # VS Code Extension
+│   ├── src/
+│   │   ├── extension.ts        # Main extension entry
+│   │   ├── mcp-client.ts       # Yjs WebSocket client
+│   │   ├── status-bar.ts       # Status bar manager
+│   │   └── collaborators-view.ts
+│   └── package.json
+├── mcp-server/                 # WebSocket sync server
+│   └── src/
+│       └── index.ts            # Yjs server
 ├── functions/                  # Firebase Cloud Functions
 │   └── src/
 │       ├── index.ts            # Dataset upload triggers
@@ -403,6 +726,7 @@ adhyay/
 | `/api/playground` | GET/POST | Sample datasets & playground |
 | `/api/payment/order` | POST | Create Razorpay order |
 | `/api/proxy/[...path]` | * | Proxy to EC2 backend |
+| `/api/mcp/sync-script` | POST | VS Code → Firestore code sync |
 
 ---
 
@@ -445,8 +769,8 @@ adhyay/
 
 ```bash
 # Clone the repository
-git clone https://github.com/Sayandip-Jana/Adhyay.git
-cd Adhyay
+git clone https://github.com/Sayandip-Jana/MLForge.git
+cd MLForge
 
 # Install dependencies
 npm install
@@ -564,10 +888,7 @@ MIT License - See [LICENSE](LICENSE) for details.
 ---
 
 <div align="center">
-  <h3>🚀 Adhyay ML Studio</h3>
+  <h3>🚀 AutoForge ML Studio</h3>
   <p>Train. Deploy. Scale.</p>
   <br/>
-  <a href="https://adhyay.vercel.app">Live Demo</a> •
-  <a href="https://github.com/Sayandip-Jana/Adhyay/issues">Report Bug</a> •
-  <a href="https://github.com/Sayandip-Jana/Adhyay/discussions">Discussions</a>
 </div>

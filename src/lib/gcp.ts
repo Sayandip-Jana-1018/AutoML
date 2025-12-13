@@ -1,6 +1,15 @@
+/**
+ * GCP Utilities
+ * 
+ * Core Google Cloud Platform utilities:
+ * - Storage operations (upload, download, signed URLs)
+ * - File metadata
+ * 
+ * Note: Training is now handled by compute-training.ts (Compute Engine)
+ * and runpod-training.ts (RunPod GPU) instead of Vertex AI.
+ */
+
 import { Storage } from '@google-cloud/storage';
-const { JobServiceClient } = require('@google-cloud/aiplatform').v1;
-import { getMaxTrainingTimeout, getDefaultMachineType, MACHINE_COSTS, type SubscriptionTier } from './resource-policy';
 
 // Initialize GCP Clients with explicit credentials
 const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n');
@@ -16,6 +25,14 @@ export const storage = privateKey && clientEmail ? new Storage({
     }
 }) : new Storage();
 
+// Configuration exports
+export const GCP_PROJECT_ID = projectId;
+export const GCP_LOCATION = process.env.GCP_LOCATION || 'us-central1';
+// IMPORTANT: Use GCP_TRAINING_BUCKET for training outputs, NOT Firebase Storage bucket
+// Firebase Storage (automl-dc494.firebasestorage.app) is for user uploads
+// GCS bucket (mlforge-fluent-cable-480715-c8) is for training outputs
+export const TRAINING_BUCKET = process.env.GCP_TRAINING_BUCKET || 'mlforge-fluent-cable-480715-c8';
+
 /**
  * Retrieves metadata for a file in GCS.
  */
@@ -26,36 +43,33 @@ export async function getFileMetadata(gcsPath: string) {
     return metadata;
 }
 
-// Create AI Platform client with explicit credentials
-const client = privateKey && clientEmail ? new JobServiceClient({
-    apiEndpoint: 'us-central1-aiplatform.googleapis.com',
-    credentials: {
-        client_email: clientEmail,
-        private_key: privateKey,
-    }
-}) : new JobServiceClient({
-    apiEndpoint: 'us-central1-aiplatform.googleapis.com',
-});
-
-// Configuration
-export const GCP_PROJECT_ID = projectId;
-export const GCP_LOCATION = process.env.GCP_LOCATION || 'us-central1';
-// ML Training bucket (NEW GCP project - NOT Firebase Storage)
-export const TRAINING_BUCKET = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'mlforge-fluent-cable-480715-c8';
-
 /**
  * Uploads the generated Python training script to Google Cloud Storage.
+ * Uses content hash for deduplication - same script content won't be uploaded twice.
  */
 export async function uploadScriptToGCS(projectId: string, scriptContent: string): Promise<string> {
     try {
+        const crypto = await import('crypto');
         const bucket = storage.bucket(TRAINING_BUCKET);
-        const fileName = `projects/${projectId}/jobs/train_${Date.now()}.py`;
+
+        // Compute SHA256 hash of script content for deduplication
+        const contentHash = crypto.createHash('sha256').update(scriptContent).digest('hex').slice(0, 16);
+        const fileName = `projects/${projectId}/jobs/train_${contentHash}.py`;
         const file = bucket.file(fileName);
 
+        // Check if file already exists (deduplication)
+        const [exists] = await file.exists();
+        if (exists) {
+            console.log(`[GCP] Script already exists, reusing: gs://${TRAINING_BUCKET}/${fileName}`);
+            return `gs://${TRAINING_BUCKET}/${fileName}`;
+        }
+
+        // Upload new script
         await file.save(scriptContent, {
             contentType: 'text/x-python',
             metadata: {
-                cacheControl: 'private'
+                cacheControl: 'private',
+                contentHash: contentHash
             }
         });
 
@@ -68,201 +82,89 @@ export async function uploadScriptToGCS(projectId: string, scriptContent: string
 }
 
 /**
- * Submits a Custom Training Job to Vertex AI.
- * Uses a pre-built Scikit-learn container for simplicity in this Studio environment.
- * Applies resource limits based on subscription tier.
- */
-export async function submitVertexTrainingJob(
-    projectId: string,
-    scriptGcsPath: string,
-    options: {
-        tier?: SubscriptionTier;
-        machineType?: string;
-        imageUri?: string;
-        datasetGcsPath?: string;  // Path to dataset in GCS
-        jobId?: string;           // Job ID for model output path
-    } = {}
-) {
-    const {
-        tier = 'free',
-        machineType = getDefaultMachineType(tier),
-        imageUri = 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest',
-        datasetGcsPath = '',
-        jobId = `job-${Date.now()}`
-    } = options;
-
-    if (!GCP_PROJECT_ID) throw new Error("GCP_PROJECT_ID is not defined.");
-
-    const parent = `projects/${GCP_PROJECT_ID}/locations/${GCP_LOCATION}`;
-    const displayName = `studio-job-${Date.now()}`;
-    const timeoutSeconds = getMaxTrainingTimeout(tier);
-
-    // Model output path in GCS - this is where the training script will save the model
-    const gcsOutputPath = `gs://${TRAINING_BUCKET}/projects/${projectId}/jobs/${jobId}/model/`;
-
-    // Environment variables for the training container
-    const envVars = [
-        { name: 'GCS_OUTPUT_PATH', value: gcsOutputPath },
-        { name: 'DATASET_GCS_PATH', value: datasetGcsPath },
-        { name: 'PROJECT_ID', value: projectId },
-        { name: 'JOB_ID', value: jobId },
-        { name: 'TRAINING_BUCKET', value: TRAINING_BUCKET }
-    ];
-
-    // Construct the CustomJob with resource limits
-    const containerJob = {
-        displayName: displayName,
-        jobSpec: {
-            workerPoolSpecs: [{
-                machineSpec: { machineType },
-                replicaCount: 1,
-                containerSpec: {
-                    imageUri,
-                    command: [
-                        "sh",
-                        "-c",
-                        `gsutil cp ${scriptGcsPath} train.py && python3 train.py`
-                    ],
-                    env: envVars
-                }
-            }],
-            // Apply timeout based on tier
-            scheduling: {
-                timeout: { seconds: timeoutSeconds },
-                restartJobOnWorkerRestart: false
-            }
-        }
-    };
-
-    console.log(`[Vertex AI] Submitting Custom Job: ${displayName} (Tier: ${tier}, Machine: ${machineType}, Timeout: ${timeoutSeconds}s)`);
-
-    try {
-        const [response] = await client.createCustomJob({
-            parent,
-            customJob: containerJob
-        });
-
-        console.log(`[Vertex AI] Job Created: ${response.name}`);
-
-        // Estimate cost
-        const estimatedCost = (MACHINE_COSTS[machineType] || 0.20) * (timeoutSeconds / 3600);
-
-        return {
-            jobId: response.name?.split('/').pop(),
-            status: response.state,
-            machineType,
-            maxDurationHours: timeoutSeconds / 3600,
-            estimatedMaxCost: estimatedCost.toFixed(2),
-            dashboardUrl: `https://console.cloud.google.com/vertex-ai/training/jobs?project=${GCP_PROJECT_ID}`
-        };
-    } catch (e) {
-        console.error("[Vertex AI] Submission Error:", e);
-        throw e;
-    }
-}
-
-/**
- * Stub for retrieving logs - in a real app this would use Cloud Logging API.
+ * Stub for retrieving logs - now handled by compute-training.ts via GCS polling
  */
 export async function getTrainingLogs(jobId: string) {
-    // REAL IMPLEMENTATION TODO: Use @google-cloud/logging
-    return [];
+    console.log(`[GCP] Logs for job ${jobId} - use /api/studio/jobs/[id]/logs instead`);
+    return {
+        logs: [],
+        message: 'Logs are streamed from GCS via the logs API endpoint'
+    };
 }
-
-const { EndpointServiceClient, ModelServiceClient } = require('@google-cloud/aiplatform').v1;
-
-// Initialize endpoint and model clients with explicit credentials
-const endpointClient = privateKey && clientEmail ? new EndpointServiceClient({
-    apiEndpoint: 'us-central1-aiplatform.googleapis.com',
-    credentials: { client_email: clientEmail, private_key: privateKey }
-}) : new EndpointServiceClient({ apiEndpoint: 'us-central1-aiplatform.googleapis.com' });
-
-const modelClient = privateKey && clientEmail ? new ModelServiceClient({
-    apiEndpoint: 'us-central1-aiplatform.googleapis.com',
-    credentials: { client_email: clientEmail, private_key: privateKey }
-}) : new ModelServiceClient({ apiEndpoint: 'us-central1-aiplatform.googleapis.com' });
 
 /**
  * Generates a V4 Signed URL for uploading a file directly to GCS.
  */
 export async function generateUploadSignedUrl(projectId: string, fileName: string, contentType: string) {
-    const bucket = storage.bucket(TRAINING_BUCKET);
-    const gcsFileName = `projects/${projectId}/datasets/${Date.now()}_${fileName}`;
-    const file = bucket.file(gcsFileName);
+    try {
+        const bucket = storage.bucket(TRAINING_BUCKET);
+        const filePath = `projects/${projectId}/uploads/${fileName}`;
+        const file = bucket.file(filePath);
 
-    const [url] = await file.getSignedUrl({
-        version: 'v4',
-        action: 'write',
-        expires: Date.now() + 15 * 60 * 1000,
-        contentType,
-    });
+        const [url] = await file.getSignedUrl({
+            version: 'v4',
+            action: 'write',
+            expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+            contentType,
+        });
 
-    return { url, gcsPath: `gs://${TRAINING_BUCKET}/${gcsFileName}` };
+        return {
+            url,
+            gcsPath: `gs://${TRAINING_BUCKET}/${filePath}`
+        };
+    } catch (error) {
+        console.error("[GCP] Signed URL Error:", error);
+        throw new Error("Failed to generate upload URL.");
+    }
 }
 
 /**
- * Deploys a trained model to a Vertex AI Endpoint.
- * Assumes the training job exported a model to the job directory.
+ * Download a file from GCS
  */
-export async function deployModelToVertex(projectId: string, modelDisplayName: string, modelArtifactUri: string) {
-    const parent = `projects/${GCP_PROJECT_ID}/locations/${GCP_LOCATION}`;
+export async function downloadFromGCS(gcsPath: string): Promise<Buffer> {
+    const bucketName = gcsPath.replace('gs://', '').split('/')[0];
+    const fileName = gcsPath.replace(`gs://${bucketName}/`, '');
 
-    // 1. Upload Model
-    console.log(`[Vertex AI] Uploading Model: ${modelDisplayName}`);
-    const [uploadResponse] = await modelClient.uploadModel({
-        parent,
-        model: {
-            displayName: modelDisplayName,
-            artifactUri: modelArtifactUri, // gs://path/to/model/
-            containerSpec: {
-                imageUri: 'us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-0:latest', // Pre-built sklearn serving
-            },
-        },
-    });
-
-    // As uploadModel is LRO (Long Running Operation), we might need to wait, 
-    // but for "Real-time" UI non-block, we usually return the LRO name or wait if we want synchronous flow.
-    // Let's await the LRO for simplicity in this "Studio" flow so user gets a final URL.
-    const [uploadResult] = await uploadResponse.promise();
-    const modelName = uploadResult.model;
-    console.log(`[Vertex AI] Model Uploaded: ${modelName}`);
-
-    // 2. Create Endpoint
-    console.log(`[Vertex AI] Creating Endpoint...`);
-    const [endpointResponse] = await endpointClient.createEndpoint({
-        parent,
-        endpoint: { displayName: `${modelDisplayName}-endpoint` },
-    });
-    const [endpointResult] = await endpointResponse.promise();
-    const endpointName = endpointResult.name;
-    console.log(`[Vertex AI] Endpoint Created: ${endpointName}`);
-
-    // 3. Deploy Model to Endpoint
-    console.log(`[Vertex AI] Deploying to Endpoint...`);
-    const [deployResponse] = await endpointClient.deployModel({
-        endpoint: endpointName,
-        deployedModel: {
-            model: modelName,
-            displayName: 'deployed-model',
-            dedicatedResources: {
-                minReplicaCount: 1,
-                machineSpec: {
-                    machineType: 'e2-highmem-2',
-                },
-            },
-        },
-        trafficSplit: { '0': 100 },
-    });
-
-    // This is also LRO. 
-    await deployResponse.promise();
-    console.log(`[Vertex AI] Deployment Complete.`);
-
-    return {
-        modelName,
-        endpointName,
-        endpointUrl: `https://${GCP_LOCATION}-aiplatform.googleapis.com/v1/${endpointName}:predict`
-    };
+    const [content] = await storage.bucket(bucketName).file(fileName).download();
+    return content;
 }
 
+/**
+ * Check if a file exists in GCS
+ */
+export async function fileExistsInGCS(gcsPath: string): Promise<boolean> {
+    try {
+        const bucketName = gcsPath.replace('gs://', '').split('/')[0];
+        const fileName = gcsPath.replace(`gs://${bucketName}/`, '');
 
+        const [exists] = await storage.bucket(bucketName).file(fileName).exists();
+        return exists;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * List files in a GCS directory
+ */
+export async function listFilesInGCS(gcsPrefix: string): Promise<string[]> {
+    const bucketName = gcsPrefix.replace('gs://', '').split('/')[0];
+    const prefix = gcsPrefix.replace(`gs://${bucketName}/`, '');
+
+    const [files] = await storage.bucket(bucketName).getFiles({ prefix });
+    return files.map(f => `gs://${bucketName}/${f.name}`);
+}
+
+export default {
+    storage,
+    getFileMetadata,
+    uploadScriptToGCS,
+    getTrainingLogs,
+    generateUploadSignedUrl,
+    downloadFromGCS,
+    fileExistsInGCS,
+    listFilesInGCS,
+    GCP_PROJECT_ID,
+    GCP_LOCATION,
+    TRAINING_BUCKET
+};

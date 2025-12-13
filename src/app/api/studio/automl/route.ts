@@ -205,16 +205,36 @@ function generateAutoMLScript(config: ScriptConfig): string {
     const numericCols = columns.filter(c => columnTypes[c] === 'numeric' && c !== targetColumn);
     const categoricalCols = columns.filter(c => (columnTypes[c] === 'categorical' || columnTypes[c] === 'text') && c !== targetColumn);
 
-    const isClassification = taskType.includes('classification');
+    // FIXED: Check BOTH taskType AND algorithm name for classification
+    const isClassification = taskType.includes('classification') || algorithm.includes('Classifier');
     const metricImport = isClassification
-        ? 'from sklearn.metrics import accuracy_score, classification_report, confusion_matrix'
+        ? 'from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_score, recall_score, f1_score, log_loss'
         : 'from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error';
 
     const metricCalc = isClassification
         ? `    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, average='weighted', zero_division=0)
+    recall = recall_score(y_test, y_pred, average='weighted', zero_division=0)
+    f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
+    cm = confusion_matrix(y_test, y_pred)
+    
+    # Try to compute log_loss if model has predict_proba
+    try:
+        y_proba = model.predict_proba(X_test)
+        logloss = log_loss(y_test, y_proba)
+    except:
+        logloss = None
+    
     print(f"Accuracy: {accuracy:.4f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1-Score: {f1:.4f}")
+    if logloss:
+        print(f"Log Loss: {logloss:.4f}")
     print("\\nClassification Report:")
-    print(classification_report(y_test, y_pred))`
+    print(classification_report(y_test, y_pred))
+    print("\\nConfusion Matrix:")
+    print(cm)`
         : `    mse = mean_squared_error(y_test, y_pred)
     rmse = mean_squared_error(y_test, y_pred, squared=False)
     r2 = r2_score(y_test, y_pred)
@@ -323,8 +343,11 @@ def preprocess(df):
     return X, y, preprocessor
 
 def train_model(X, y, preprocessor):
-    """Train the model"""
-    print("\\nTraining model...")
+    """Train multiple models and select the best one via cross-validation"""
+    from sklearn.model_selection import cross_val_score
+    print("\\\\n" + "="*60)
+    print("BEST ALGORITHM SELECTOR - Comparing Multiple Models")
+    print("="*60)
     
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(
@@ -332,15 +355,74 @@ def train_model(X, y, preprocessor):
     )
     print(f"Train size: {len(X_train)}, Test size: {len(X_test)}")
     
-    # Create full pipeline
-    model = Pipeline([
-        ('preprocessor', preprocessor),
-        ('classifier', ${algorithm}(${algorithm.includes('Forest') ? 'n_estimators=100, ' : ''}random_state=RANDOM_STATE))
-    ])
+    # Define candidate algorithms
+    candidates = {}
     
-    # Fit model
+    # Always try LogisticRegression
+    try:
+        from sklearn.linear_model import LogisticRegression
+        candidates['LogisticRegression'] = LogisticRegression(max_iter=500, random_state=RANDOM_STATE)
+    except: pass
+    
+    # Always try RandomForest
+    try:
+        from sklearn.ensemble import RandomForestClassifier
+        candidates['RandomForest'] = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE)
+    except: pass
+    
+    # Try XGBoost if available
+    try:
+        from xgboost import XGBClassifier
+        candidates['XGBoost'] = XGBClassifier(n_estimators=100, use_label_encoder=False, eval_metric='logloss', random_state=RANDOM_STATE, verbosity=0)
+        print("✓ XGBoost available")
+    except ImportError:
+        print("✗ XGBoost not installed")
+    
+    # Try LightGBM if available
+    try:
+        from lightgbm import LGBMClassifier
+        candidates['LightGBM'] = LGBMClassifier(n_estimators=100, random_state=RANDOM_STATE, verbose=-1)
+        print("✓ LightGBM available")
+    except ImportError:
+        print("✗ LightGBM not installed")
+    
+    # Run cross-validation for each candidate
+    results = {}
+    print("\\\\nRunning 3-fold cross-validation for each algorithm...")
+    
+    for name, clf in candidates.items():
+        try:
+            pipeline = Pipeline([
+                ('preprocessor', preprocessor),
+                ('classifier', clf)
+            ])
+            scores = cross_val_score(pipeline, X_train, y_train, cv=3, scoring='accuracy', n_jobs=-1)
+            mean_score = scores.mean()
+            std_score = scores.std()
+            results[name] = {'mean': mean_score, 'std': std_score, 'pipeline': pipeline}
+            print(f"  {name}: {mean_score:.4f} (+/- {std_score:.4f})")
+        except Exception as e:
+            print(f"  {name}: Failed - {str(e)[:50]}")
+    
+    # Select best algorithm
+    if not results:
+        raise ValueError("All algorithms failed during cross-validation")
+    
+    best_name = max(results, key=lambda k: results[k]['mean'])
+    best_result = results[best_name]
+    
+    print(f"\\\\n{'='*60}")
+    print(f"★ BEST ALGORITHM: {best_name} (CV Accuracy: {best_result['mean']:.4f})")
+    print(f"{'='*60}\\\\n")
+    
+    # Train best model on full training data
+    model = best_result['pipeline']
     model.fit(X_train, y_train)
-    print("Model trained successfully!")
+    print(f"Final model ({best_name}) trained successfully!")
+    
+    # Store comparison results for metrics
+    model.algorithm_comparison = {name: {'cv_accuracy': r['mean'], 'cv_std': r['std']} for name, r in results.items()}
+    model.best_algorithm = best_name
     
     return model, X_test, y_test
 
@@ -353,13 +435,24 @@ def evaluate(model, X_test, y_test):
     
 ${metricCalc}
     
-${isClassification ? `    metrics['accuracy'] = accuracy
+${isClassification ? `    metrics['accuracy'] = float(accuracy)
+    metrics['precision'] = float(precision)
+    metrics['recall'] = float(recall)
+    metrics['f1'] = float(f1)
+    if logloss is not None:
+        metrics['log_loss'] = float(logloss)
+    metrics['confusion_matrix'] = cm.tolist()
     try:
         metrics['num_classes'] = len(np.unique(y_test))
     except:
-        pass` : `    metrics['rmse'] = rmse
-    metrics['r2'] = r2
-    metrics['mae'] = mae`}
+        pass
+    
+    # Include algorithm comparison results
+    if hasattr(model, 'algorithm_comparison'):
+        metrics['algorithm_comparison'] = model.algorithm_comparison
+        metrics['best_algorithm'] = model.best_algorithm` : `    metrics['rmse'] = float(rmse)
+    metrics['r2'] = float(r2)
+    metrics['mae'] = float(mae)`}
     
     return model, metrics
 

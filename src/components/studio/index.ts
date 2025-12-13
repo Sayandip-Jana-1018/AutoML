@@ -7,6 +7,11 @@ export { ChatInterface } from './ChatInterface';
 export { DatasetPreviewOverlay, DatasetTriggerButton } from './DatasetPreviewOverlay';
 export { WorkflowTimeline } from './WorkflowTimeline';
 export { StudioHeader } from './StudioHeader';
+export { SuggestionPanel } from './SuggestionPanel';
+export { ScriptVersionsView } from './ScriptVersionsView';
+export { ComparisonTab } from './ComparisonTab';
+export { default as CollabLinkModal } from './CollabLinkModal';
+export { default as GitHubPushModal } from './GitHubPushModal';
 
 // Export types
 export type {

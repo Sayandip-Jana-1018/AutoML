@@ -49,7 +49,48 @@ export interface Message {
 export interface Job {
     id: string;
     status: string;
-    metrics?: { accuracy: number; loss: number };
+    metrics?: {
+        accuracy?: number;
+        precision?: number;
+        recall?: number;
+        f1?: number;
+        log_loss?: number;
+        loss?: number;  // Legacy field
+        rmse?: number;  // Regression
+        r2?: number;    // Regression
+        mae?: number;   // Regression
+        num_classes?: number;
+        confusion_matrix?: number[][];
+    };
     createdAt: any;
     logs?: string[];
+    scriptVersion?: number | string;
+    scriptVersionId?: string;
+    backend?: string;
+    vmName?: string;
+    podId?: string;
+    consoleUrl?: string;
+    // Dataset info
+    originalFilename?: string;
+    datasetFilename?: string;
+    datasetRows?: number;
+    datasetSizeMB?: number;
+    taskType?: string;
+    algorithm?: string;
+    // Cost and runtime
+    estimatedMinutes?: number;
+    estimatedTotalCost?: number;
+    actualRuntimeSeconds?: number;
+    actualCostUsd?: number;
+    actualCostInr?: number;
+    // Phase tracking
+    currentPhase?: string;
+    phaseProgress?: number;
+    // Config
+    config?: {
+        machineType?: string;
+        tier?: string;
+        algorithm?: string;
+        [key: string]: any;
+    };
 }

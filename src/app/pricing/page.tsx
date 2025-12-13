@@ -183,63 +183,83 @@ export default function PricingPage() {
         }
     }, [isPaymentOpen])
 
+    /**
+     * Pricing Calculation with 50% Profit Margin
+     * 
+     * Cost Basis (per month, assuming avg 10 training jobs):
+     * - Free: e2-medium $0.07/hr × 1hr × 10 jobs = $7/month → ₹600 cost → ₹0 (subsidized)
+     * - Silver: e2-standard-4 $0.13/hr × 2hr × 15 jobs = $3.9/month → ₹330 + AI APIs ₹200 = ₹530 cost → ₹800 (50% margin)
+     * - Gold: e2-highmem-8 $0.36/hr × 4hr × 20 jobs = $28.8/month + RunPod $0.26/hr × 5 = $30 → ₹2500 + AI APIs ₹400 = ₹2900 → ₹4350 (50% margin)
+     * 
+     * Rounding to nice numbers for marketing
+     */
+    const MONTHLY_PRICES = {
+        free: 0,
+        silver: 799,    // Cost ~₹530, Price ₹799 = 50% margin
+        gold: 2499      // Cost ~₹2900 (conservative), Price ₹4350 → ₹2499 for competitive pricing
+    };
+
     const plans = [
         {
             name: "BRONZE",
             tier: "free" as const,
-            price: 0,
+            price: MONTHLY_PRICES.free,
             icon: Star,
             color: "from-orange-400 to-red-500",
             features: [
-                "Gemini 1.5 Flash (Free)",
-                "Basic Code Gen",
-                "10 Summaries per day",
-                `${RESOURCE_POLICIES.free.maxTrainingHours} Hour Max Training`,
-                `${RESOURCE_POLICIES.free.maxEpochs} Epochs / ${RESOURCE_POLICIES.free.maxTrees} Trees Limit`,
-                `${RESOURCE_POLICIES.free.allowedMachineTypes[0]} Machine`
+                "GCP Compute Engine Training",
+                `e2-medium (${RESOURCE_POLICIES.free.allowedMachineTypes[0]})`,
+                "2 vCPU • 4 GB RAM",
+                `Max ${RESOURCE_POLICIES.free.maxTrainingHours} Hour Training`,
+                "10 MB Dataset Limit",
+                `${RESOURCE_POLICIES.free.maxEpochs} Epochs Max`,
+                "Gemini 1.5 Flash (Free)"
             ],
             missing: [
-                "OpenAI GPT-4o",
-                "Claude 3.5 Sonnet",
-                "HPO Tuning"
+                "GPU Training",
+                "Large Datasets (100MB+)",
+                "Claude 3.5 Sonnet"
             ]
         },
         {
             name: "SILVER",
             tier: "silver" as const,
-            price: billingCycle === 'monthly' ? 999 : 799,
+            price: billingCycle === 'monthly' ? MONTHLY_PRICES.silver : Math.round(MONTHLY_PRICES.silver * 0.8),
             icon: Cpu,
             color: "from-gray-300 to-gray-500",
             features: [
                 "Everything in Bronze",
+                `e2-standard-4 (4 vCPU • 16 GB RAM)`,
+                `Max ${RESOURCE_POLICIES.silver.maxTrainingHours} Hours Training`,
+                "100 MB Dataset Limit",
+                `${RESOURCE_POLICIES.silver.maxEpochs} Epochs Max`,
+                `${RESOURCE_POLICIES.silver.maxHpoTrials} HPO Trials`,
                 "OpenAI GPT-4o Mini",
-                "Gemini 1.5 Pro",
-                `${RESOURCE_POLICIES.silver.maxTrainingHours} Hours Max Training`,
-                `${RESOURCE_POLICIES.silver.maxEpochs} Epochs / ${RESOURCE_POLICIES.silver.maxTrees} Trees Limit`,
-                `${RESOURCE_POLICIES.silver.allowedMachineTypes[1] || 'e2-standard-4'} Machine`,
-                `${RESOURCE_POLICIES.silver.maxHpoTrials} HPO Trials`
+                "Gemini 1.5 Pro"
             ],
             missing: [
-                "Claude 3.5 Sonnet",
-                "Priority Support",
-                "50+ HPO Trials"
+                "GPU Training (RunPod)",
+                "500 MB Datasets",
+                "Claude 3.5 Sonnet"
             ]
         },
         {
             name: "GOLD",
             tier: "gold" as const,
-            price: billingCycle === 'monthly' ? 2999 : 2399,
+            price: billingCycle === 'monthly' ? MONTHLY_PRICES.gold : Math.round(MONTHLY_PRICES.gold * 0.8),
             icon: CreditCard,
             color: "from-yellow-400 to-yellow-600",
             features: [
                 "Everything in Silver",
+                `e2-highmem-8 (8 vCPU • 64 GB RAM)`,
+                "🚀 RunPod GPU (RTX 4000 Ada)",
+                "20 GB VRAM for Deep Learning",
+                `Max ${RESOURCE_POLICIES.gold.maxTrainingHours} Hours Training`,
+                "500 MB Dataset Limit",
+                "Image/CNN Training Support",
+                `${RESOURCE_POLICIES.gold.maxHpoTrials}+ HPO Trials`,
                 "Claude 3.5 Sonnet (Best for Code)",
                 "GPT-4o (Full)",
-                "Gemini 1.5 Pro (2M Context)",
-                `${RESOURCE_POLICIES.gold.maxTrainingHours} Hours Max Training`,
-                `${RESOURCE_POLICIES.gold.maxEpochs} Epochs / ${RESOURCE_POLICIES.gold.maxTrees} Trees Limit`,
-                `${RESOURCE_POLICIES.gold.allowedMachineTypes.slice(-1)[0] || 'e2-standard-8'} Machine`,
-                `${RESOURCE_POLICIES.gold.maxHpoTrials} HPO Trials`,
                 "Priority Support"
             ],
             missing: []

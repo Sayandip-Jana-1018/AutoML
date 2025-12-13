@@ -1,20 +1,29 @@
 import { NextResponse } from 'next/server';
-import { deployModelToVertex } from '@/lib/gcp';
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 
-// Force Node.js runtime for Cloud SDK
+// Force Node.js runtime
 export const runtime = 'nodejs';
 
+/**
+ * POST /api/studio/deploy
+ * Deploy a trained model - marks it as deployed in the registry
+ */
 export async function POST(req: Request) {
     try {
-        const { projectId, jobId } = await req.json();
+        const { projectId, jobId, userId } = await req.json();
 
         if (!projectId || !jobId) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
-        // Fetch job details to get the model output path
+        // Ensure database is initialized
+        if (!adminDb) {
+            console.error('[Deploy API] adminDb is not initialized');
+            return NextResponse.json({ error: "Database not initialized" }, { status: 500 });
+        }
+
+        // Fetch job details
         const jobDoc = await adminDb
             .collection('projects').doc(projectId)
             .collection('jobs').doc(jobId)
@@ -25,48 +34,104 @@ export async function POST(req: Request) {
         }
 
         const jobData = jobDoc.data();
+        console.log(`[Deploy API] Deploying Job ${jobId} for Project ${projectId}`);
 
-        // Use stored modelOutputPath if available, otherwise fall back to convention
-        const trainingBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'mlforge-fluent-cable-480715-c8';
-        const modelArtifactUri = jobData?.modelOutputPath ||
-            `gs://${trainingBucket}/projects/${projectId}/jobs/${jobId}/model/`;
+        // Get project info for owner data
+        const projectDoc = await adminDb.collection('projects').doc(projectId).get();
+        const projectData = projectDoc.data();
 
-        console.log(`[Deploy API] Starting deployment for Job ${jobId}`);
-        console.log(`[Deploy API] Model artifact URI: ${modelArtifactUri}`);
+        // Get user info for owner name/photo
+        let ownerName = null;
+        let ownerPhotoURL = null;
+        const ownerId = userId || jobData?.userId || projectData?.owner_email;
 
-        // Trigger Long-Running Deployment
-        // In a real async system, we would return "Deploying..." and let a worker handle this.
-        // Since Vercel has timeouts, we might hit limits here if we wait for full deployment (10-15 mins).
-        // OPTIMIZATION: We will initiate it but NOT wait for the final LRO promise in the response,
-        // letting the logs/backend handle it, OR we accept that this request might timeout on Vercel.
-        // Re-architecture for time: We will return "Initiated" and run the promise in background (if runtime allows).
-        // WARNING: Vercel Serverless functions freeze after response. 
-        // CORRECT PATH: Task Queues. 
-        // SHORTCUT: We will await the *Initial* creation requests (Upload/Create Endpoint) but maybe not full traffic split.
-        // Actually, let's keep it simple: try to await. If timeout, UI handles error.
+        if (ownerId) {
+            try {
+                const userDoc = await adminDb.collection('users').doc(ownerId).get();
+                if (userDoc.exists) {
+                    const userData = userDoc.data();
+                    ownerName = userData?.displayName || userData?.name || userData?.email?.split('@')[0];
+                    ownerPhotoURL = userData?.photoURL || userData?.avatar;
+                }
+            } catch (e) {
+                console.log('[Deploy API] Could not fetch owner data:', e);
+            }
+        }
 
-        const deploymentResult = await deployModelToVertex(
-            projectId,
-            `project-${projectId}-model`,
-            modelArtifactUri
-        );
+        // Check if model already exists for this project
+        const existingModels = await adminDb
+            .collection('models')
+            .where('projectId', '==', projectId)
+            .limit(1)
+            .get();
 
-        // Save Endpoint info to Firestore
+        let modelId: string;
+
+        if (!existingModels.empty) {
+            // Update existing model
+            modelId = existingModels.docs[0].id;
+            await adminDb.collection('models').doc(modelId).update({
+                status: 'deployed',
+                visibility: 'public',
+                ownerName: ownerName || existingModels.docs[0].data().ownerName,
+                ownerPhotoURL: ownerPhotoURL || existingModels.docs[0].data().ownerPhotoURL,
+                deployedAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp()
+            });
+            console.log(`[Deploy API] Updated existing model ${modelId}`);
+        } else {
+            // Create new model entry
+            const modelRef = await adminDb.collection('models').add({
+                name: projectData?.name || `Project ${projectId} Model`,
+                description: `Trained model for ${projectData?.name || projectId}`,
+                taskType: jobData?.taskType || 'classification',
+                projectId,
+                ownerId: userId || ownerId,
+                ownerEmail: projectData?.owner_email,
+                ownerName,
+                ownerPhotoURL,
+                version: 1,
+                metrics: jobData?.metrics || { accuracy: jobData?.bestMetricValue },
+                gcsPath: jobData?.modelOutputPath,
+                jobId,
+                status: 'deployed',
+                visibility: 'public',
+                uses: 0,
+                collaborators: [],
+                createdAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+                deployedAt: FieldValue.serverTimestamp()
+            });
+            modelId = modelRef.id;
+            console.log(`[Deploy API] Created new model ${modelId}`);
+        }
+
+        // Update job status
+        await adminDb
+            .collection('projects').doc(projectId)
+            .collection('jobs').doc(jobId)
+            .update({
+                status: 'deployed',
+                deployedAt: FieldValue.serverTimestamp(),
+                modelId
+            });
+
+        // Add deployment record
         await adminDb.collection('projects').doc(projectId).collection('deployments').add({
             jobId,
-            endpointName: deploymentResult.endpointName,
-            endpointUrl: deploymentResult.endpointUrl,
+            modelId,
             status: 'active',
             createdAt: FieldValue.serverTimestamp()
         });
 
         return NextResponse.json({
             status: 'deployed',
-            endpointUrl: deploymentResult.endpointUrl
+            modelId,
+            message: 'Model deployed successfully and published to marketplace'
         });
 
     } catch (error: any) {
-        console.error("Deployment Error:", error);
+        console.error("[Deploy API] Error:", error);
         return NextResponse.json({ error: error.message || "Failed to deploy model" }, { status: 500 });
     }
 }

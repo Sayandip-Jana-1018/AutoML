@@ -1,5 +1,5 @@
 /**
- * Adhyay ML Studio - Cloud Functions
+ * MLForge Studio - Cloud Functions
  *
  * Event-driven functions for automated dataset processing
  */
@@ -10,6 +10,15 @@ import * as logger from "firebase-functions/logger";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { profileDatasetFromGCS, DatasetSchema } from "./schema-profiler";
+
+// NOTE: Metrics sync functions require deployment to the GCP project that owns the bucket
+// Firebase Functions v2 cannot trigger on buckets from different projects
+// To enable: Deploy these functions separately to fluent-cable-480715-c8 project
+// For now, metrics are stored in GCS and can be pulled on-demand via API
+// export { onMetricsUploaded, onModelUploaded } from "./metrics-sync";
+
+// Scheduled metrics sync - runs every 5 minutes to sync metrics from GCS
+export { scheduledMetricsSync } from "./scheduled-sync";
 
 // Initialize Firebase Admin
 initializeApp();
@@ -23,13 +32,14 @@ setGlobalOptions({ maxInstances: 10, region: "us-central1" });
  * Triggered by OBJECT_FINALIZE on GCS bucket
  *
  * Expected path format: projects/{projectId}/datasets/{datasetId}/{filename}
- * Or: adhyay-datasets/{userId}/{projectId}/{filename}
+ * Or: mlforge-datasets/{userId}/{projectId}/{filename}
  */
 export const onDatasetUploaded = onObjectFinalized(
     {
-        bucket: "adhyay-ml-studio.appspot.com", // Replace with your bucket name
+        bucket: "automl-dc494.firebasestorage.app", // Firebase Storage bucket
         memory: "512MiB",
         timeoutSeconds: 120,
+        region: "us-central1",
     },
     async (event) => {
         const filePath = event.data.name;
@@ -178,9 +188,10 @@ export const onDatasetUploaded = onObjectFinalized(
  */
 export const onDatasetReUploaded = onObjectFinalized(
     {
-        bucket: "adhyay-ml-studio.appspot.com", // Replace with your bucket name
+        bucket: "automl-dc494.firebasestorage.app", // Firebase Storage bucket
         memory: "512MiB",
         timeoutSeconds: 120,
+        region: "us-central1",
     },
     async (event) => {
         // Check if this is an overwrite (metageneration > 1)

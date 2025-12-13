@@ -5,6 +5,7 @@ import { motion } from "framer-motion"
 import { Lock, Shield, Key, Eye, EyeOff, Loader2 } from "lucide-react"
 import { sendPasswordResetEmail } from "firebase/auth"
 import { auth } from "@/lib/firebase"
+import { useThemeColor } from "@/context/theme-context"
 
 interface SecuritySettingsProps {
     userEmail: string
@@ -14,6 +15,7 @@ export function SecuritySettings({ userEmail }: SecuritySettingsProps) {
     const [sending, setSending] = useState(false)
     const [sent, setSent] = useState(false)
     const [error, setError] = useState("")
+    const { themeColor } = useThemeColor()
 
     const handlePasswordReset = async () => {
         if (!userEmail) return
@@ -35,17 +37,17 @@ export function SecuritySettings({ userEmail }: SecuritySettingsProps) {
     return (
         <motion.div
             key="security"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-6 max-w-2xl mx-auto"
         >
-            <div className="flex items-center gap-3 mb-6">
-                <div className="p-3 bg-purple-500/20 rounded-2xl">
-                    <Shield className="w-6 h-6 text-purple-400" />
+            <div className="flex flex-col items-center text-center gap-3 mb-8">
+                <div className="p-4 rounded-2xl" style={{ backgroundColor: `${themeColor}20` }}>
+                    <Shield className="w-8 h-8" style={{ color: themeColor }} />
                 </div>
                 <div>
-                    <h2 className="text-xl font-bold text-black dark:text-white">Security Settings</h2>
+                    <h2 className="text-2xl font-bold" style={{ color: themeColor }}>Security Settings</h2>
                     <p className="text-sm text-black/60 dark:text-white/50">Manage your account security</p>
                 </div>
             </div>

@@ -1,61 +1,72 @@
-"use client";
+'use client';
 
 import { useEffect, useCallback } from 'react';
+
+type ShortcutHandler = () => void;
 
 interface ShortcutConfig {
     key: string;
     ctrl?: boolean;
     shift?: boolean;
     alt?: boolean;
-    handler: () => void;
-    description: string;
+    handler: ShortcutHandler;
+    description?: string;
+    enabled?: boolean;
 }
 
 interface UseKeyboardShortcutsOptions {
-    enabled?: boolean;
     shortcuts: ShortcutConfig[];
+    enabled?: boolean;
 }
 
 /**
- * Hook for registering keyboard shortcuts
+ * useKeyboardShortcuts - A hook for handling keyboard shortcuts
+ * 
+ * Supports both Cmd (Mac) and Ctrl (Windows) via the `ctrl` flag.
  * 
  * @example
  * useKeyboardShortcuts({
  *   shortcuts: [
- *     { key: 'Enter', ctrl: true, handler: startTraining, description: 'Start training' },
- *     { key: 'd', ctrl: true, shift: true, handler: toggleDiff, description: 'Toggle diff' },
- *     { key: 'Escape', handler: closeOverlay, description: 'Close overlay' }
+ *     { key: 's', ctrl: true, handler: handleSave, description: 'Save script' },
+ *     { key: 'Enter', ctrl: true, handler: handleTrain, description: 'Start training' },
+ *     { key: 'Escape', handler: closePanel, description: 'Close panel' }
  *   ]
  * });
  */
-export function useKeyboardShortcuts({ enabled = true, shortcuts }: UseKeyboardShortcutsOptions) {
+export function useKeyboardShortcuts({ shortcuts, enabled = true }: UseKeyboardShortcutsOptions) {
     const handleKeyDown = useCallback((event: KeyboardEvent) => {
         if (!enabled) return;
 
-        // Don't trigger shortcuts when typing in inputs
+        // Skip if user is typing in an input/textarea (unless it's Escape)
         const target = event.target as HTMLElement;
-        if (
-            target.tagName === 'INPUT' ||
+        const isInputField = target.tagName === 'INPUT' ||
             target.tagName === 'TEXTAREA' ||
-            target.isContentEditable
-        ) {
-            // Allow Escape to work in inputs
-            if (event.key !== 'Escape') return;
+            target.isContentEditable;
+
+        if (isInputField && event.key !== 'Escape') {
+            return;
         }
 
         for (const shortcut of shortcuts) {
+            if (shortcut.enabled === false) continue;
+
             const keyMatch = event.key.toLowerCase() === shortcut.key.toLowerCase();
-            const ctrlMatch = shortcut.ctrl ? (event.ctrlKey || event.metaKey) : !event.ctrlKey;
+
+            // Handle Cmd (Mac) / Ctrl (Windows) - check both metaKey and ctrlKey
+            const ctrlOrCmdPressed = event.metaKey || event.ctrlKey;
+            const ctrlMatch = shortcut.ctrl ? ctrlOrCmdPressed : !ctrlOrCmdPressed;
+
             const shiftMatch = shortcut.shift ? event.shiftKey : !event.shiftKey;
             const altMatch = shortcut.alt ? event.altKey : !event.altKey;
 
             if (keyMatch && ctrlMatch && shiftMatch && altMatch) {
                 event.preventDefault();
+                event.stopPropagation();
                 shortcut.handler();
                 return;
             }
         }
-    }, [enabled, shortcuts]);
+    }, [shortcuts, enabled]);
 
     useEffect(() => {
         window.addEventListener('keydown', handleKeyDown);
@@ -64,34 +75,47 @@ export function useKeyboardShortcuts({ enabled = true, shortcuts }: UseKeyboardS
 }
 
 /**
- * Get formatted shortcut string for display
+ * Get display string for a shortcut (e.g., "⌘S" on Mac, "Ctrl+S" on Windows)
  */
-export function formatShortcut(shortcut: ShortcutConfig): string {
+export function getShortcutDisplay(config: Pick<ShortcutConfig, 'key' | 'ctrl' | 'shift' | 'alt'>): string {
+    const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
     const parts: string[] = [];
 
-    if (shortcut.ctrl) parts.push('Ctrl');
-    if (shortcut.shift) parts.push('Shift');
-    if (shortcut.alt) parts.push('Alt');
+    if (config.ctrl) {
+        parts.push(isMac ? '⌘' : 'Ctrl');
+    }
+    if (config.alt) {
+        parts.push(isMac ? '⌥' : 'Alt');
+    }
+    if (config.shift) {
+        parts.push(isMac ? '⇧' : 'Shift');
+    }
 
-    // Capitalize key
-    const key = shortcut.key === ' ' ? 'Space' :
-        shortcut.key.length === 1 ? shortcut.key.toUpperCase() :
-            shortcut.key;
-    parts.push(key);
+    // Format special keys
+    let keyDisplay = config.key;
+    if (keyDisplay === 'Enter') keyDisplay = '↵';
+    if (keyDisplay === 'Escape') keyDisplay = 'Esc';
+    if (keyDisplay === 'ArrowUp') keyDisplay = '↑';
+    if (keyDisplay === 'ArrowDown') keyDisplay = '↓';
+    if (keyDisplay === 'ArrowLeft') keyDisplay = '←';
+    if (keyDisplay === 'ArrowRight') keyDisplay = '→';
 
-    return parts.join('+');
+    parts.push(keyDisplay.toUpperCase());
+
+    return isMac ? parts.join('') : parts.join('+');
 }
 
 /**
- * Default studio shortcuts
+ * Common shortcut presets for MLForge
  */
-export const STUDIO_SHORTCUTS = {
-    START_TRAINING: { key: 'Enter', ctrl: true, description: 'Start training' },
-    TOGGLE_DIFF: { key: 'd', ctrl: true, shift: true, description: 'Toggle diff viewer' },
-    CLOSE_OVERLAY: { key: 'Escape', description: 'Close overlay/modal' },
-    SAVE_DRAFT: { key: 's', ctrl: true, description: 'Save draft' },
-    OPEN_TEMPLATES: { key: 't', ctrl: true, shift: true, description: 'Open templates' },
-    FOCUS_CHAT: { key: '/', ctrl: true, description: 'Focus chat input' }
-};
+export const COMMON_SHORTCUTS = {
+    save: { key: 's', ctrl: true, description: 'Save script' },
+    train: { key: 'Enter', ctrl: true, description: 'Start training' },
+    closePanel: { key: 'Escape', description: 'Close panel' },
+    undo: { key: 'z', ctrl: true, description: 'Undo' },
+    redo: { key: 'z', ctrl: true, shift: true, description: 'Redo' },
+    find: { key: 'f', ctrl: true, description: 'Find in code' },
+    newVersion: { key: 'n', ctrl: true, shift: true, description: 'New version' },
+} as const;
 
 export default useKeyboardShortcuts;

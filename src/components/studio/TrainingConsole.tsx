@@ -31,7 +31,7 @@ interface TrainingConsoleProps {
     maxDurationHours: number;
     estimatedCost: number;
     dashboardUrl?: string;
-    vertexJobId?: string;
+    backend?: 'gcp-compute-engine' | 'runpod';
     pendingDiff?: {
         original: string;
         modified: string;
@@ -52,7 +52,7 @@ export function TrainingConsole({
     maxDurationHours,
     estimatedCost,
     dashboardUrl,
-    vertexJobId,
+    backend,
     pendingDiff,
     onApproveAndRun,
     onCancel,
@@ -104,7 +104,7 @@ export function TrainingConsole({
                     <div>
                         <h3 className="font-semibold text-white">Training Console</h3>
                         <p className="text-xs text-gray-400">
-                            {vertexJobId ? `Job: ${vertexJobId}` : 'No active job'}
+                            {jobId ? `Job: ${jobId.slice(0, 8)}...` : 'No active job'}
                         </p>
                     </div>
                 </div>
@@ -124,7 +124,7 @@ export function TrainingConsole({
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 transition-colors text-sm"
                         >
                             <ExternalLink className="w-3.5 h-3.5" />
-                            Vertex Dashboard
+                            {backend === 'runpod' ? 'RunPod Console' : 'Cloud Console'}
                         </a>
                     )}
                 </div>
@@ -284,12 +284,12 @@ export function TrainingConsole({
                                         <div
                                             key={i}
                                             className={`py-0.5 ${log.includes('Error') || log.includes('error')
-                                                    ? 'text-red-400'
-                                                    : log.includes('Warning') || log.includes('warning')
-                                                        ? 'text-yellow-400'
-                                                        : log.includes('Complete') || log.includes('Success')
-                                                            ? 'text-green-400'
-                                                            : 'text-gray-400'
+                                                ? 'text-red-400'
+                                                : log.includes('Warning') || log.includes('warning')
+                                                    ? 'text-yellow-400'
+                                                    : log.includes('Complete') || log.includes('Success')
+                                                        ? 'text-green-400'
+                                                        : 'text-gray-400'
                                                 }`}
                                         >
                                             <span className="text-gray-600 mr-2">[{String(i + 1).padStart(3, '0')}]</span>

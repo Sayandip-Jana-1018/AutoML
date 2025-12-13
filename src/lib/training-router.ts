@@ -1,0 +1,206 @@
+/**
+ * Training Router
+ * 
+ * Routes training jobs to the appropriate backend based on:
+ * - User subscription tier
+ * - Dataset type (tabular vs image)
+ * - User preference (CPU vs GPU)
+ */
+
+import { SubscriptionTier } from './resource-policy';
+import { COMPUTE_ENGINE_CONFIGS } from './compute-training';
+
+export type DatasetType = 'tabular' | 'image' | 'unknown';
+export type TrainingBackend = 'gcp-compute-engine' | 'runpod';
+
+export interface TrainingRouteDecision {
+    backend: TrainingBackend;
+    machineType: string;
+    specs: string;
+    estimatedCostPerHour: number;
+    maxDurationHours: number;
+    gpuEnabled: boolean;
+    gpuType?: string;
+    reason: string;
+}
+
+/**
+ * Detect dataset type from file extension or content
+ */
+export function detectDatasetType(
+    filename: string,
+    mimeType?: string
+): DatasetType {
+    const ext = filename.toLowerCase().split('.').pop() || '';
+
+    // Image datasets
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff'];
+    const imageArchivePatterns = ['images', 'img', 'photos', 'pics'];
+
+    if (imageExtensions.includes(ext)) {
+        return 'image';
+    }
+
+    // Check for image archives
+    if (ext === 'zip' || ext === 'tar' || ext === 'gz') {
+        const nameLower = filename.toLowerCase();
+        if (imageArchivePatterns.some(p => nameLower.includes(p))) {
+            return 'image';
+        }
+    }
+
+    // Tabular datasets
+    const tabularExtensions = ['csv', 'xlsx', 'xls', 'parquet', 'json', 'tsv'];
+    if (tabularExtensions.includes(ext)) {
+        return 'tabular';
+    }
+
+    // Check mime type
+    if (mimeType) {
+        if (mimeType.startsWith('image/')) return 'image';
+        if (mimeType.includes('csv') || mimeType.includes('spreadsheet')) return 'tabular';
+    }
+
+    return 'unknown';
+}
+
+/**
+ * Detect if task type requires GPU
+ */
+export function requiresGPU(taskType: string): boolean {
+    const gpuTasks = [
+        'cnn', 'convolutional',
+        'deep_learning', 'deeplearning',
+        'neural_network', 'neuralnetwork',
+        'image_classification', 'imageclassification',
+        'object_detection', 'objectdetection',
+        'semantic_segmentation',
+        'resnet', 'vgg', 'efficientnet', 'mobilenet',
+        'transformer', 'bert', 'gpt'
+    ];
+
+    return gpuTasks.some(t => taskType.toLowerCase().includes(t));
+}
+
+/**
+ * Route training to appropriate backend
+ */
+export function routeTraining(params: {
+    tier: SubscriptionTier;
+    datasetType: DatasetType;
+    taskType: string;
+    datasetSizeMB: number;
+    userPreference?: 'cpu' | 'gpu';
+}): TrainingRouteDecision {
+    const { tier, datasetType, taskType, datasetSizeMB, userPreference } = params;
+
+    // Get base config for tier
+    const ceConfig = COMPUTE_ENGINE_CONFIGS[tier];
+
+    // Check if GPU is needed
+    const needsGPU =
+        userPreference === 'gpu' ||
+        datasetType === 'image' ||
+        requiresGPU(taskType);
+
+    // Only Gold tier has GPU access
+    const canUseGPU = tier === 'gold' && needsGPU;
+
+    // Route to RunPod for GPU workloads
+    if (canUseGPU) {
+        return {
+            backend: 'runpod',
+            machineType: 'RTX 4000 Ada',
+            specs: '8 vCPU, 50 GB RAM, 20 GB VRAM',
+            estimatedCostPerHour: 0.26,
+            maxDurationHours: 8,
+            gpuEnabled: true,
+            gpuType: 'RTX 4000 Ada',
+            reason: 'GPU training for image/deep learning workload (Gold tier)'
+        };
+    }
+
+    // Otherwise use Compute Engine
+    return {
+        backend: 'gcp-compute-engine',
+        machineType: ceConfig.machineType,
+        specs: ceConfig.specs,
+        estimatedCostPerHour: ceConfig.costPerHour,
+        maxDurationHours: ceConfig.maxHours,
+        gpuEnabled: false,
+        reason: tier === 'gold' && datasetType === 'image'
+            ? 'CPU training (upgrade to Gold for GPU)'
+            : `Standard CPU training (${tier} tier)`
+    };
+}
+
+/**
+ * Validate dataset size against tier limits
+ */
+export function validateDatasetSize(
+    tier: SubscriptionTier,
+    datasetSizeMB: number
+): { valid: boolean; maxAllowed: number; message?: string } {
+    const config = COMPUTE_ENGINE_CONFIGS[tier];
+
+    if (datasetSizeMB > config.maxDatasetMB) {
+        return {
+            valid: false,
+            maxAllowed: config.maxDatasetMB,
+            message: `Dataset size (${datasetSizeMB} MB) exceeds ${tier} tier limit (${config.maxDatasetMB} MB). Please upgrade your plan or reduce dataset size.`
+        };
+    }
+
+    return { valid: true, maxAllowed: config.maxDatasetMB };
+}
+
+/**
+ * Estimate training time based on dataset and config
+ */
+export function estimateTrainingTime(params: {
+    datasetSizeMB: number;
+    datasetType: DatasetType;
+    backend: TrainingBackend;
+    epochs?: number;
+}): { minMinutes: number; maxMinutes: number } {
+    const { datasetSizeMB, datasetType, backend, epochs = 50 } = params;
+
+    // Base time: setup + data loading + teardown
+    const setupTime = 3; // minutes
+
+    if (datasetType === 'image') {
+        // Image training is more complex
+        const perEpochTime = (datasetSizeMB / 50) * (backend === 'runpod' ? 0.5 : 2); // GPU is 4x faster
+        const trainingTime = perEpochTime * Math.min(epochs, 50);
+        return {
+            minMinutes: Math.ceil(setupTime + trainingTime * 0.7),
+            maxMinutes: Math.ceil(setupTime + trainingTime * 1.5)
+        };
+    } else {
+        // Tabular training
+        const trainingTime = (datasetSizeMB / 10) + (epochs / 20);
+        return {
+            minMinutes: Math.ceil(setupTime + trainingTime * 0.5),
+            maxMinutes: Math.ceil(setupTime + trainingTime * 2)
+        };
+    }
+}
+
+/**
+ * Get human-readable backend description
+ */
+export function getBackendDescription(backend: TrainingBackend, gpuType?: string): string {
+    if (backend === 'runpod') {
+        return `RunPod GPU Cloud (${gpuType || 'RTX 4000 Ada'})`;
+    }
+    return 'Google Cloud Compute Engine';
+}
+
+export default {
+    detectDatasetType,
+    requiresGPU,
+    routeTraining,
+    validateDatasetSize,
+    estimateTrainingTime,
+    getBackendDescription
+};

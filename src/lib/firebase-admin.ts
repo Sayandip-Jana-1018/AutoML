@@ -48,3 +48,9 @@ if (!admin.apps.length) {
 
 export const adminDb = admin.firestore();
 export const adminAuth = admin.auth();
+
+// Storage for accessing GCS bucket
+const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'mlforge-fluent-cable-480715-c8';
+export const adminStorage = admin.storage();
+export const getStorageBucket = () => adminStorage.bucket(storageBucket);
+

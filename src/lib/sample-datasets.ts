@@ -142,7 +142,7 @@ export async function createPlaygroundProject(
             }),
             rowCount: sample.rows
         },
-        gcsUri: `gs://${process.env.GCS_BUCKET || 'adhyay-datasets'}/${sample.gcsPath}`,
+        gcsUri: `gs://${process.env.GCS_BUCKET || 'mlforge-datasets'}/${sample.gcsPath}`,
         visibility: 'private',
         collaborators: [],
         isSample: true,
@@ -153,7 +153,7 @@ export async function createPlaygroundProject(
     // Create initial version
     await datasetRef.collection('versions').add({
         versionNumber: 1,
-        gcsUri: `gs://${process.env.GCS_BUCKET || 'adhyay-datasets'}/${sample.gcsPath}`,
+        gcsUri: `gs://${process.env.GCS_BUCKET || 'mlforge-datasets'}/${sample.gcsPath}`,
         status: 'ready',
         createdAt: FieldValue.serverTimestamp()
     });

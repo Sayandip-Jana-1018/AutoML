@@ -2,25 +2,31 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion';
-import { X, CheckCircle2, AlertCircle, FileCode, Cloud, Cpu, Sparkles, Zap, Brain, Rocket } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, FileCode, Cloud, Cpu, Sparkles, Zap, Brain, Rocket, RefreshCw, Loader2 } from 'lucide-react';
 import { useThemeColor } from '@/context/theme-context';
 
-export type TrainingStep = 'preparing' | 'uploading' | 'submitting' | 'training' | 'completed' | 'failed';
+export type TrainingStep = 'preparing' | 'uploading' | 'submitting' | 'installing' | 'training' | 'validating' | 'deploying' | 'completed' | 'failed';
 
 interface TrainingProgressOverlayProps {
     isOpen: boolean;
     onClose: () => void;
     currentStep: TrainingStep;
     error?: string | null;
+    errorCode?: string | null; // 'RESOURCE_EXHAUSTED' | 'QUOTA_EXCEEDED' etc.
     logs?: string[];
+    jobId?: string | null;
+    onRetry?: () => Promise<void> | void;
 }
 
 const TRAINING_STEPS = [
-    { id: 'preparing', label: 'Preparing Script', description: 'Generating optimized training code...', icon: FileCode },
-    { id: 'uploading', label: 'Uploading to Cloud', description: 'Uploading script to Google Cloud Storage...', icon: Cloud },
-    { id: 'submitting', label: 'Submitting Job', description: 'Submitting training job to Vertex AI...', icon: Cpu },
-    { id: 'training', label: 'Training Model', description: 'Model is training on cloud infrastructure...', icon: Sparkles },
-    { id: 'completed', label: 'Training Complete', description: 'Your model has been trained successfully!', icon: CheckCircle2 },
+    { id: 'preparing', label: 'Prepare', description: 'Generating optimized training code...', icon: FileCode },
+    { id: 'uploading', label: 'Upload', description: 'Uploading script to Cloud Storage...', icon: Cloud },
+    { id: 'submitting', label: 'Submit', description: 'Submitting job to Compute Engine...', icon: Cpu },
+    { id: 'installing', label: 'Install', description: 'Installing dependencies on VM...', icon: Zap },
+    { id: 'training', label: 'Train', description: 'Model is training...', icon: Sparkles },
+    { id: 'validating', label: 'Validate', description: 'Validating model metrics...', icon: CheckCircle2 },
+    { id: 'deploying', label: 'Deploy', description: 'Deploying to marketplace...', icon: Rocket },
+    { id: 'completed', label: 'Done', description: 'Your model is ready!', icon: CheckCircle2 },
 ];
 
 const getStepIndex = (step: TrainingStep): number => {
@@ -287,8 +293,13 @@ export const TrainingProgressOverlay = ({
     onClose,
     currentStep,
     error,
-    logs = []
+    errorCode,
+    logs = [],
+    jobId,
+    onRetry
 }: TrainingProgressOverlayProps) => {
+    const [isRetrying, setIsRetrying] = React.useState(false);
+    const [isCollapsed, setIsCollapsed] = React.useState(false);
     const { themeColor } = useThemeColor();
     const [particles, setParticles] = useState<{ id: number; x: number; y: number; size: number; delay: number }[]>([]);
     const currentStepIndex = getStepIndex(currentStep);
@@ -318,356 +329,531 @@ export const TrainingProgressOverlay = ({
     return (
         <AnimatePresence>
             {isOpen && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden"
-                >
-                    {/* Animated gradient background */}
-                    <motion.div
-                        className="absolute inset-0"
-                        style={{
-                            background: `radial-gradient(ellipse at 50% 50%, ${themeColor}10 0%, transparent 50%), 
+                <>
+                    {/* Collapsed Mini Widget - Draggable */}
+                    {isCollapsed ? (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.8, y: 20 }}
+                            className="fixed bottom-8 right-8 z-[60] cursor-grab active:cursor-grabbing select-none"
+                            drag
+                            dragConstraints={{ left: -window.innerWidth + 400, right: 0, top: -window.innerHeight + 300, bottom: 0 }}
+                            dragElastic={0.15}
+                            dragTransition={{ bounceStiffness: 300, bounceDamping: 20 }}
+                            whileDrag={{ scale: 1.05, cursor: 'grabbing' }}
+                        >
+                            {/* Glow effect behind capsule */}
+                            <motion.div
+                                className="absolute inset-0 rounded-3xl blur-xl"
+                                style={{ background: `${themeColor}40` }}
+                                animate={{ opacity: [0.4, 0.7, 0.4] }}
+                                transition={{ duration: 2, repeat: Infinity }}
+                            />
+
+                            <div
+                                className="relative flex items-center gap-4 px-5 py-4 rounded-3xl backdrop-blur-2xl border"
+                                style={{
+                                    background: `linear-gradient(135deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 100%)`,
+                                    borderColor: `${themeColor}60`,
+                                    boxShadow: `0 20px 60px ${themeColor}40, 0 0 0 1px ${themeColor}30 inset, 0 0 80px ${themeColor}20`
+                                }}
+                            >
+                                {/* Animated icon container */}
+                                <div className="relative">
+                                    {/* Pulse ring */}
+                                    <motion.div
+                                        className="absolute inset-0 rounded-full"
+                                        style={{ border: `2px solid ${themeColor}40` }}
+                                        animate={currentStep === 'failed' ? {} : { scale: [1, 1.5, 1], opacity: [0.8, 0, 0.8] }}
+                                        transition={{ duration: 2, repeat: Infinity }}
+                                    />
+
+                                    {/* Spinning icon */}
+                                    <motion.div
+                                        animate={{ rotate: currentStep === 'failed' ? 0 : 360 }}
+                                        transition={{ duration: 3, repeat: currentStep === 'failed' ? 0 : Infinity, ease: "linear" }}
+                                        className="flex items-center justify-center w-10 h-10 rounded-full"
+                                        style={{ background: `${themeColor}20` }}
+                                    >
+                                        {currentStep === 'failed' ? (
+                                            <AlertCircle className="w-6 h-6 text-red-400" />
+                                        ) : (
+                                            React.createElement(TRAINING_STEPS[currentStepIndex]?.icon || Brain, {
+                                                className: "w-6 h-6",
+                                                style: { color: themeColor }
+                                            })
+                                        )}
+                                    </motion.div>
+                                </div>
+
+                                {/* Status text */}
+                                <div className="flex flex-col min-w-[120px]">
+                                    <span className="text-sm font-bold text-white tracking-wide">
+                                        {currentStep === 'failed' ? 'Training Failed' : TRAINING_STEPS[currentStepIndex]?.label || 'Processing...'}
+                                    </span>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        <span className="text-xs text-white/50">
+                                            Step {currentStepIndex + 1}/{TRAINING_STEPS.length}
+                                        </span>
+                                        <div
+                                            className="w-1.5 h-1.5 rounded-full animate-pulse"
+                                            style={{ background: currentStep === 'failed' ? '#ef4444' : themeColor }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Progress ring - larger and more prominent */}
+                                <div className="relative w-12 h-12 flex-shrink-0">
+                                    <svg className="w-12 h-12 -rotate-90">
+                                        <circle
+                                            cx="24"
+                                            cy="24"
+                                            r="20"
+                                            stroke="rgba(255,255,255,0.1)"
+                                            strokeWidth="3"
+                                            fill="none"
+                                        />
+                                        <motion.circle
+                                            cx="24"
+                                            cy="24"
+                                            r="20"
+                                            stroke={currentStep === 'failed' ? '#ef4444' : themeColor}
+                                            strokeWidth="3"
+                                            fill="none"
+                                            strokeLinecap="round"
+                                            initial={{ pathLength: 0 }}
+                                            animate={{ pathLength: progress / 100 }}
+                                            transition={{ duration: 0.5, ease: "easeOut" }}
+                                        />
+                                    </svg>
+                                    <span
+                                        className="absolute inset-0 flex items-center justify-center text-xs font-bold"
+                                        style={{ color: currentStep === 'failed' ? '#ef4444' : themeColor }}
+                                    >
+                                        {Math.round(progress)}%
+                                    </span>
+                                </div>
+
+                                {/* Expand Arrow Button - more prominent */}
+                                <motion.button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsCollapsed(false);
+                                    }}
+                                    className="flex-shrink-0 p-2.5 rounded-xl hover:bg-white/10 transition-all cursor-pointer"
+                                    style={{ border: `1px solid ${themeColor}30` }}
+                                    title="Expand training details"
+                                    whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.15)' }}
+                                    whileTap={{ scale: 0.95 }}
+                                >
+                                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <path d="M5 15l7-7 7 7" />
+                                    </svg>
+                                </motion.button>
+                            </div>
+                        </motion.div>
+                    ) : (
+                        /* Full Screen View */
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.5 }}
+                            className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/70 backdrop-blur-sm"
+                        >
+                            {/* Animated gradient background - pointer-events-none to allow button clicks */}
+                            <motion.div
+                                className="absolute inset-0 pointer-events-none"
+                                style={{
+                                    background: `radial-gradient(ellipse at 50% 50%, ${themeColor}10 0%, transparent 50%), 
                                          radial-gradient(ellipse at 20% 80%, ${themeColor}08 0%, transparent 40%),
                                          radial-gradient(ellipse at 80% 20%, ${themeColor}08 0%, transparent 40%),
                                          linear-gradient(180deg, #000000 0%, #0a0a0a 100%)`,
-                        }}
-                        animate={{
-                            background: [
-                                `radial-gradient(ellipse at 50% 50%, ${themeColor}10 0%, transparent 50%), 
+                                }}
+                                animate={{
+                                    background: [
+                                        `radial-gradient(ellipse at 50% 50%, ${themeColor}10 0%, transparent 50%), 
                                  radial-gradient(ellipse at 20% 80%, ${themeColor}08 0%, transparent 40%),
                                  radial-gradient(ellipse at 80% 20%, ${themeColor}08 0%, transparent 40%),
                                  linear-gradient(180deg, #000000 0%, #0a0a0a 100%)`,
-                                `radial-gradient(ellipse at 60% 40%, ${themeColor}10 0%, transparent 50%), 
+                                        `radial-gradient(ellipse at 60% 40%, ${themeColor}10 0%, transparent 50%), 
                                  radial-gradient(ellipse at 30% 70%, ${themeColor}08 0%, transparent 40%),
                                  radial-gradient(ellipse at 70% 30%, ${themeColor}08 0%, transparent 40%),
                                  linear-gradient(180deg, #000000 0%, #0a0a0a 100%)`,
-                            ]
-                        }}
-                        transition={{ duration: 10, repeat: Infinity, repeatType: "reverse" }}
-                    />
+                                    ]
+                                }}
+                                transition={{ duration: 10, repeat: Infinity, repeatType: "reverse" }}
+                            />
 
-                    {/* Hex Grid */}
-                    <HexGrid themeColor={themeColor} />
+                            {/* Decorative elements container - no pointer events */}
+                            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                                {/* Hex Grid */}
+                                <HexGrid themeColor={themeColor} />
 
-                    {/* Pulsing Rings */}
-                    <PulsingRings themeColor={themeColor} />
+                                {/* Floating Orbs */}
+                                {orbs.map((orb, i) => (
+                                    <FloatingOrb key={i} themeColor={themeColor} {...orb} />
+                                ))}
 
-                    {/* Floating Orbs */}
-                    {orbs.map((orb, i) => (
-                        <FloatingOrb key={i} themeColor={themeColor} {...orb} />
-                    ))}
-
-                    {/* Floating Particles */}
-                    {particles.map((particle) => (
-                        <motion.div
-                            key={particle.id}
-                            className="absolute rounded-full"
-                            style={{
-                                left: `${particle.x}%`,
-                                top: `${particle.y}%`,
-                                width: particle.size,
-                                height: particle.size,
-                                backgroundColor: themeColor,
-                                boxShadow: `0 0 ${particle.size * 2}px ${themeColor}60`,
-                            }}
-                            animate={{
-                                y: [0, -50, 0],
-                                x: [0, Math.random() * 30 - 15, 0],
-                                opacity: [0.1, 0.6, 0.1],
-                                scale: [1, 1.5, 1]
-                            }}
-                            transition={{
-                                duration: 4 + particle.delay,
-                                repeat: Infinity,
-                                delay: particle.delay,
-                                ease: "easeInOut"
-                            }}
-                        />
-                    ))}
-
-                    {/* Main Content Container */}
-                    <motion.div
-                        initial={{ scale: 0.8, y: 50, opacity: 0 }}
-                        animate={{ scale: 1, y: 0, opacity: 1 }}
-                        exit={{ scale: 0.8, y: 50, opacity: 0 }}
-                        transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                        className="relative z-10 w-[600px] max-w-[95vw]"
-                    >
-                        {/* Close button - only show if failed */}
-                        {currentStep === 'failed' && (
-                            <motion.button
-                                initial={{ opacity: 0, scale: 0 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                onClick={onClose}
-                                className="absolute -top-14 right-0 p-3 rounded-full bg-white/5 hover:bg-white/15 text-white/60 hover:text-white transition-all border border-white/10 backdrop-blur-xl"
-                                whileHover={{ scale: 1.1, rotate: 90 }}
-                                whileTap={{ scale: 0.9 }}
-                            >
-                                <X className="w-5 h-5" />
-                            </motion.button>
-                        )}
-
-                        {/* Main Animated Loader */}
-                        <div className="flex justify-center mb-10">
-                            <MorphingSphere themeColor={themeColor} currentStep={currentStep} />
-                        </div>
-
-                        {/* Current Step Title with Typewriter */}
-                        <motion.div
-                            key={currentStep}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ type: "spring", stiffness: 200 }}
-                            className="text-center mb-6"
-                        >
-                            <h2 className="text-3xl font-bold text-white mb-3">
-                                <TypewriterText
-                                    text={currentStep === 'failed'
-                                        ? 'Training Failed'
-                                        : TRAINING_STEPS[currentStepIndex]?.label || 'Processing...'}
-                                />
-                            </h2>
-                            <motion.p
-                                className="text-white/50 text-sm max-w-md mx-auto"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ delay: 0.5 }}
-                            >
-                                {currentStep === 'failed'
-                                    ? error || 'An error occurred during training'
-                                    : TRAINING_STEPS[currentStepIndex]?.description}
-                            </motion.p>
-                        </motion.div>
-
-                        {/* Progress Wave */}
-                        <div className="mb-8 px-4">
-                            <ProgressWave progress={progress} themeColor={themeColor} />
-                            <div className="flex justify-between mt-2 text-xs text-white/30">
-                                <span>Step {currentStepIndex + 1} of {TRAINING_STEPS.length}</span>
-                                <span>{Math.round(progress)}%</span>
+                                {/* Floating Particles */}
+                                {particles.map((particle) => (
+                                    <motion.div
+                                        key={particle.id}
+                                        className="absolute rounded-full"
+                                        style={{
+                                            left: `${particle.x}%`,
+                                            top: `${particle.y}%`,
+                                            width: particle.size,
+                                            height: particle.size,
+                                            backgroundColor: themeColor,
+                                            boxShadow: `0 0 ${particle.size * 2}px ${themeColor}60`,
+                                        }}
+                                        animate={{
+                                            y: [0, -50, 0],
+                                            x: [0, Math.random() * 30 - 15, 0],
+                                            opacity: [0.1, 0.6, 0.1],
+                                            scale: [1, 1.5, 1]
+                                        }}
+                                        transition={{
+                                            duration: 4 + particle.delay,
+                                            repeat: Infinity,
+                                            delay: particle.delay,
+                                            ease: "easeInOut"
+                                        }}
+                                    />
+                                ))}
                             </div>
-                        </div>
 
-                        {/* Step Timeline Card */}
-                        <motion.div
-                            className="backdrop-blur-2xl rounded-3xl border p-6 overflow-hidden"
-                            style={{
-                                background: `linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)`,
-                                borderColor: `${themeColor}20`,
-                                boxShadow: `0 25px 50px -12px ${themeColor}10, inset 0 1px 0 rgba(255,255,255,0.1)`,
-                            }}
-                            initial={{ opacity: 0, y: 30 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.2 }}
-                        >
+                            {/* Main Content Container */}
+                            <motion.div
+                                initial={{ scale: 0.8, y: 50, opacity: 0 }}
+                                animate={{ scale: 1, y: 0, opacity: 1 }}
+                                exit={{ scale: 0.8, y: 50, opacity: 0 }}
+                                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                                className="relative z-10 w-[600px] max-w-[95vw]"
+                            >
+                                {/* Minimize button - always show (except completed) */}
+                                {currentStep !== 'completed' && (
+                                    <motion.button
+                                        initial={{ opacity: 0, scale: 0 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        onClick={() => setIsCollapsed(true)}
+                                        className="absolute -top-12 right-14 p-3 rounded-xl transition-all backdrop-blur-xl"
+                                        style={{
+                                            background: `linear-gradient(135deg, ${themeColor}40, ${themeColor}20)`,
+                                            border: `1px solid ${themeColor}60`,
+                                            boxShadow: `0 4px 20px ${themeColor}30`
+                                        }}
+                                        whileHover={{ scale: 1.1, boxShadow: `0 8px 30px ${themeColor}50` }}
+                                        whileTap={{ scale: 0.9 }}
+                                        title="Minimize to corner"
+                                    >
+                                        <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                            <path d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </motion.button>
+                                )}
 
-                            <div className="relative space-y-2">
-                                {TRAINING_STEPS.slice(0, 4).map((step, index) => {
-                                    const isComplete = index < currentStepIndex;
-                                    const isCurrent = index === currentStepIndex && currentStep !== 'failed';
-                                    const isPending = index > currentStepIndex;
-                                    const isFailed = currentStep === 'failed' && index === currentStepIndex;
-                                    const StepIcon = step.icon;
+                                {/* Close button - only show if failed */}
+                                {currentStep === 'failed' && (
+                                    <motion.button
+                                        initial={{ opacity: 0, scale: 0 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        onClick={onClose}
+                                        className="absolute -top-14 right-0 p-3 rounded-full bg-white/5 hover:bg-white/15 text-white/60 hover:text-white transition-all border border-white/10 backdrop-blur-xl"
+                                        whileHover={{ scale: 1.1, rotate: 90 }}
+                                        whileTap={{ scale: 0.9 }}
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </motion.button>
+                                )}
 
-                                    return (
-                                        <motion.div
-                                            key={step.id}
-                                            initial={{ opacity: 0, x: -30 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: index * 0.1 + 0.3, type: "spring" }}
-                                            className={`flex items-center gap-4 p-4 rounded-2xl transition-all relative overflow-hidden ${isCurrent ? 'bg-white/10' : ''
-                                                }`}
-                                            whileHover={{ x: 5, transition: { duration: 0.2 } }}
-                                        >
-                                            {/* Active step glow */}
-                                            {isCurrent && (
-                                                <motion.div
-                                                    className="absolute inset-0 opacity-20"
-                                                    style={{
-                                                        background: `linear-gradient(90deg, ${themeColor}40, transparent)`,
+                                {/* Main Animated Loader */}
+                                <div className="flex justify-center mb-10">
+                                    <MorphingSphere themeColor={themeColor} currentStep={currentStep} />
+                                </div>
+
+                                {/* Current Step Title with Typewriter */}
+                                <motion.div
+                                    key={currentStep}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ type: "spring", stiffness: 200 }}
+                                    className="text-center mb-6"
+                                >
+                                    <h2 className="text-3xl font-bold text-white mb-3">
+                                        <TypewriterText
+                                            text={currentStep === 'failed'
+                                                ? 'Training Failed'
+                                                : TRAINING_STEPS[currentStepIndex]?.label || 'Processing...'}
+                                        />
+                                    </h2>
+                                    <motion.p
+                                        className="text-white/50 text-sm max-w-md mx-auto"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        transition={{ delay: 0.5 }}
+                                    >
+                                        {currentStep === 'failed'
+                                            ? error || 'An error occurred during training'
+                                            : TRAINING_STEPS[currentStepIndex]?.description}
+                                    </motion.p>
+                                </motion.div>
+
+                                {/* Progress Wave */}
+                                <div className="mb-8 px-4">
+                                    <ProgressWave progress={progress} themeColor={themeColor} />
+                                    <div className="flex justify-between mt-2 text-xs text-white/30">
+                                        <span>Step {currentStepIndex + 1} of {TRAINING_STEPS.length}</span>
+                                        <span>{Math.round(progress)}%</span>
+                                    </div>
+                                </div>
+
+                                {/* Horizontal Step Timeline */}
+                                <motion.div
+                                    className="backdrop-blur-2xl rounded-2xl border p-4 overflow-hidden"
+                                    style={{
+                                        background: `linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)`,
+                                        borderColor: `${themeColor}20`,
+                                    }}
+                                    initial={{ opacity: 0, y: 30 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.2 }}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        {TRAINING_STEPS.slice(0, -1).map((step, index) => {
+                                            const isComplete = index < currentStepIndex;
+                                            const isCurrent = index === currentStepIndex && currentStep !== 'failed';
+                                            const isFailed = currentStep === 'failed' && index === currentStepIndex;
+                                            const StepIcon = step.icon;
+
+                                            return (
+                                                <React.Fragment key={step.id}>
+                                                    {/* Step Circle */}
+                                                    <motion.div
+                                                        className="flex flex-col items-center gap-1"
+                                                        initial={{ opacity: 0, scale: 0.8 }}
+                                                        animate={{ opacity: 1, scale: 1 }}
+                                                        transition={{ delay: index * 0.05 }}
+                                                    >
+                                                        <div
+                                                            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${isComplete ? 'bg-green-500/30' :
+                                                                isFailed ? 'bg-red-500/30' :
+                                                                    isCurrent ? '' : 'bg-white/10'
+                                                                }`}
+                                                            style={isCurrent && !isFailed ? {
+                                                                background: `linear-gradient(135deg, ${themeColor}50, ${themeColor}30)`,
+                                                                boxShadow: `0 0 15px ${themeColor}40`
+                                                            } : {}}
+                                                        >
+                                                            {isComplete ? (
+                                                                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                                                            ) : isFailed ? (
+                                                                <AlertCircle className="w-4 h-4 text-red-400" />
+                                                            ) : isCurrent ? (
+                                                                <motion.div
+                                                                    animate={{ rotate: 360 }}
+                                                                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                                                                >
+                                                                    <StepIcon className="w-4 h-4" style={{ color: themeColor }} />
+                                                                </motion.div>
+                                                            ) : (
+                                                                <StepIcon className="w-4 h-4 text-white/30" />
+                                                            )}
+                                                        </div>
+                                                        <span className={`text-[9px] font-medium ${isComplete ? 'text-green-400' :
+                                                            isCurrent ? 'text-white' :
+                                                                'text-white/30'
+                                                            }`}>{step.label}</span>
+                                                    </motion.div>
+
+                                                    {/* Connector Line (except after last) */}
+                                                    {index < TRAINING_STEPS.length - 2 && (
+                                                        <div className="flex-1 h-0.5 mx-1 rounded-full bg-white/10 overflow-hidden">
+                                                            {index < currentStepIndex && (
+                                                                <motion.div
+                                                                    className="h-full rounded-full"
+                                                                    style={{ backgroundColor: '#22c55e' }}
+                                                                    initial={{ width: 0 }}
+                                                                    animate={{ width: '100%' }}
+                                                                    transition={{ duration: 0.5 }}
+                                                                />
+                                                            )}
+                                                            {index === currentStepIndex - 1 && (
+                                                                <motion.div
+                                                                    className="h-full rounded-full"
+                                                                    style={{ backgroundColor: themeColor }}
+                                                                    initial={{ width: 0 }}
+                                                                    animate={{ width: '100%' }}
+                                                                    transition={{ duration: 0.5 }}
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </React.Fragment>
+                                            );
+                                        })}
+                                    </div>
+                                </motion.div>
+
+                                {/* Error Details */}
+                                <AnimatePresence>
+                                    {currentStep === 'failed' && error && (() => {
+                                        // Extract clean error message from raw error
+                                        let cleanMessage = error;
+                                        let technicalDetails = '';
+
+                                        // Try to parse JSON error and extract message
+                                        try {
+                                            if (error.includes('"message"')) {
+                                                const match = error.match(/"message":\s*"([^"]+)"/);
+                                                if (match) {
+                                                    cleanMessage = match[1].split('.')[0]; // Take first sentence
+                                                    technicalDetails = error;
+                                                }
+                                            } else if (error.includes('Failed to create training VM')) {
+                                                cleanMessage = 'Failed to create training VM. Please check your GCP settings.';
+                                                technicalDetails = error;
+                                            }
+                                        } catch {
+                                            // Keep original
+                                        }
+
+                                        // Truncate if still too long
+                                        if (cleanMessage.length > 150) {
+                                            cleanMessage = cleanMessage.substring(0, 147) + '...';
+                                        }
+
+                                        return (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 20, height: 0 }}
+                                                animate={{ opacity: 1, y: 0, height: 'auto' }}
+                                                exit={{ opacity: 0, y: -20, height: 0 }}
+                                                className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl backdrop-blur-xl"
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm text-red-300 font-medium">{cleanMessage}</p>
+                                                        {technicalDetails && (
+                                                            <details className="mt-2">
+                                                                <summary className="text-[10px] text-red-400/60 cursor-pointer hover:text-red-400 transition-colors">
+                                                                    Show technical details
+                                                                </summary>
+                                                                <pre className="mt-2 p-2 bg-black/30 rounded-lg text-[9px] text-red-400/70 font-mono overflow-x-auto max-h-32 overflow-y-auto">
+                                                                    {technicalDetails.substring(0, 500)}
+                                                                    {technicalDetails.length > 500 ? '...' : ''}
+                                                                </pre>
+                                                            </details>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        );
+                                    })()}
+                                </AnimatePresence>
+
+                                {/* Action Buttons */}
+                                <div className="mt-6 space-y-3">
+                                    {currentStep === 'failed' && (
+                                        <>
+                                            {/* Retry Button - only if onRetry callback provided */}
+                                            {onRetry && (
+                                                <motion.button
+                                                    initial={{ opacity: 0, y: 20 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    onClick={async () => {
+                                                        setIsRetrying(true);
+                                                        try {
+                                                            await onRetry();
+                                                        } finally {
+                                                            setIsRetrying(false);
+                                                        }
                                                     }}
-                                                    animate={{ x: ['-100%', '200%'] }}
-                                                    transition={{ duration: 2, repeat: Infinity }}
-                                                />
+                                                    disabled={isRetrying}
+                                                    className="w-full py-4 rounded-2xl font-semibold text-white transition-all overflow-hidden relative disabled:opacity-50"
+                                                    style={{
+                                                        background: errorCode === 'RESOURCE_EXHAUSTED' || errorCode === 'QUOTA_EXCEEDED'
+                                                            ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                                                            : `linear-gradient(135deg, ${themeColor}, #8B5CF6)`,
+                                                    }}
+                                                    whileHover={{ scale: isRetrying ? 1 : 1.02 }}
+                                                    whileTap={{ scale: isRetrying ? 1 : 0.98 }}
+                                                >
+                                                    <span className="flex items-center justify-center gap-2">
+                                                        {isRetrying ? (
+                                                            <>
+                                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                                Retrying...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <RefreshCw className="w-4 h-4" />
+                                                                {errorCode === 'RESOURCE_EXHAUSTED' || errorCode === 'QUOTA_EXCEEDED'
+                                                                    ? 'Retry Training (Quota Issue)'
+                                                                    : 'Retry Training'}
+                                                            </>
+                                                        )}
+                                                    </span>
+                                                </motion.button>
                                             )}
 
-                                            {/* Step Icon */}
-                                            <motion.div
-                                                className={`relative w-12 h-12 rounded-2xl flex items-center justify-center ${isComplete ? 'bg-green-500/20' :
-                                                    isFailed ? 'bg-red-500/20' :
-                                                        isCurrent ? '' : 'bg-white/5'
-                                                    }`}
-                                                style={isCurrent && !isFailed ? {
-                                                    backgroundColor: `${themeColor}20`,
-                                                    boxShadow: `0 0 20px ${themeColor}30`
-                                                } : {}}
-                                                whileHover={{ scale: 1.05 }}
+                                            {/* Close Button */}
+                                            <motion.button
+                                                initial={{ opacity: 0, y: 20 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: 0.1 }}
+                                                onClick={onClose}
+                                                className="w-full py-4 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold transition-all border border-white/10 backdrop-blur-xl"
+                                                whileHover={{ scale: 1.02, boxShadow: '0 10px 40px rgba(255,255,255,0.1)' }}
+                                                whileTap={{ scale: 0.98 }}
                                             >
-                                                {isComplete ? (
-                                                    <motion.div
-                                                        initial={{ scale: 0, rotate: -180 }}
-                                                        animate={{ scale: 1, rotate: 0 }}
-                                                        transition={{ type: "spring", stiffness: 300 }}
-                                                    >
-                                                        <CheckCircle2 className="w-6 h-6 text-green-400" />
-                                                    </motion.div>
-                                                ) : isFailed ? (
-                                                    <motion.div
-                                                        animate={{ rotate: [0, 5, -5, 0] }}
-                                                        transition={{ duration: 0.5, repeat: Infinity }}
-                                                    >
-                                                        <AlertCircle className="w-6 h-6 text-red-400" />
-                                                    </motion.div>
-                                                ) : isCurrent ? (
-                                                    <motion.div
-                                                        animate={{ rotate: 360 }}
-                                                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                                                    >
-                                                        <StepIcon className="w-6 h-6" style={{ color: themeColor }} />
-                                                    </motion.div>
-                                                ) : (
-                                                    <StepIcon className="w-6 h-6 text-white/20" />
-                                                )}
-                                            </motion.div>
+                                                <span className="flex items-center justify-center gap-2">
+                                                    <X className="w-4 h-4" /> Close
+                                                </span>
+                                            </motion.button>
+                                        </>
+                                    )}
 
-                                            {/* Step Info */}
-                                            <div className="flex-1 min-w-0">
-                                                <div className={`text-sm font-semibold ${isComplete ? 'text-green-400' :
-                                                    isFailed ? 'text-red-400' :
-                                                        isCurrent ? 'text-white' : 'text-white/25'
-                                                    }`}>
-                                                    {step.label}
-                                                </div>
-                                                <AnimatePresence mode="wait">
-                                                    {isCurrent && (
-                                                        <motion.div
-                                                            initial={{ opacity: 0, height: 0 }}
-                                                            animate={{ opacity: 1, height: 'auto' }}
-                                                            exit={{ opacity: 0, height: 0 }}
-                                                            className="text-xs text-white/40 mt-1"
-                                                        >
-                                                            {step.description}
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
-                                            </div>
-
-                                            {/* Status Badge */}
-                                            <AnimatePresence mode="wait">
-                                                {isComplete && (
-                                                    <motion.span
-                                                        initial={{ opacity: 0, scale: 0.5 }}
-                                                        animate={{ opacity: 1, scale: 1 }}
-                                                        exit={{ opacity: 0, scale: 0.5 }}
-                                                        className="text-[10px] font-bold text-green-400 bg-green-500/20 px-3 py-1.5 rounded-full border border-green-500/30"
-                                                    >
-                                                        ✓ Done
-                                                    </motion.span>
-                                                )}
-                                                {isCurrent && !isFailed && (
-                                                    <motion.span
-                                                        initial={{ opacity: 0, scale: 0.5 }}
-                                                        animate={{ opacity: 1, scale: 1 }}
-                                                        className="text-[10px] font-bold px-3 py-1.5 rounded-full border"
-                                                        style={{
-                                                            backgroundColor: `${themeColor}20`,
-                                                            color: themeColor,
-                                                            borderColor: `${themeColor}40`
-                                                        }}
-                                                    >
-                                                        <motion.span
-                                                            animate={{ opacity: [1, 0.5, 1] }}
-                                                            transition={{ duration: 1.5, repeat: Infinity }}
-                                                        >
-                                                            In Progress
-                                                        </motion.span>
-                                                    </motion.span>
-                                                )}
-                                                {isFailed && (
-                                                    <motion.span
-                                                        initial={{ opacity: 0, scale: 0.5 }}
-                                                        animate={{ opacity: 1, scale: 1 }}
-                                                        className="text-[10px] font-bold text-red-400 bg-red-500/20 px-3 py-1.5 rounded-full border border-red-500/30"
-                                                    >
-                                                        ✕ Failed
-                                                    </motion.span>
-                                                )}
-                                            </AnimatePresence>
-                                        </motion.div>
-                                    );
-                                })}
-                            </div>
+                                    {currentStep === 'completed' && (
+                                        <motion.button
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            onClick={onClose}
+                                            className="w-full py-4 rounded-2xl font-semibold text-white transition-all overflow-hidden relative"
+                                            style={{
+                                                background: `linear-gradient(135deg, ${themeColor}, #8B5CF6, ${themeColor})`,
+                                                backgroundSize: '200% 200%',
+                                            }}
+                                            whileHover={{
+                                                scale: 1.02,
+                                                boxShadow: `0 20px 40px ${themeColor}40`
+                                            }}
+                                            whileTap={{ scale: 0.98 }}
+                                        >
+                                            <motion.div
+                                                className="absolute inset-0"
+                                                style={{
+                                                    background: `linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)`,
+                                                }}
+                                                animate={{ x: ['-100%', '100%'] }}
+                                                transition={{ duration: 2, repeat: Infinity }}
+                                            />
+                                            <span className="relative flex items-center justify-center gap-2">
+                                                <Rocket className="w-4 h-4" /> View Results
+                                            </span>
+                                        </motion.button>
+                                    )}
+                                </div>
+                            </motion.div>
                         </motion.div>
-
-                        {/* Error Details */}
-                        <AnimatePresence>
-                            {currentStep === 'failed' && error && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 20, height: 0 }}
-                                    animate={{ opacity: 1, y: 0, height: 'auto' }}
-                                    exit={{ opacity: 0, y: -20, height: 0 }}
-                                    className="mt-4 p-5 bg-red-500/10 border border-red-500/30 rounded-2xl backdrop-blur-xl"
-                                >
-                                    <p className="text-xs text-red-400 font-mono leading-relaxed">{error}</p>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
-                        {/* Action Buttons */}
-                        <div className="mt-6">
-                            {currentStep === 'failed' && (
-                                <motion.button
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    onClick={onClose}
-                                    className="w-full py-4 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold transition-all border border-white/10 backdrop-blur-xl"
-                                    whileHover={{ scale: 1.02, boxShadow: '0 10px 40px rgba(255,255,255,0.1)' }}
-                                    whileTap={{ scale: 0.98 }}
-                                >
-                                    <span className="flex items-center justify-center gap-2">
-                                        <Zap className="w-4 h-4" /> Close & Retry
-                                    </span>
-                                </motion.button>
-                            )}
-
-                            {currentStep === 'completed' && (
-                                <motion.button
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    onClick={onClose}
-                                    className="w-full py-4 rounded-2xl font-semibold text-white transition-all overflow-hidden relative"
-                                    style={{
-                                        background: `linear-gradient(135deg, ${themeColor}, #8B5CF6, ${themeColor})`,
-                                        backgroundSize: '200% 200%',
-                                    }}
-                                    whileHover={{
-                                        scale: 1.02,
-                                        boxShadow: `0 20px 40px ${themeColor}40`
-                                    }}
-                                    whileTap={{ scale: 0.98 }}
-                                >
-                                    <motion.div
-                                        className="absolute inset-0"
-                                        style={{
-                                            background: `linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)`,
-                                        }}
-                                        animate={{ x: ['-100%', '100%'] }}
-                                        transition={{ duration: 2, repeat: Infinity }}
-                                    />
-                                    <span className="relative flex items-center justify-center gap-2">
-                                        <Rocket className="w-4 h-4" /> View Results
-                                    </span>
-                                </motion.button>
-                            )}
-                        </div>
-                    </motion.div>
-                </motion.div>
+                    )}
+                </>
             )}
         </AnimatePresence>
     );
 };
 
 export default TrainingProgressOverlay;
+

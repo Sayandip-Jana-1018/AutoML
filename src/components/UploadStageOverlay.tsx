@@ -112,8 +112,8 @@ export function UploadStageOverlay({
                 <Navbar />
             </div>
 
-            {/* Main Content */}
-            <div className="flex-1 flex items-center justify-center p-6 overflow-hidden">
+            {/* Main Content - added pt-6 for more top spacing */}
+            <div className="flex-1 flex items-center justify-center p-6 pt-12 overflow-hidden">
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
