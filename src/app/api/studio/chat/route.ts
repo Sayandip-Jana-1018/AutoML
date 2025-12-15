@@ -64,21 +64,55 @@ YOUR GOALS:
    - Use sensible defaults within the user's plan limits
    - For tree-based models, use n_estimators=100 by default (well within limits)
    - For neural networks, use epochs=50 by default (well within limits)
+
+2. CRITICAL: TARGET COLUMN RULES:
+   - YOU MUST use the "Suggested Target" from the Dataset Schema above as target_col
+   - NEVER guess or pick your own target column - always use the one from schema
+   - If schema says "Suggested Target: Survived", use target_col = 'Survived'
+   - The target column should be EXCLUDED from feature columns (numeric_cols, categorical_cols)
    
-2. ONLY CHECK LIMITS IF USER EXPLICITLY REQUESTS:
+3. CRITICAL: DYNAMIC COLUMN DETECTION (REQUIRED):
+   - NEVER hardcode column names - always detect them dynamically from the DataFrame
+   - Use this pattern for preprocessing (works with ANY target column):
+   
+   target_col = '${schema?.targetColumnSuggestion || 'target'}'  # From schema
+   X = df.drop(columns=[target_col])
+   y = df[target_col]
+   
+   # DYNAMIC column detection - always works!
+   numeric_cols = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
+   categorical_cols = X.select_dtypes(include=['object', 'category']).columns.tolist()
+   
+   preprocessor = ColumnTransformer([
+       ('num', Pipeline([('imputer', SimpleImputer(strategy='median')), ('scaler', StandardScaler())]), numeric_cols),
+       ('cat', Pipeline([('imputer', SimpleImputer(strategy='constant', fill_value='missing')), ('encoder', OneHotEncoder(handle_unknown='ignore'))]), categorical_cols)
+   ])
+
+4. CRITICAL: DATASET PATH (REQUIRED):
+   - ALWAYS use './dataset.csv' as the dataset path - this is where the training pipeline places the data
+   - NEVER use placeholders like 'path_to_your_csv' or 'your_file.csv'
+   - Use this exact pattern:
+   
+   def load_data():
+       return pd.read_csv('./dataset.csv')
+   
+   if __name__ == "__main__":
+       df = load_data()  # NO ARGUMENTS - path is hardcoded
+   
+5. ONLY CHECK LIMITS IF USER EXPLICITLY REQUESTS:
    - If user says "use 1000 epochs" and limit is ${limits.maxEpochs}, set to ${limits.maxEpochs}
    - If user says "5000 trees" and limit is ${limits.maxTrees}, set to ${limits.maxTrees}
    - DO NOT refuse unless user explicitly asks for values exceeding limits
    - Allowed algorithms for ${tier}: ${limits.allowedAlgorithms.join(', ')}
    
-3. DETECT COMMAND TYPE (for structured editing):
+6. DETECT COMMAND TYPE (for structured editing):
    - "Split 80/20" → SET_SPLIT_RATIO
    - "Use XGBoost" → CHANGE_MODEL
    - "Add F1 score" → ADD_METRIC
    - "Set epochs to 50" → SET_EPOCHS
    - "Add dropout" → ADD_LAYER
    
-4. ALWAYS GENERATE CODE:
+7. ALWAYS GENERATE CODE:
    - Unless user specifically requests impossible values, generate code
    - Set isSafe=true and provide updatedScript
 
@@ -97,7 +131,11 @@ IMPORTANT:
 - Almost all requests should result in generated code (isSafe=true)
 - Only set resourceViolation if user EXPLICITLY requests values exceeding limits
 - Structure code with: load_data(), preprocess(), train_model(), evaluate() functions
+- NEVER use df.fillna(df.mean()) - always handle numeric and categorical columns separately
+- ALWAYS use the target column from schema, NEVER guess your own target column
 `;
+
+
 
         const { text: rawResponse } = await generateText({
             model: selectedModel,

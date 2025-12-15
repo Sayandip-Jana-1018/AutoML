@@ -21,14 +21,14 @@ const USD_TO_INR = parseFloat(process.env.USD_TO_INR || '83.0');
 const COST_PER_PREDICTION_USD = 0.0001; // $0.0001 per prediction
 
 interface RouteContext {
-    params: { modelId: string };
+    params: Promise<{ modelId: string }>;
 }
 
 export async function POST(req: NextRequest, context: RouteContext) {
     const startTime = Date.now();
 
     try {
-        const { modelId } = context.params;
+        const { modelId } = await context.params;
 
         if (!modelId) {
             return NextResponse.json({ error: 'modelId is required' }, { status: 400 });
@@ -172,7 +172,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
  */
 export async function GET(req: NextRequest, context: RouteContext) {
     try {
-        const { modelId } = context.params;
+        const { modelId } = await context.params;
 
         // Authenticate
         const authHeader = req.headers.get('authorization');

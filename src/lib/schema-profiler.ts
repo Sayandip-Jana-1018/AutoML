@@ -24,6 +24,8 @@ export interface DatasetSchema {
     inferredTaskType: 'classification' | 'regression' | 'unknown';
     taskTypeConfidence: number; // 0-1 confidence score
     targetColumnSuggestion?: string;
+    // NEW: Preview data rows for display
+    previewRows?: Record<string, any>[];
 }
 
 /**
@@ -152,6 +154,15 @@ export function profileCSV(csvContent: string): DatasetSchema {
     const targetColumn = targetSuggestion ? columns.find(c => c.name === targetSuggestion) : undefined;
     const { taskType, confidence } = inferTaskTypeWithConfidence(targetColumn);
 
+    // Extract first 5 rows as preview data
+    const previewRows = dataRows.slice(0, 5).map(row => {
+        const rowObj: Record<string, any> = {};
+        headers.forEach((header, idx) => {
+            rowObj[header.trim()] = row[idx] || null;
+        });
+        return rowObj;
+    });
+
     return {
         columns,
         rowCount: dataRows.length,
@@ -162,30 +173,61 @@ export function profileCSV(csvContent: string): DatasetSchema {
         },
         inferredTaskType: taskType,
         taskTypeConfidence: confidence,
-        targetColumnSuggestion: targetSuggestion
+        targetColumnSuggestion: targetSuggestion,
+        previewRows
     };
 }
 
 /**
- * Simple CSV line parser (handles quoted values)
+ * Robust CSV line parser (handles quoted values with commas, escaped quotes)
  */
 function parseCSVLine(line: string): string[] {
     const result: string[] = [];
     let current = '';
     let inQuotes = false;
+    let i = 0;
 
-    for (let i = 0; i < line.length; i++) {
+    // Remove BOM if present
+    if (line.charCodeAt(0) === 0xFEFF) {
+        line = line.slice(1);
+    }
+
+    // Remove trailing \r if present (Windows line endings)
+    if (line.endsWith('\r')) {
+        line = line.slice(0, -1);
+    }
+
+    while (i < line.length) {
         const char = line[i];
 
         if (char === '"') {
-            inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
+            if (inQuotes && line[i + 1] === '"') {
+                // Escaped quote ("") - add single quote to result
+                current += '"';
+                i += 2;
+                continue;
+            } else {
+                // Toggle quote mode
+                inQuotes = !inQuotes;
+                i++;
+                continue;
+            }
+        }
+
+        if (char === ',' && !inQuotes) {
+            // Field delimiter - push current field and reset
             result.push(current.trim());
             current = '';
-        } else {
-            current += char;
+            i++;
+            continue;
         }
+
+        // Regular character - add to current field
+        current += char;
+        i++;
     }
+
+    // Don't forget the last field
     result.push(current.trim());
 
     return result;

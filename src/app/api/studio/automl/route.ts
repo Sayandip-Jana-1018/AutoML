@@ -303,12 +303,12 @@ def load_data():
     return df
 
 def preprocess(df):
-    """Preprocess the dataset"""
+    """Preprocess the dataset - dynamically handles any target column"""
     print("\\nPreprocessing data...")
     
     # Separate features and target
     if TARGET_COLUMN not in df.columns:
-        raise ValueError(f"Target column '{TARGET_COLUMN}' not found in dataset")
+        raise ValueError(f"Target column '{TARGET_COLUMN}' not found in dataset. Available columns: {list(df.columns)}")
     
     X = df.drop(columns=[TARGET_COLUMN])
     y = df[TARGET_COLUMN]
@@ -319,12 +319,23 @@ def preprocess(df):
         y = le.fit_transform(y)
         print(f"Encoded target classes: {le.classes_}")` : '# Regression - target should be numeric'}
     
-    # Build preprocessing pipeline
-    numeric_features = [c for c in NUMERIC_FEATURES if c in X.columns]
-    categorical_features = [c for c in CATEGORICAL_FEATURES if c in X.columns]
+    # DYNAMIC COLUMN DETECTION - auto-detect from actual DataFrame
+    # This ensures we never reference columns that don't exist
+    numeric_features = X.select_dtypes(include=['int64', 'float64', 'int32', 'float32']).columns.tolist()
+    categorical_features = X.select_dtypes(include=['object', 'category', 'bool']).columns.tolist()
     
-    print(f"Numeric features: {len(numeric_features)}")
-    print(f"Categorical features: {len(categorical_features)}")
+    # Optional: use schema hints if available (but filtered to existing columns)
+    schema_numeric = [c for c in NUMERIC_FEATURES if c in X.columns]
+    schema_categorical = [c for c in CATEGORICAL_FEATURES if c in X.columns]
+    
+    # If schema hints are reasonable, prefer them (they exclude ID columns etc.)
+    if len(schema_numeric) >= len(numeric_features) * 0.5:
+        numeric_features = schema_numeric
+    if len(schema_categorical) >= len(categorical_features) * 0.5:
+        categorical_features = schema_categorical
+    
+    print(f"Numeric features ({len(numeric_features)}): {numeric_features[:5]}{'...' if len(numeric_features) > 5 else ''}")
+    print(f"Categorical features ({len(categorical_features)}): {categorical_features[:5]}{'...' if len(categorical_features) > 5 else ''}")
     
     preprocessor = ColumnTransformer(
         transformers=[
@@ -337,70 +348,204 @@ def preprocess(df):
                 ('encoder', OneHotEncoder(handle_unknown='ignore', sparse_output=False))
             ]), categorical_features)
         ],
-        remainder='drop'  # Drop other columns
+        remainder='drop'  # Drop other columns (datetime, text, etc.)
     )
     
     return X, y, preprocessor
 
+
 def train_model(X, y, preprocessor):
-    """Train multiple models and select the best one via cross-validation"""
+    """Train multiple models and select the best one via cross-validation
+    
+    Smart features:
+    - Dataset size heuristics: Skip complex models for small datasets
+    - Class imbalance detection: Auto-apply class_weight='balanced' (classification only)
+    - Early stopping: Prevent overfitting for boosting algorithms
+    - Task-aware: Uses Classifiers or Regressors based on task type
+    """
     from sklearn.model_selection import cross_val_score
     print("\\\\n" + "="*60)
-    print("BEST ALGORITHM SELECTOR - Comparing Multiple Models")
+    print("SMART AUTOML - Dataset-Aware Model Selection")
     print("="*60)
     
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE
     )
-    print(f"Train size: {len(X_train)}, Test size: {len(X_test)}")
+    n_samples = len(X_train)
+    n_features = X.shape[1] if hasattr(X, 'shape') else len(X.columns)
+    print(f"Train size: {n_samples}, Test size: {len(X_test)}, Features: {n_features}")
     
-    # Define candidate algorithms
+${isClassification ? `    # Detect class imbalance for classification
+    is_imbalanced = False
+    try:
+        from collections import Counter
+        class_counts = Counter(y_train)
+        if len(class_counts) >= 2:
+            counts = list(class_counts.values())
+            imbalance_ratio = min(counts) / max(counts)
+            is_imbalanced = imbalance_ratio < 0.3  # Less than 30% minority
+            if is_imbalanced:
+                print(f"⚠️ Class imbalance detected (ratio: {imbalance_ratio:.2f}) - using balanced weights")
+    except:
+        pass
+    class_weight_param = 'balanced' if is_imbalanced else None` : `    # Regression task - no class imbalance check needed
+    is_imbalanced = False`}
+    
+    # Dataset size categories
+    is_tiny = n_samples < 200
+    is_small = n_samples < 500
+    is_medium = n_samples < 5000
+    
+    if is_tiny:
+        print("📊 Tiny dataset (<200 rows) - using simple models only")
+    elif is_small:
+        print("📊 Small dataset (<500 rows) - skipping complex boosting models")
+    elif is_medium:
+        print("📊 Medium dataset - testing all available algorithms")
+    else:
+        print("📊 Large dataset (5000+ rows) - full model comparison")
+    
+    # Define candidate algorithms based on dataset size and task type
     candidates = {}
     
-    # Always try LogisticRegression
+${isClassification ? `    # === CLASSIFICATION MODELS ===
+    # TIER 1: Simple models (always included)
     try:
         from sklearn.linear_model import LogisticRegression
-        candidates['LogisticRegression'] = LogisticRegression(max_iter=500, random_state=RANDOM_STATE)
+        candidates['LogisticRegression'] = LogisticRegression(
+            max_iter=1000, random_state=RANDOM_STATE, class_weight=class_weight_param
+        )
     except: pass
     
-    # Always try RandomForest
+    # TIER 2: Tree-based (included for all but tiny datasets)
+    if not is_tiny:
+        try:
+            from sklearn.ensemble import RandomForestClassifier
+            candidates['RandomForest'] = RandomForestClassifier(
+                n_estimators=50 if is_small else 100,
+                max_depth=10 if is_small else None,
+                random_state=RANDOM_STATE, class_weight=class_weight_param, n_jobs=-1
+            )
+        except: pass
+        try:
+            from sklearn.ensemble import GradientBoostingClassifier
+            candidates['GradientBoosting'] = GradientBoostingClassifier(
+                n_estimators=50 if is_small else 100, max_depth=3,
+                random_state=RANDOM_STATE, validation_fraction=0.1, n_iter_no_change=10
+            )
+        except: pass
+    
+    # TIER 3: Advanced boosting (only for medium+ datasets)
+    if not is_small:
+        try:
+            from xgboost import XGBClassifier
+            candidates['XGBoost'] = XGBClassifier(
+                n_estimators=100, max_depth=6, learning_rate=0.1,
+                use_label_encoder=False, eval_metric='logloss',
+                random_state=RANDOM_STATE, verbosity=0
+            )
+            print("✓ XGBoost available")
+        except ImportError:
+            print("✗ XGBoost not installed")
+        try:
+            from lightgbm import LGBMClassifier
+            candidates['LightGBM'] = LGBMClassifier(
+                n_estimators=100, max_depth=6, learning_rate=0.1,
+                random_state=RANDOM_STATE, verbose=-1, class_weight=class_weight_param
+            )
+            print("✓ LightGBM available")
+        except ImportError:
+            print("✗ LightGBM not installed")
+    
+    # TIER 4: SVM for small datasets
+    if is_small and n_samples >= 50:
+        try:
+            from sklearn.svm import SVC
+            candidates['SVM'] = SVC(kernel='rbf', probability=True, random_state=RANDOM_STATE, class_weight=class_weight_param)
+        except: pass
+    
+    scoring_metric = 'accuracy'` : `    # === REGRESSION MODELS ===
+    # TIER 1: Simple models (always included)
     try:
-        from sklearn.ensemble import RandomForestClassifier
-        candidates['RandomForest'] = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE)
+        from sklearn.linear_model import Ridge
+        candidates['Ridge'] = Ridge(alpha=1.0, random_state=RANDOM_STATE)
+    except: pass
+    try:
+        from sklearn.linear_model import Lasso
+        candidates['Lasso'] = Lasso(alpha=1.0, random_state=RANDOM_STATE, max_iter=1000)
     except: pass
     
-    # Try XGBoost if available
-    try:
-        from xgboost import XGBClassifier
-        candidates['XGBoost'] = XGBClassifier(n_estimators=100, use_label_encoder=False, eval_metric='logloss', random_state=RANDOM_STATE, verbosity=0)
-        print("✓ XGBoost available")
-    except ImportError:
-        print("✗ XGBoost not installed")
+    # TIER 2: Tree-based (included for all but tiny datasets)
+    if not is_tiny:
+        try:
+            from sklearn.ensemble import RandomForestRegressor
+            candidates['RandomForest'] = RandomForestRegressor(
+                n_estimators=50 if is_small else 100,
+                max_depth=10 if is_small else None,
+                random_state=RANDOM_STATE, n_jobs=-1
+            )
+        except: pass
+        try:
+            from sklearn.ensemble import GradientBoostingRegressor
+            candidates['GradientBoosting'] = GradientBoostingRegressor(
+                n_estimators=50 if is_small else 100, max_depth=3,
+                random_state=RANDOM_STATE, validation_fraction=0.1, n_iter_no_change=10
+            )
+        except: pass
     
-    # Try LightGBM if available
-    try:
-        from lightgbm import LGBMClassifier
-        candidates['LightGBM'] = LGBMClassifier(n_estimators=100, random_state=RANDOM_STATE, verbose=-1)
-        print("✓ LightGBM available")
-    except ImportError:
-        print("✗ LightGBM not installed")
+    # TIER 3: Advanced boosting (only for medium+ datasets)
+    if not is_small:
+        try:
+            from xgboost import XGBRegressor
+            candidates['XGBoost'] = XGBRegressor(
+                n_estimators=100, max_depth=6, learning_rate=0.1,
+                random_state=RANDOM_STATE, verbosity=0
+            )
+            print("✓ XGBoost available")
+        except ImportError:
+            print("✗ XGBoost not installed")
+        try:
+            from lightgbm import LGBMRegressor
+            candidates['LightGBM'] = LGBMRegressor(
+                n_estimators=100, max_depth=6, learning_rate=0.1,
+                random_state=RANDOM_STATE, verbose=-1
+            )
+            print("✓ LightGBM available")
+        except ImportError:
+            print("✗ LightGBM not installed")
+    
+    # TIER 4: SVR for small datasets
+    if is_small and n_samples >= 50:
+        try:
+            from sklearn.svm import SVR
+            candidates['SVR'] = SVR(kernel='rbf')
+        except: pass
+    
+    scoring_metric = 'r2'`}
+    
+    print(f"\\\\nTesting {len(candidates)} algorithms: {', '.join(candidates.keys())}")
+    
+    # Determine CV folds based on dataset size
+    cv_folds = 3 if is_small else 5
+    print(f"Running {cv_folds}-fold cross-validation (metric: {scoring_metric})...")
     
     # Run cross-validation for each candidate
     results = {}
-    print("\\\\nRunning 3-fold cross-validation for each algorithm...")
-    
-    for name, clf in candidates.items():
+    for name, model in candidates.items():
         try:
             pipeline = Pipeline([
                 ('preprocessor', preprocessor),
-                ('classifier', clf)
+                ('model', model)
             ])
-            scores = cross_val_score(pipeline, X_train, y_train, cv=3, scoring='accuracy', n_jobs=-1)
+            scores = cross_val_score(pipeline, X_train, y_train, cv=cv_folds, scoring=scoring_metric, n_jobs=-1)
             mean_score = scores.mean()
             std_score = scores.std()
             results[name] = {'mean': mean_score, 'std': std_score, 'pipeline': pipeline}
-            print(f"  {name}: {mean_score:.4f} (+/- {std_score:.4f})")
+            
+            # Visual indicator of performance
+            stars = "★" * max(1, int(mean_score * 5))
+            print(f"  {name}: {mean_score:.4f} (+/- {std_score:.4f}) {stars}")
         except Exception as e:
             print(f"  {name}: Failed - {str(e)[:50]}")
     
@@ -412,7 +557,10 @@ def train_model(X, y, preprocessor):
     best_result = results[best_name]
     
     print(f"\\\\n{'='*60}")
-    print(f"★ BEST ALGORITHM: {best_name} (CV Accuracy: {best_result['mean']:.4f})")
+    print(f"🏆 BEST ALGORITHM: {best_name}")
+    print(f"   CV {scoring_metric.upper()}: {best_result['mean']:.4f} (+/- {best_result['std']:.4f})")
+${isClassification ? `    if is_imbalanced:
+        print(f"   ℹ️  Using balanced class weights due to imbalance")` : ''}
     print(f"{'='*60}\\\\n")
     
     # Train best model on full training data
@@ -421,10 +569,13 @@ def train_model(X, y, preprocessor):
     print(f"Final model ({best_name}) trained successfully!")
     
     # Store comparison results for metrics
-    model.algorithm_comparison = {name: {'cv_accuracy': r['mean'], 'cv_std': r['std']} for name, r in results.items()}
+    model.algorithm_comparison = {name: {'cv_score': r['mean'], 'cv_std': r['std']} for name, r in results.items()}
     model.best_algorithm = best_name
+    model.dataset_info = {'n_samples': n_samples, 'n_features': n_features, 'is_imbalanced': is_imbalanced, 'cv_folds': cv_folds}
     
     return model, X_test, y_test
+
+
 
 def evaluate(model, X_test, y_test):
     """Evaluate model performance and return metrics"""

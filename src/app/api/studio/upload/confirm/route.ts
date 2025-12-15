@@ -48,6 +48,7 @@ export async function POST(req: Request) {
         const existingData = existing.data();
         const datasetName = existingData?.name || '';
         const fileHash = existingData?.fileHash; // Get hash stored during upload route
+        const userTargetColumn = existingData?.targetColumn || null; // User's selection from upload UI
 
         // 0.5 Deduplication Check
         let md5Hash: string | undefined;
@@ -136,6 +137,7 @@ export async function POST(req: Request) {
         try {
             schema = await profileDatasetFromGCS(gcsPath);
             console.log(`[Upload Confirm] Profiled: ${schema.rowCount} rows`);
+            console.log(`[Upload Confirm] Target: ${userTargetColumn ? `USER-SELECTED: ${userTargetColumn}` : `AUTO-DETECTED: ${schema.targetColumnSuggestion}`}`);
         } catch (profileError: unknown) {
             const errorMessage = profileError instanceof Error ? profileError.message : 'Failed to profile dataset';
             console.error(`[Upload Confirm] Profiling failed:`, profileError);
@@ -167,7 +169,7 @@ export async function POST(req: Request) {
                 missingValueStats: schema.missingValueStats || {},
                 inferredTaskType: schema.inferredTaskType || 'unknown',
                 taskTypeConfidence: schema.taskTypeConfidence || 0,
-                targetColumnSuggestion: schema.targetColumnSuggestion || ''
+                targetColumnSuggestion: userTargetColumn || schema.targetColumnSuggestion || ''
             },
             gcsPath: gcsPath || '',
             md5Hash: md5Hash || '',
@@ -205,7 +207,9 @@ export async function POST(req: Request) {
                 missingValueStats: schema.missingValueStats || {},
                 inferredTaskType: schema.inferredTaskType || 'unknown',
                 taskTypeConfidence: schema.taskTypeConfidence || 0,
-                targetColumnSuggestion: schema.targetColumnSuggestion || ''
+                targetColumnSuggestion: userTargetColumn || schema.targetColumnSuggestion || '',
+                // NEW: Store preview rows for data display
+                previewRows: schema.previewRows || []
             },
             columnNames: schema.columns.map(c => c.name),
             rowCount: schema.rowCount || 0,
@@ -222,9 +226,9 @@ export async function POST(req: Request) {
             // Schema detection fields
             taskType: schema.inferredTaskType || 'unknown',
             taskTypeConfidence: schema.taskTypeConfidence || 0,
-            targetColumn: schema.targetColumnSuggestion || '',
+            targetColumn: userTargetColumn || schema.targetColumnSuggestion || '',
             inferredTaskType: schema.inferredTaskType || 'unknown',
-            targetColumnSuggestion: schema.targetColumnSuggestion || '',
+            targetColumnSuggestion: userTargetColumn || schema.targetColumnSuggestion || '',
             // Versioning for lineage
             latestDatasetId: datasetId,
             datasetVersionId: versionRef.id,
@@ -264,7 +268,7 @@ export async function POST(req: Request) {
                     columnNames: schema.columns.map(c => c.name),
                     taskType: schema.inferredTaskType || 'unknown',
                     inferredTaskType: schema.inferredTaskType || 'unknown',
-                    targetColumnSuggestion: schema.targetColumnSuggestion || '',
+                    targetColumnSuggestion: userTargetColumn || schema.targetColumnSuggestion || '',
                     datasetId,
                     versionId: versionRef.id,
                     canonicalDatasetRef: `projects/${projectId}/datasets/${datasetId}`,

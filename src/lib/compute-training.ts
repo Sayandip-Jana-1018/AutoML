@@ -209,6 +209,10 @@ sed -i "s|'path_to_csv.csv'|'./dataset.csv'|g" train.py
 sed -i 's|"path_to_csv.csv"|"./dataset.csv"|g' train.py
 sed -i "s|'your_dataset.csv'|'./dataset.csv'|g" train.py
 sed -i "s|read_csv('dataset.csv')|read_csv('./dataset.csv')|g" train.py
+# CRITICAL FIX: AI chat generates /tmp/dataset.csv but we download to /tmp/training/dataset.csv
+sed -i "s|'/tmp/dataset.csv'|'./dataset.csv'|g" train.py
+sed -i 's|"/tmp/dataset.csv"|"./dataset.csv"|g' train.py
+sed -i "s|'/tmp/training/dataset.csv'|'./dataset.csv'|g" train.py
 
 echo "========================================"
 python3 train.py 2>&1 | tee /tmp/training_output.txt

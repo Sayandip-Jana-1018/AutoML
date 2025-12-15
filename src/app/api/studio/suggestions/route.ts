@@ -1,4 +1,4 @@
-"use server";
+// API Route for storing and fetching suggestions
 
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";

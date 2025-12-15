@@ -155,6 +155,97 @@ export function validateDatasetSize(
 }
 
 /**
+ * Validate dataset type and model/algorithm compatibility
+ * Prevents invalid combinations like LinearRegression on image data
+ */
+export function validateDatasetModelCompatibility(
+    datasetType: DatasetType,
+    taskType: string,
+    algorithm?: string
+): { valid: boolean; warning?: string; error?: string; suggestions?: string[] } {
+    const taskLower = taskType.toLowerCase();
+    const algoLower = (algorithm || '').toLowerCase();
+
+    // Algorithms that only work with tabular data
+    const tabularOnlyAlgorithms = [
+        'linearregression', 'linear_regression', 'ridge', 'lasso', 'elasticnet',
+        'logisticregression', 'logistic_regression',
+        'randomforest', 'random_forest',
+        'xgboost', 'lightgbm', 'catboost', 'gradientboosting', 'gradient_boosting',
+        'decisiontree', 'decision_tree',
+        'svm', 'svc', 'svr',
+        'knn', 'k_neighbors', 'kneighbors',
+        'naivebayes', 'naive_bayes', 'gaussiannb',
+        'adaboost', 'bagging', 'extratrees',
+        'kmeans', 'k_means', 'dbscan', 'hierarchicalclustering', 'agglomerativeclustering'
+    ];
+
+    // Algorithms that only work with image data
+    const imageOnlyAlgorithms = [
+        'cnn', 'convolutional', 'conv2d',
+        'resnet', 'vgg', 'efficientnet', 'mobilenet', 'inception',
+        'yolo', 'rcnn', 'faster_rcnn', 'mask_rcnn',
+        'unet', 'segnet'
+    ];
+
+    // Task types that require image data
+    const imageOnlyTasks = [
+        'image_classification', 'imageclassification',
+        'object_detection', 'objectdetection',
+        'semantic_segmentation', 'segmentation',
+        'image_segmentation'
+    ];
+
+    // Check: Image dataset with tabular-only algorithm
+    if (datasetType === 'image') {
+        const isTabularAlgo = tabularOnlyAlgorithms.some(a => algoLower.includes(a));
+        if (isTabularAlgo) {
+            return {
+                valid: false,
+                error: `${algorithm || 'This algorithm'} cannot be used with image datasets. It requires tabular (CSV/Excel) data.`,
+                suggestions: [
+                    'Use a CNN-based model for image classification',
+                    'Use ResNet, VGG, or EfficientNet for image tasks',
+                    'Upload a CSV/Excel file to use this algorithm'
+                ]
+            };
+        }
+    }
+
+    // Check: Tabular dataset with image-only algorithm/task
+    if (datasetType === 'tabular') {
+        const isImageAlgo = imageOnlyAlgorithms.some(a => algoLower.includes(a));
+        const isImageTask = imageOnlyTasks.some(t => taskLower.includes(t));
+
+        if (isImageAlgo || isImageTask) {
+            return {
+                valid: false,
+                error: `${algorithm || taskType} requires image data but you uploaded a tabular dataset.`,
+                suggestions: [
+                    'Upload an image dataset (ZIP of images or image files)',
+                    'Use RandomForest, XGBoost, or LogisticRegression for tabular data',
+                    'Select "classification" or "regression" as task type'
+                ]
+            };
+        }
+    }
+
+    // Warning: Unknown dataset type
+    if (datasetType === 'unknown') {
+        return {
+            valid: true,
+            warning: 'Could not detect dataset type. Ensure your data format matches the selected algorithm.',
+            suggestions: [
+                'Use .csv, .xlsx for tabular data',
+                'Use .jpg, .png, or .zip of images for image data'
+            ]
+        };
+    }
+
+    return { valid: true };
+}
+
+/**
  * Estimate training time based on dataset and config
  */
 export function estimateTrainingTime(params: {
@@ -201,6 +292,7 @@ export default {
     requiresGPU,
     routeTraining,
     validateDatasetSize,
+    validateDatasetModelCompatibility,
     estimateTrainingTime,
     getBackendDescription
 };

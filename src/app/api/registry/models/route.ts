@@ -25,6 +25,7 @@ export async function GET(req: Request) {
                 const snapshot = await adminDb
                     .collection('models')
                     .where('visibility', '==', 'public')
+                    .where('status', '==', 'deployed')
                     .orderBy('updatedAt', 'desc')
                     .limit(50)
                     .get();

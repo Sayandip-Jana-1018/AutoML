@@ -30,7 +30,7 @@ interface SuggestionPanelProps {
     currentScript: string;
     currentScriptVersion?: number; // Current version being edited
     onApply: (mergedCode: string) => void;
-    onRetrain: () => void;
+    onRetrain: (mergedCode: string) => void;
     loading?: boolean;
 }
 
@@ -53,23 +53,26 @@ export function SuggestionPanel({
         suggestion.targetScriptVersion !== currentScriptVersion;
     const [showConfirm, setShowConfirm] = useState(false);
     const [editedCode, setEditedCode] = useState('');
-    const [isTextExpanded, setIsTextExpanded] = useState(false);
+    // Helper to determine if code should be replaced or appended
 
-    // Constants for truncation
-    const MAX_TEXT_LENGTH = 800;
-    const MAX_CODE_LENGTH = 1500;
+    // Helper to determine if code should be replaced or appended
+    const getMergedCode = () => {
+        if (!suggestion?.extractedCode) return currentScript;
 
-    // Initialize edited code when suggestion changes
-    useState(() => {
-        if (suggestion?.extractedCode) {
-            setEditedCode(suggestion.extractedCode);
-        }
-    });
+        // Clean artifacts
+        const cleanCode = editedCode || suggestion.extractedCode
+            .replace(/^# Full Python script here\.\.\.\s*/i, '')
+            .replace(/^# based on this suggestion.*\s*/i, '')
+            .trim();
 
-    // Truncate helper
-    const truncateText = (text: string, maxLength: number) => {
-        if (text.length <= maxLength) return { text, isTruncated: false };
-        return { text: text.slice(0, maxLength) + '...', isTruncated: true };
+        // Simple heuristic: If it starts with imports or is very long, treat as replacement
+        const isReplacement = cleanCode.startsWith('import ') ||
+            cleanCode.startsWith('from ') ||
+            cleanCode.length > (currentScript.length * 0.8);
+
+        return isReplacement
+            ? cleanCode
+            : currentScript + '\n\n# === AI Improvement Suggestion ===\n' + cleanCode;
     };
 
     const handleApplyClick = () => {
@@ -77,10 +80,12 @@ export function SuggestionPanel({
     };
 
     const handleConfirmApply = () => {
-        const mergedCode = currentScript + '\n\n# === AI Improvement Suggestion ===\n' + (editedCode || suggestion?.extractedCode || '');
-        onApply(mergedCode);
+        onApply(getMergedCode());
         setShowConfirm(false);
     };
+
+    // Modified code for diff view
+    const modifiedCodePreview = getMergedCode();
 
     const tabs = [
         { id: 'suggestion', label: 'Suggestion', icon: Code2 },
@@ -122,36 +127,32 @@ export function SuggestionPanel({
                         boxShadow: `0 25px 50px -12px rgba(0,0,0,0.5), 0 0 40px ${themeColor}20`
                     }}
                 >
-                    {/* Header */}
+                    {/* Header - Centered */}
                     <div
-                        className="flex items-center justify-between px-6 py-4 border-b"
+                        className="relative px-6 py-4 border-b flex items-center justify-center"
                         style={{ borderColor: 'rgba(255,255,255,0.1)' }}
                     >
-                        <div className="flex items-center gap-3">
-                            <div
-                                className="p-2 rounded-xl"
-                                style={{ background: `${themeColor}20` }}
-                            >
+                        <div className="text-center">
+                            <div className="flex items-center justify-center gap-2 mb-1">
                                 <Rocket className="w-5 h-5" style={{ color: themeColor }} />
-                            </div>
-                            <div>
                                 <h3 className="text-lg font-bold text-white">AI Suggestion</h3>
-                                <p className="text-xs text-white/40">
-                                    Review and apply to your training script
-                                </p>
                             </div>
+                            <p className="text-xs text-white/40">
+                                Review parameters and retrain your model
+                            </p>
                         </div>
+
                         <button
                             onClick={onClose}
-                            className="p-2 rounded-xl hover:bg-white/10 transition-colors"
+                            className="absolute right-6 top-1/2 -translate-y-1/2 p-2 rounded-xl hover:bg-white/10 transition-colors"
                         >
                             <X className="w-5 h-5 text-white/60" />
                         </button>
                     </div>
 
-                    {/* Tabs */}
+                    {/* Tabs - Centered */}
                     <div
-                        className="flex items-center gap-2 px-6 py-3 border-b"
+                        className="flex items-center justify-center gap-2 px-6 py-3 border-b"
                         style={{ borderColor: 'rgba(255,255,255,0.05)' }}
                     >
                         {tabs.map(tab => (
@@ -173,8 +174,8 @@ export function SuggestionPanel({
                         ))}
                     </div>
 
-                    {/* Content */}
-                    <div className="flex-1 overflow-y-auto p-6" style={{ height: 'calc(100% - 180px)' }}>
+                    {/* Content - Full Height with Bottom Padding for Footer */}
+                    <div className="flex-1 overflow-y-auto p-6 pb-40 h-full">
                         {activeTab === 'suggestion' && (
                             <div className="space-y-4">
                                 {/* Version Mismatch Warning */}
@@ -234,38 +235,15 @@ export function SuggestionPanel({
                                     </div>
                                 )}
 
-                                {/* Suggestion text with truncation */}
+                                {/* Suggestion text - Full Display */}
                                 <div className="text-sm text-white/60 leading-relaxed whitespace-pre-wrap">
-                                    {(() => {
-                                        const { text: displayText, isTruncated } = isTextExpanded
-                                            ? { text: suggestion.text, isTruncated: false }
-                                            : truncateText(suggestion.text, MAX_TEXT_LENGTH);
-                                        return (
-                                            <>
-                                                {displayText}
-                                                {(isTruncated || (suggestion.text.length > MAX_TEXT_LENGTH && isTextExpanded)) && (
-                                                    <button
-                                                        onClick={() => setIsTextExpanded(!isTextExpanded)}
-                                                        className="ml-2 text-xs font-medium hover:underline"
-                                                        style={{ color: themeColor }}
-                                                    >
-                                                        {isTextExpanded ? 'Show less' : 'Show more'}
-                                                    </button>
-                                                )}
-                                            </>
-                                        );
-                                    })()}
+                                    {suggestion.text}
                                 </div>
 
                                 {suggestion.extractedCode && (
                                     <div className="mt-4">
                                         <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-2">
                                             Extracted Code
-                                            {suggestion.extractedCode.length > MAX_CODE_LENGTH && (
-                                                <span className="text-white/30 font-normal ml-2">
-                                                    ({suggestion.extractedCode.length} chars)
-                                                </span>
-                                            )}
                                         </h4>
                                         <div
                                             className="rounded-xl p-4 font-mono text-sm overflow-x-auto max-h-[300px] overflow-y-auto"
@@ -286,7 +264,7 @@ export function SuggestionPanel({
                         {activeTab === 'diff' && (
                             <DiffViewer
                                 originalCode={currentScript}
-                                modifiedCode={currentScript + '\n\n# === AI Improvement Suggestion ===\n' + (suggestion.extractedCode || '')}
+                                modifiedCode={modifiedCodePreview}
                                 diffs={[]}
                                 title="Changes Preview"
                                 collapsible={false}
@@ -301,53 +279,61 @@ export function SuggestionPanel({
                         )}
                     </div>
 
-                    {/* Footer Actions */}
+                    {/* Footer Actions - With Blur Overlay */}
                     <div
-                        className="absolute bottom-0 left-0 right-0 px-6 py-4 border-t flex items-center justify-between"
+                        className="absolute bottom-0 left-0 right-0 px-6 py-6 border-t flex flex-col items-center gap-3"
                         style={{
                             borderColor: 'rgba(255,255,255,0.1)',
-                            background: 'rgba(0,0,0,0.3)',
-                            backdropFilter: 'blur(10px)'
+                            background: 'linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.8))',
+                            backdropFilter: 'blur(20px)',
+                            paddingBottom: '2rem'
                         }}
                     >
-                        <button
-                            onClick={onClose}
-                            className="px-4 py-2 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/10 transition-all"
-                        >
-                            Close
-                        </button>
+                        <div className="flex items-center gap-3 w-full justify-center">
+                            <button
+                                onClick={onClose}
+                                className="px-6 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/10"
+                            >
+                                Cancel
+                            </button>
 
-                        <div className="flex items-center gap-3">
                             <button
                                 onClick={handleApplyClick}
                                 disabled={loading || !suggestion.extractedCode}
-                                className="px-5 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-6 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                                 style={{
-                                    background: 'rgba(255,255,255,0.1)',
+                                    background: 'rgba(255,255,255,0.05)',
                                     border: `1px solid ${themeColor}50`,
                                     color: themeColor
                                 }}
                             >
                                 <Check className="w-4 h-4 inline mr-2" />
-                                Apply Code
+                                Apply Only
                             </button>
 
-                            <button
-                                onClick={onRetrain}
-                                disabled={loading}
-                                className="px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:scale-105 hover:brightness-110 disabled:opacity-50"
-                                style={{
-                                    background: `linear-gradient(135deg, ${themeColor}, ${themeColor}80)`,
-                                    boxShadow: `0 4px 20px ${themeColor}40`
-                                }}
-                            >
-                                {loading ? (
-                                    <Loader2 className="w-4 h-4 inline mr-2 animate-spin" />
-                                ) : (
-                                    <Rocket className="w-4 h-4 inline mr-2" />
-                                )}
-                                Retrain Now
-                            </button>
+                            <div className="relative group">
+                                <button
+                                    onClick={() => onRetrain(modifiedCodePreview)}
+                                    disabled={loading}
+                                    className="px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:scale-105 hover:brightness-110 disabled:opacity-50 shadow-lg"
+                                    style={{
+                                        background: `linear-gradient(135deg, ${themeColor}, ${themeColor}80)`,
+                                        boxShadow: `0 4px 20px ${themeColor}40`
+                                    }}
+                                >
+                                    {loading ? (
+                                        <Loader2 className="w-4 h-4 inline mr-2 animate-spin" />
+                                    ) : (
+                                        <Rocket className="w-4 h-4 inline mr-2" />
+                                    )}
+                                    Apply to Editor
+                                </button>
+                                {/* Tooltip for Retrain */}
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-48 p-3 rounded-xl bg-black/90 border border-white/10 text-xs text-white/70 text-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none backdrop-blur-xl">
+                                    Updates the code in the editor so you can review it before manually starting training.
+                                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-black/90 rotate-45 border-r border-b border-white/10"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

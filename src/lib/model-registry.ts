@@ -111,22 +111,60 @@ export async function registerModel(data: {
     target_column?: string;
     algorithm?: string;
 }): Promise<string> {
+    // Check for existing model with same projectId and jobId to prevent duplicates
+    if (data.jobId && data.projectId) {
+        const existingByJob = await adminDb.collection('models')
+            .where('projectId', '==', data.projectId)
+            .where('jobId', '==', data.jobId)
+            .limit(1)
+            .get();
+
+        if (!existingByJob.empty) {
+            console.log(`[Model Registry] Found existing model for project ${data.projectId} job ${data.jobId}`);
+            return existingByJob.docs[0].id;
+        }
+    }
+
+    // Also check for existing model with same name for same owner (optional but prevents UI duplicates)
+    if (data.name && data.ownerId) {
+        const existingByName = await adminDb.collection('models')
+            .where('ownerId', '==', data.ownerId)
+            .where('name', '==', data.name)
+            .limit(1)
+            .get();
+
+        if (!existingByName.empty) {
+            console.log(`[Model Registry] Found existing model with name "${data.name}" for owner ${data.ownerId}`);
+            // Update the existing model instead of creating duplicate
+            const existingId = existingByName.docs[0].id;
+            await adminDb.collection('models').doc(existingId).update({
+                metrics: data.metrics || existingByName.docs[0].data().metrics,
+                gcsPath: data.gcsPath || existingByName.docs[0].data().gcsPath,
+                jobId: data.jobId || existingByName.docs[0].data().jobId,
+                trainedAt: data.trainedAt || existingByName.docs[0].data().trainedAt,
+                version: (existingByName.docs[0].data().version || 1) + 1,
+                updatedAt: FieldValue.serverTimestamp()
+            });
+            return existingId;
+        }
+    }
+
     const modelRef = await adminDb.collection('models').add({
         name: data.name,
         description: data.description || `Trained model for ${data.name}`,
         taskType: data.taskType,
         projectId: data.projectId,
         ownerId: data.ownerId,
-        ownerEmail: data.ownerEmail || null,
-        ownerName: data.ownerName || null,
-        ownerPhotoURL: data.ownerPhotoURL || null,
+        ownerEmail: data.ownerEmail || '',
+        ownerName: data.ownerName || '',
+        ownerPhotoURL: data.ownerPhotoURL || '',
         version: data.version || 1,
-        metrics: data.metrics || null,
-        gcsPath: data.gcsPath || null,
-        jobId: data.jobId || null,
-        trainedAt: data.trainedAt || null,
-        bestVersionId: null,
-        bestMetricValue: data.metrics?.accuracy || null,
+        metrics: data.metrics || {},
+        gcsPath: data.gcsPath || '',
+        jobId: data.jobId || '',
+        trainedAt: data.trainedAt || new Date().toISOString(),
+        bestVersionId: '',
+        bestMetricValue: data.metrics?.accuracy || 0,
         totalVersions: 1,
         visibility: data.visibility || 'private',
         status: data.status || 'ready',

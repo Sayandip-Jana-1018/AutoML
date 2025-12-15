@@ -375,7 +375,8 @@ export const CodeEditor = ({ code, onChange, onSave, onRun, onSyncVSCode, saving
                                 whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
                                 wordBreak: wordWrap ? 'break-word' : 'normal',
                                 fontSize: `${fontSize}px`,
-                                lineHeight: '1.6'
+                                lineHeight: '1.6',
+                                overflow: 'hidden'  // FIX: Prevent double scrollbar - outer container handles scrolling
                             }}
                         />
                     </div>

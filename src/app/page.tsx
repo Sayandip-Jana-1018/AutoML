@@ -51,7 +51,7 @@ export default function Home() {
             {/* Background */}
             <div className="fixed inset-0 z-0 h-full w-full dark:opacity-90 transition-opacity duration-500 pointer-events-none">
                 <Silk
-                    key={themeColor}
+                    key={`${themeColor}-${silkConfig.speed}-${silkConfig.scale}-${silkConfig.noiseIntensity}-${silkConfig.rotation}`}
                     color={themeColor}
                     speed={silkConfig.speed}
                     scale={silkConfig.scale}

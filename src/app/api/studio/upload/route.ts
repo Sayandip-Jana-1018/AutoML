@@ -10,21 +10,56 @@ const TIER_UPLOAD_LIMITS = {
     gold: 1024 * 1024 * 1024   // 1GB
 };
 
-// Helper to infer dataset type
-function inferDatasetType(mimeType: string, fileName: string): 'tabular' | 'image' | 'text' | 'unknown' {
-    const lowerName = fileName.toLowerCase();
-    if (mimeType.includes('csv') || lowerName.endsWith('.csv') || lowerName.endsWith('.xlsx')) return 'tabular';
-    if (mimeType.includes('image') || lowerName.endsWith('.jpg') || lowerName.endsWith('.png')) return 'image';
-    if (mimeType.includes('zip') || lowerName.endsWith('.zip')) {
-        return 'image';
+// Helper to infer dataset type (extended to support more formats)
+function inferDatasetType(mimeType: string, fileName: string, overrideType?: string): 'tabular' | 'image' | 'text' | 'json' | 'unknown' {
+    // Use override if provided
+    if (overrideType && ['tabular', 'image', 'text', 'json'].includes(overrideType)) {
+        return overrideType as 'tabular' | 'image' | 'text' | 'json';
     }
-    if (mimeType.includes('text') || lowerName.endsWith('.txt') || lowerName.endsWith('.json')) return 'text';
+
+    const lowerName = fileName.toLowerCase();
+
+    // Tabular formats
+    if (mimeType.includes('csv') || lowerName.endsWith('.csv') || lowerName.endsWith('.tsv')) return 'tabular';
+    if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls') || lowerName.endsWith('.parquet')) return 'tabular';
+    if (lowerName.endsWith('.jsonl')) return 'tabular'; // JSONL is line-delimited JSON for tabular data
+
+    // JSON format
+    if (lowerName.endsWith('.json')) return 'json';
+    if (mimeType.includes('json')) return 'json';
+
+    // Image formats
+    if (mimeType.includes('image') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.png') || lowerName.endsWith('.gif') || lowerName.endsWith('.webp')) return 'image';
+    if (mimeType.includes('zip') || lowerName.endsWith('.zip')) {
+        // Check filename for image-related keywords
+        if (lowerName.includes('image') || lowerName.includes('photo') || lowerName.includes('pic')) {
+            return 'image';
+        }
+        return 'image'; // Default ZIP to image dataset
+    }
+
+    // Text formats
+    if (mimeType.includes('text') || lowerName.endsWith('.txt')) return 'text';
+
     return 'unknown';
 }
 
 export async function POST(req: Request) {
     try {
-        const { projectId, fileName, contentType, fileSize, userTier = 'free', fileHash, userId } = await req.json();
+        const {
+            projectId,
+            fileName,
+            contentType,
+            fileSize,
+            userTier = 'free',
+            fileHash,
+            userId,
+            // NEW: Options from preview UI
+            overrideType,
+            targetColumn,
+            sheetName,
+            zipAsClassFolders
+        } = await req.json();
 
         if (!projectId || !fileName || !contentType) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -124,7 +159,7 @@ export async function POST(req: Request) {
         // 1. Generate Signed URL
         const { url, gcsPath } = await generateUploadSignedUrl(projectId, fileName, contentType);
 
-        const datasetType = inferDatasetType(contentType, fileName);
+        const datasetType = inferDatasetType(contentType, fileName, overrideType);
 
         // 2. Create pending dataset record (include hash for future deduplication)
         const datasetRef = await adminDb.collection('projects').doc(projectId).collection('datasets').add({
@@ -135,6 +170,10 @@ export async function POST(req: Request) {
             contentType,
             fileSize: fileSize || 0,
             fileHash: fileHash || null, // Store hash for deduplication
+            // NEW: Options from preview UI
+            targetColumn: targetColumn || null,
+            sheetName: sheetName || null,
+            zipAsClassFolders: zipAsClassFolders || false,
             createdAt: FieldValue.serverTimestamp(),
         });
 

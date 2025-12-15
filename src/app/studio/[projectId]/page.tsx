@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { useThemeColor } from '@/context/theme-context';
 import { useTraining } from '@/context/training-context';
-import { doc, getDoc, onSnapshot, updateDoc, collection, orderBy, query, serverTimestamp, addDoc, getDocs, limit, where } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, updateDoc, collection, orderBy, query, serverTimestamp, addDoc, getDocs, limit, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Loader2, BarChart3, Terminal, History, Code, Clock, Globe, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -98,11 +98,17 @@ export default function StudioPage() {
     const [trainingError, setTrainingError] = useState<string | null>(null);
 
     // Sync overlay visibility with global context on mount
+    // IMPORTANT: Only show overlay if the activeJob belongs to THIS project
     useEffect(() => {
-        if (training.activeJob && ['running', 'provisioning', 'installing', 'downloading', 'training', 'RUNNING', 'PROVISIONING'].includes(training.activeJob.status)) {
+        if (training.activeJob &&
+            training.activeJob.projectId === projectId &&
+            ['running', 'provisioning', 'installing', 'downloading', 'training', 'RUNNING', 'PROVISIONING'].includes(training.activeJob.status)) {
             setShowTrainingProgress(true);
+        } else {
+            // Clear overlay if job belongs to different project
+            setShowTrainingProgress(false);
         }
-    }, [training.activeJob]);
+    }, [training.activeJob, projectId]);
 
     // Training success celebration state
     const [showSuccessCelebration, setShowSuccessCelebration] = useState(false);
@@ -351,20 +357,15 @@ export default function StudioPage() {
             // Check if content is same as last version (normalize whitespace)
             const normalizedLocal = localCode.trim();
             const normalizedLast = lastContent.trim();
+            const isDuplicate = normalizedLocal === normalizedLast && lastVersion > 0;
 
-            // If saving for training, always save (skip duplicate check message)
-            // If manual save, check for duplicates and show message
-            if (normalizedLocal === normalizedLast && lastVersion > 0) {
-                if (!forTraining) {
-                    showToast({
-                        type: 'info',
-                        title: "Version Already Exists",
-                        message: `This code is identical to v${lastVersion}`,
-                    });
-                }
-                // For training, silently use existing version
+            // If saving for training and it's a duplicate, we can silently skip saving a new version
+            // But if it's a MANUAL save (buttons), we ALWAYS save a new version as requested by user
+            if (isDuplicate && forTraining) {
+                // Silently use existing version info for training
+                // No action needed, logic below won't run
             } else {
-                // Add new script version
+                // Add new script version (Always save for manual requests, even if duplicate)
                 await addDoc(scriptsRef, {
                     version: lastVersion + 1,
                     content: localCode,
@@ -378,7 +379,7 @@ export default function StudioPage() {
                     showToast({
                         type: 'success',
                         title: "Script Saved!",
-                        message: `Version ${lastVersion + 1} saved to history`,
+                        message: `Version ${lastVersion + 1} saved ` + (isDuplicate ? '(Identity)' : ''),
                     });
                 }
             }
@@ -394,11 +395,86 @@ export default function StudioPage() {
         }
     };
 
+    // Add writeBatch to existing imports if not present, but since I am replacing a chunk, I will assume imports are handled or I will insert logic that uses them if they are imported. 
+    // Wait, I need to check if writeBatch, collection, where, getDocs, limit are imported. 
+    // They are imported in the file line 8: import { doc, getDoc, onSnapshot, updateDoc, collection, orderBy, query, serverTimestamp, addDoc, getDocs, limit, where } from 'firebase/firestore';
+    // Missing: writeBatch. 
+    // I need to add writeBatch to imports first!
+
     const handleSaveName = async (name: string) => {
-        await updateDoc(doc(db, 'projects', projectId), {
-            name,
-            lastUpdated: serverTimestamp()
-        });
+        try {
+            // 1. Update project name
+            await updateDoc(doc(db, 'projects', projectId), {
+                name,
+                lastUpdated: serverTimestamp()
+            });
+
+            // 2. Sync name to all models belonging to this project
+            try {
+                // Find all models for this project
+                const modelsRef = collection(db, 'models');
+                const q = query(modelsRef, where('projectId', '==', projectId));
+                const snapshot = await getDocs(q);
+
+                if (!snapshot.empty) {
+                    const batch = writeBatch(db);
+                    let count = 0;
+
+                    snapshot.docs.forEach((modelDoc) => {
+                        const modelRef = doc(db, 'models', modelDoc.id);
+                        // Update root name and metrics.name if it exists
+                        // Note: We use dot notation for nested field update 'metrics.name' 
+                        // but we must check if metrics exist? updateDoc merges, so it's safe if metrics exists? 
+                        // Actually, to be safe, we just update root Name. 
+                        // But user screenshot showed metrics.name. 
+                        // Let's update both to covers all bases.
+                        const updateData: any = { name };
+
+                        // We can't conditionally update 'metrics.name' easily in a batch without reading first (which we did).
+                        const data = modelDoc.data();
+                        if (data.metrics) {
+                            updateData['metrics.name'] = name;
+                        }
+
+                        // Also update description if it looks like a default autogenerated one
+                        // This fixes "Trained model for oldName"
+                        if (data.description && typeof data.description === 'string') {
+                            if (data.description.startsWith('Trained model for') || data.description.includes('@Project')) {
+                                // Replace or reset description
+                                // Simple heuristic: set it to "Trained model for {newName}"
+                                updateData['description'] = `Trained model for ${name}`;
+                            }
+                        }
+
+                        batch.update(modelRef, updateData);
+                        count++;
+                    });
+
+                    if (count > 0) {
+                        await batch.commit();
+                        console.log(`[Studio] Synced name to ${count} models`);
+                    }
+                }
+            } catch (syncError) {
+                console.error('Failed to sync model names:', syncError);
+                // Don't fail the whole operation if sync fails, just log it
+            }
+
+            showToast({
+                type: 'success',
+                title: 'Project Renamed',
+                message: 'Name updated successfully (synced to models)',
+                duration: 2000
+            });
+        } catch (error) {
+            console.error('Failed to update project name:', error);
+            showToast({
+                type: 'error',
+                title: 'Update Failed',
+                message: 'Could not save project name',
+                duration: 3000
+            });
+        }
     };
 
     const handleRunTraining = async () => {
@@ -586,7 +662,7 @@ export default function StudioPage() {
         }
     };
 
-    const handleUploadStart = async (file: File) => {
+    const handleUploadStart = async (file: File, options?: { targetColumn?: string; zipAsClassFolders?: boolean; cleaningConfig?: any; columnTypes?: any }) => {
         try {
             let fileHash: string | undefined;
             try {
@@ -598,6 +674,8 @@ export default function StudioPage() {
                 console.warn('[Upload] Hash calculation failed:', hashError);
             }
 
+            console.log('[Upload] Target column from UI:', options?.targetColumn);
+
             const response = await fetch('/api/studio/upload', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -608,7 +686,10 @@ export default function StudioPage() {
                     fileSize: file.size,
                     userTier: userTier || 'free',
                     fileHash,
-                    userId: user?.uid
+                    userId: user?.uid,
+                    // Pass options from upload UI
+                    targetColumn: options?.targetColumn,
+                    zipAsClassFolders: options?.zipAsClassFolders
                 })
             });
 
@@ -1062,7 +1143,14 @@ export default function StudioPage() {
                     columns: project.dataset.columns || [],
                     columnTypes: project.dataset.columnTypes,
                     rowCount: project.dataset.rowCount || 0,
-                    fileSize: project.dataset.fileSize
+                    fileSize: project.dataset.fileSize,
+                    // NEW: Additional quality info from schema
+                    targetColumn: project.targetColumnSuggestion || activeDataset?.schema?.targetColumnSuggestion,
+                    nullPercentage: activeDataset?.schema?.missingValueStats?.percentMissing || 0,
+                    nullCount: activeDataset?.schema?.missingValueStats?.totalMissing || 0,
+                    duplicateRows: activeDataset?.schema?.duplicateRows || 0,
+                    qualityScore: activeDataset?.schema?.qualityScore || 80,
+                    previewRows: activeDataset?.schema?.previewRows || []
                 } : null}
                 isOpen={showDatasetOverlay}
                 onClose={() => setShowDatasetOverlay(false)}
@@ -1378,15 +1466,34 @@ export default function StudioPage() {
                     }
                     window.history.replaceState({}, '', `/studio/${projectId}`);
                 }}
-                onRetrain={() => {
-                    // Apply suggestion first, then trigger training
-                    if (suggestionData?.extractedCode) {
-                        const mergedCode = localCode + '\n\n# === AI Improvement Suggestion ===\n' + suggestionData.extractedCode;
-                        setLocalCode(mergedCode);
-                    }
+                onRetrain={(mergedCode) => {
+                    // Apply suggestion
+                    const finalCode = mergedCode || (localCode + '\n\n# === AI Improvement Suggestion ===\n' + (suggestionData?.extractedCode || ''));
+                    setLocalCode(finalCode);
+
                     setShowSuggestionPanel(false);
-                    // Open training config to let user start training
-                    setShowTrainingConfig(true);
+
+                    // Mark as applied in DB (mirroring onApply logic)
+                    if (suggestionData?.id && user?.uid) {
+                        fetch(`/api/studio/suggestions/${suggestionData.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                appliedBy: user.uid,
+                                appliedByEmail: user.email,
+                                extractedCode: suggestionData?.extractedCode
+                            })
+                        }).catch(console.error);
+                    }
+
+                    // Just update state and notify user, do NOT auto-open training config
+                    showToast({
+                        type: 'info',
+                        title: 'Ready to Train',
+                        message: 'Code updated. Review changes and click "Train Model" when ready.',
+                        duration: 4000
+                    });
+
                     window.history.replaceState({}, '', `/studio/${projectId}`);
                 }}
                 loading={suggestionLoading}

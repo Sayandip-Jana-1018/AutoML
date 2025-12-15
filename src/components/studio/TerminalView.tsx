@@ -156,84 +156,97 @@ export const TerminalView = ({
     return (
         <GlassCard className="h-full overflow-hidden" hover={false}>
             <div className="h-full flex flex-col min-h-0">
-                {/* Single Combined Header - Logs + Metadata */}
-                <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-white/10 bg-black/20">
-                    {/* Left: Logs + Status + Metadata */}
-                    <div className="flex items-center gap-3 text-[10px] flex-wrap">
-                        <span className="font-mono text-xs text-white font-bold">Logs</span>
-                        {status && (
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${status === 'running' || status === 'RUNNING' || status === 'PROVISIONING'
-                                ? 'bg-yellow-500/20 text-yellow-400'
-                                : status === 'succeeded' || status === 'completed' || status === 'deployed'
-                                    ? 'bg-green-500/20 text-green-400'
-                                    : status === 'failed'
-                                        ? 'bg-red-500/20 text-red-400'
-                                        : 'bg-white/10 text-white/50'
-                                }`}>
-                                {status.toUpperCase()}
-                            </span>
-                        )}
-                        {/* Separator */}
-                        {jobMetadata && <span className="text-white/20">|</span>}
-                        {/* Metadata inline */}
-                        {jobMetadata && (
-                            <>
-                                <span className="text-white/70">{jobMetadata.originalFilename || 'dataset.csv'}</span>
-                                <span className="text-white/30">•</span>
-                                <span className="capitalize" style={{ color: themeColor }}>{jobMetadata.taskType || 'classification'}</span>
-                                <span className="text-white/30">•</span>
-                                <span className="text-purple-400">{jobMetadata.algorithm || 'RandomForest'}</span>
-                                {jobMetadata.vmName && (
-                                    <>
-                                        <span className="text-white/30">•</span>
-                                        <span className="text-amber-400">{jobMetadata.config?.machineType || 'e2-medium'}</span>
-                                    </>
-                                )}
-                            </>
-                        )}
-                        {isPolling && (
-                            <span className="flex items-center gap-1 text-white/30">
-                                <RefreshCw className="w-3 h-3 animate-spin" />
-                            </span>
-                        )}
+                {/* Two-Line Header - Row 1: Logs + Status + Time + Cost | Row 2: Metadata */}
+                <div className="flex-shrink-0 border-b border-white/10 bg-black/20">
+                    {/* Row 1: Logs, Status, Time/Cost */}
+                    <div className="flex items-center justify-between px-3 py-2">
+                        <div className="flex items-center gap-3">
+                            <span className="font-mono text-xs text-white font-bold">Logs</span>
+                            {status && (
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${status === 'running' || status === 'RUNNING' || status === 'PROVISIONING'
+                                    ? 'bg-yellow-500/20 text-yellow-400'
+                                    : status === 'succeeded' || status === 'completed' || status === 'deployed'
+                                        ? 'bg-green-500/20 text-green-400'
+                                        : status === 'failed'
+                                            ? 'bg-red-500/20 text-red-400'
+                                            : 'bg-white/10 text-white/50'
+                                    }`}>
+                                    {status.toUpperCase()}
+                                </span>
+                            )}
+                            {isPolling && (
+                                <span className="flex items-center gap-1 text-white/30">
+                                    <RefreshCw className="w-3 h-3 animate-spin" />
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Right side: Time, Cost, Console, Refresh */}
+                        <div className="flex items-center gap-3 text-[10px]">
+                            {jobMetadata && (
+                                <>
+                                    {jobMetadata.actualRuntimeSeconds ? (
+                                        <span className="flex items-center gap-1 text-green-400 font-bold">
+                                            <Clock className="w-3 h-3" />
+                                            {formatRuntime(jobMetadata.actualRuntimeSeconds)}
+                                        </span>
+                                    ) : jobMetadata.estimatedMinutes ? (
+                                        <span className="flex items-center gap-1 text-yellow-400">
+                                            <Clock className="w-3 h-3" />
+                                            ~{jobMetadata.estimatedMinutes}m
+                                        </span>
+                                    ) : null}
+                                    {jobMetadata.actualCostInr !== undefined && jobMetadata.actualCostInr !== null ? (
+                                        <span className="flex items-center gap-1 text-green-400 font-bold">
+                                            <DollarSign className="w-3 h-3" />
+                                            ₹{jobMetadata.actualCostInr.toFixed(4)}
+                                        </span>
+                                    ) : jobMetadata.estimatedTotalCost ? (
+                                        <span className="flex items-center gap-1 text-white/50">
+                                            <DollarSign className="w-3 h-3" />
+                                            ~₹{(jobMetadata.estimatedTotalCost * 83).toFixed(4)}
+                                        </span>
+                                    ) : null}
+                                    {jobMetadata.consoleUrl && (
+                                        <a
+                                            href={jobMetadata.consoleUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-1 text-blue-400 hover:text-blue-300"
+                                        >
+                                            <ExternalLink className="w-3 h-3" />
+                                        </a>
+                                    )}
+                                </>
+                            )}
+                            {projectId && jobId && (
+                                <button
+                                    onClick={handleRefresh}
+                                    className="p-1 rounded hover:bg-white/10 transition-colors"
+                                    title="Refresh logs"
+                                >
+                                    <RefreshCw className="w-3 h-3 text-white/50 hover:text-white" />
+                                </button>
+                            )}
+                        </div>
                     </div>
 
-                    {/* Right: Time, Cost, Console, Refresh */}
-                    <div className="flex items-center gap-3 text-[10px]">
-                        {jobMetadata && (
-                            <>
-                                {jobMetadata.actualRuntimeSeconds ? (
-                                    <span className="text-green-400 font-bold">{formatRuntime(jobMetadata.actualRuntimeSeconds)}</span>
-                                ) : jobMetadata.estimatedMinutes ? (
-                                    <span className="text-yellow-400">~{jobMetadata.estimatedMinutes}m</span>
-                                ) : null}
-                                {jobMetadata.actualCostInr !== undefined && jobMetadata.actualCostInr !== null ? (
-                                    <span className="text-green-400 font-bold">₹{jobMetadata.actualCostInr.toFixed(4)}</span>
-                                ) : jobMetadata.estimatedTotalCost ? (
-                                    <span className="text-white/50">~₹{(jobMetadata.estimatedTotalCost * 83).toFixed(4)}</span>
-                                ) : null}
-                                {jobMetadata.consoleUrl && (
-                                    <a
-                                        href={jobMetadata.consoleUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center gap-1 text-blue-400 hover:text-blue-300"
-                                    >
-                                        <ExternalLink className="w-3 h-3" />
-                                    </a>
-                                )}
-                            </>
-                        )}
-                        {projectId && jobId && (
-                            <button
-                                onClick={handleRefresh}
-                                className="p-1 rounded hover:bg-white/10 transition-colors"
-                                title="Refresh logs"
-                            >
-                                <RefreshCw className="w-3 h-3 text-white/50 hover:text-white" />
-                            </button>
-                        )}
-                    </div>
+                    {/* Row 2: Dataset Metadata */}
+                    {jobMetadata && (
+                        <div className="flex items-center gap-2 px-3 py-1.5 border-t border-white/5 text-[10px] bg-black/10">
+                            <span className="text-white/70 font-medium">{jobMetadata.originalFilename || 'dataset.csv'}</span>
+                            <span className="text-white/30">•</span>
+                            <span className="capitalize" style={{ color: themeColor }}>{jobMetadata.taskType || 'classification'}</span>
+                            <span className="text-white/30">•</span>
+                            <span className="text-purple-400">{jobMetadata.algorithm || 'RandomForest'}</span>
+                            {jobMetadata.vmName && (
+                                <>
+                                    <span className="text-white/30">•</span>
+                                    <span className="text-amber-400">{jobMetadata.config?.machineType || 'e2-medium'}</span>
+                                </>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Logs - Scrollable, takes remaining space */}

@@ -152,6 +152,36 @@ All Studio outputs consolidated into a single, accessible row:
 
 ---
 
+## 🆕 V5.1 Features (December 2024) - Enhanced Data Import
+
+### 📊 Multi-Table HTML Selector
+When importing webpages with multiple tables (like Wikipedia):
+- **Auto-detects all tables** on the page
+- **Shows clickable buttons** with table name + row count
+- **Instant preview switching** between tables
+- **Smart naming** from caption, id, or column headers
+
+### 🖼️ ZIP Image Dataset Preview
+For image classification datasets:
+- **Thumbnail grid** showing first 6 sample images
+- **Folder structure detection** with class labels
+- **Image count per folder** for dataset validation
+- **"Treat folders as class labels"** checkbox
+
+### 🔗 Enhanced URL Import
+- **Direct image URL support** - paste JPG/PNG URLs directly
+- **HTML table extraction** - extract tables from any webpage
+- **Better error handling** for unsupported content types
+
+### 📁 Supported Formats
+Now includes HTML in the drop zone:
+`CSV`, `XLSX`, `JSON`, `JSONL`, `TXT`, `ZIP`, `Images`, `HTML`
+
+### Dependencies Added
+- `jszip` - For reading ZIP file contents in browser
+
+---
+
 ## 🆕 V5.0 Features (December 2024)
 
 ### 🔗 Real-Time Collaboration System

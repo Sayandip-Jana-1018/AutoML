@@ -158,7 +158,7 @@ Model context:
 - Algorithm: ${selectedModel.algorithm || 'Unknown'}
 - Target: ${selectedModel.target_column || 'Unknown'}
 - Name: ${selectedModel.name}`,
-                        model: 'gemini'
+                        model: 'openai'
                     })
                 })
 
@@ -537,6 +537,33 @@ Model context:
                                 </button>
                             </div>
 
+                            {/* Global Retrain Button with Context */}
+                            <div className="mb-4">
+                                <button
+                                    onClick={() => {
+                                        // Grab last 6 messages for context
+                                        const recentMessages = messages.slice(-6).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
+                                        const contextMessage = `Context from recent chat:\n${recentMessages}\n\nUser Goal: Update the model based on this conversation.`;
+                                        handleExecuteInStudio(contextMessage, 'manual-retrain', true);
+                                    }}
+                                    disabled={messages.length === 0 || !!executeLoading}
+                                    className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                                    style={{
+                                        background: `linear-gradient(135deg, ${themeColor}40, ${themeColor}20)`,
+                                        border: `1px solid ${themeColor}60`,
+                                        color: 'white',
+                                        boxShadow: `0 4px 15px ${themeColor}20`
+                                    }}
+                                >
+                                    {executeLoading === 'manual-retrain' ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Rocket className="w-4 h-4" />
+                                    )}
+                                    Retrain with Context
+                                </button>
+                            </div>
+
                             {showHistory ? (
                                 /* Chat History View */
                                 <div className="space-y-3">
@@ -549,7 +576,7 @@ Model context:
                                         New Chat
                                     </button>
 
-                                    <div className="text-xs font-bold text-white/40 uppercase tracking-wider mb-2 px-2 mt-4">Recent Chats</div>
+                                    <div className="text-xs font-bold text-white/40 text-center uppercase tracking-wider mb-2 px-2 mt-4">Recent Chats</div>
 
                                     {chatSessions.length === 0 ? (
                                         <div className="text-white/40 text-sm px-2 italic text-center py-8">
@@ -584,7 +611,7 @@ Model context:
                                         <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-white/40" /></div>
                                     ) : (
                                         <div className="space-y-3">
-                                            <div className="text-xs font-bold text-white/40 uppercase tracking-wider mb-2 px-2">Your Trained Models</div>
+                                            <div className="text-xs text-center font-bold text-white/40 uppercase tracking-wider mb-2 px-2">Your Trained Models</div>
                                             {deployedModels.length === 0 ? (
                                                 <div className="text-white/40 text-sm px-2 italic">No trained models found.</div>
                                             ) : (
@@ -700,45 +727,7 @@ Model context:
                                                     <p className="text-sm text-white whitespace-pre-wrap">{cleanMessage(msg.content)}</p>
                                                 </div>
                                                 {/* Action buttons for AI messages with actionable suggestions */}
-                                                {msg.role === "assistant" && hasActionableSuggestion(msg.content) && (
-                                                    <div className="flex gap-2 flex-wrap">
-                                                        <button
-                                                            onClick={() => handleExecuteInStudio(msg.content, msg.id, false)}
-                                                            disabled={executeLoading === msg.id}
-                                                            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all hover:scale-105 disabled:opacity-50"
-                                                            style={{
-                                                                background: 'linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))',
-                                                                border: `1px solid ${themeColor}50`,
-                                                                backdropFilter: 'blur(8px)',
-                                                                color: themeColor
-                                                            }}
-                                                        >
-                                                            {executeLoading === msg.id ? (
-                                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                                            ) : (
-                                                                <Rocket className="w-4 h-4" />
-                                                            )}
-                                                            View in Studio
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleExecuteInStudio(msg.content, msg.id, true)}
-                                                            disabled={executeLoading === msg.id}
-                                                            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all hover:scale-105 disabled:opacity-50"
-                                                            style={{
-                                                                background: `linear-gradient(135deg, ${themeColor}, ${themeColor}cc)`,
-                                                                border: `1px solid ${themeColor}`,
-                                                                color: 'white'
-                                                            }}
-                                                        >
-                                                            {executeLoading === msg.id ? (
-                                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                                            ) : (
-                                                                <Zap className="w-4 h-4" />
-                                                            )}
-                                                            Apply & Retrain
-                                                        </button>
-                                                    </div>
-                                                )}
+                                                {/* Action buttons removed as per request - using global sidebar button instead */}
                                             </div>
                                         </motion.div>
                                     ))}
@@ -757,6 +746,8 @@ Model context:
                             </div>
 
                             <div className="p-6 border-t border-white/20">
+                                {/* Retrain with Context Button - Sidebar (Removed from here) */}
+
                                 {attachedFiles.length > 0 && (
                                     <div className="mb-3 flex flex-wrap gap-2">
                                         {attachedFiles.map((file, i) => (
@@ -786,8 +777,8 @@ Model context:
                             </div>
                         </motion.div>
                     </div>
-                </main>
-            </div>
+                </main >
+            </div >
         </>
     )
 }

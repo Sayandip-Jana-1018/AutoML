@@ -5,7 +5,7 @@ import { motion, AnimatePresence, useMotionValue, useTransform, animate } from '
 import { X, CheckCircle2, AlertCircle, FileCode, Cloud, Cpu, Sparkles, Zap, Brain, Rocket, RefreshCw, Loader2 } from 'lucide-react';
 import { useThemeColor } from '@/context/theme-context';
 
-export type TrainingStep = 'preparing' | 'uploading' | 'submitting' | 'installing' | 'training' | 'validating' | 'deploying' | 'completed' | 'failed';
+export type TrainingStep = 'preparing' | 'uploading' | 'submitting' | 'provisioning' | 'installing' | 'training' | 'validating' | 'deploying' | 'completed' | 'failed';
 
 interface TrainingProgressOverlayProps {
     isOpen: boolean;
@@ -22,8 +22,9 @@ const TRAINING_STEPS = [
     { id: 'preparing', label: 'Prepare', description: 'Generating optimized training code...', icon: FileCode },
     { id: 'uploading', label: 'Upload', description: 'Uploading script to Cloud Storage...', icon: Cloud },
     { id: 'submitting', label: 'Submit', description: 'Submitting job to Compute Engine...', icon: Cpu },
-    { id: 'installing', label: 'Install', description: 'Installing dependencies on VM...', icon: Zap },
-    { id: 'training', label: 'Train', description: 'Model is training...', icon: Sparkles },
+    { id: 'provisioning', label: 'Provision', description: 'Provisioning compute resources...', icon: Zap },
+    { id: 'installing', label: 'Install', description: 'Installing dependencies on VM...', icon: Sparkles },
+    { id: 'training', label: 'Train', description: 'Model is training...', icon: Brain },
     { id: 'validating', label: 'Validate', description: 'Validating model metrics...', icon: CheckCircle2 },
     { id: 'deploying', label: 'Deploy', description: 'Deploying to marketplace...', icon: Rocket },
     { id: 'completed', label: 'Done', description: 'Your model is ready!', icon: CheckCircle2 },
@@ -174,11 +175,21 @@ const MorphingSphere = ({ themeColor, currentStep }: { themeColor: string; curre
             <motion.div
                 className="absolute inset-8 rounded-full"
                 style={{
-                    border: `3px solid ${isFailed ? '#ef4444' : isCompleted ? '#22c55e' : themeColor}`,
+                    borderBottomWidth: '3px',
+                    borderBottomStyle: 'solid',
+                    borderBottomColor: isFailed ? '#ef4444' : isCompleted ? '#22c55e' : themeColor,
+                    borderLeftWidth: '3px',
+                    borderLeftStyle: 'solid',
+                    borderLeftColor: isFailed ? '#ef4444' : isCompleted ? '#22c55e' : themeColor,
+                    borderTopWidth: '3px',
+                    borderTopStyle: 'solid',
                     borderTopColor: 'transparent',
+                    borderRightWidth: '3px',
+                    borderRightStyle: 'solid',
                     borderRightColor: 'transparent',
                     boxShadow: `0 0 20px ${isFailed ? '#ef444460' : isCompleted ? '#22c55e60' : themeColor + '60'}, inset 0 0 20px ${isFailed ? '#ef444420' : isCompleted ? '#22c55e20' : themeColor + '20'}`,
                 }}
+
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
             />
@@ -552,20 +563,6 @@ export const TrainingProgressOverlay = ({
                                         <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                             <path d="M19 9l-7 7-7-7" />
                                         </svg>
-                                    </motion.button>
-                                )}
-
-                                {/* Close button - only show if failed */}
-                                {currentStep === 'failed' && (
-                                    <motion.button
-                                        initial={{ opacity: 0, scale: 0 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        onClick={onClose}
-                                        className="absolute -top-14 right-0 p-3 rounded-full bg-white/5 hover:bg-white/15 text-white/60 hover:text-white transition-all border border-white/10 backdrop-blur-xl"
-                                        whileHover={{ scale: 1.1, rotate: 90 }}
-                                        whileTap={{ scale: 0.9 }}
-                                    >
-                                        <X className="w-5 h-5" />
                                     </motion.button>
                                 )}
 

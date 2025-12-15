@@ -182,13 +182,6 @@ export const TrainingSuccessOverlay = ({
                         ))}
                     </div>
 
-                    {/* Explosion particles from center */}
-                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                        {explosionParticles.map((p) => (
-                            <ExplosionParticle key={p.id} {...p} />
-                        ))}
-                    </div>
-
                     {/* Main content */}
                     <AnimatePresence>
                         {showContent && (
@@ -221,18 +214,6 @@ export const TrainingSuccessOverlay = ({
                                             <CheckCircle2 className="w-12 h-12 text-white" />
                                         </motion.div>
                                     </div>
-
-                                    {/* Pulsing rings */}
-                                    {[1, 2, 3].map((ring) => (
-                                        <motion.div
-                                            key={ring}
-                                            className="absolute inset-0 rounded-full border-2"
-                                            style={{ borderColor: themeColor }}
-                                            initial={{ scale: 1, opacity: 0.5 }}
-                                            animate={{ scale: 2 + ring * 0.5, opacity: 0 }}
-                                            transition={{ duration: 1.5, delay: ring * 0.2, repeat: Infinity }}
-                                        />
-                                    ))}
                                 </motion.div>
 
                                 {/* Title */}

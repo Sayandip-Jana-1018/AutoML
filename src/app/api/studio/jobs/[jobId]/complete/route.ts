@@ -97,6 +97,69 @@ export async function POST(
                 console.log(`[Job Complete] Raw metrics string:`, metricsStr.substring(0, 500));
                 metrics = { parseError: true };
             }
+        } else {
+            // Fallback: Try to extract metrics from output.log
+            console.log(`[Job Complete] metrics.json not found, trying output.log...`);
+            const outputLogPath = `projects/${projectId}/jobs/${jobId}/output.log`;
+            const outputLogFile = bucket.file(outputLogPath);
+            const [logExists] = await outputLogFile.exists();
+
+            if (logExists) {
+                try {
+                    const [logContent] = await outputLogFile.download();
+                    const logStr = logContent.toString();
+
+                    // Parse common metric patterns from output
+                    const extractedMetrics: Record<string, number | null> = {};
+
+                    // Accuracy patterns
+                    const accuracyMatch = logStr.match(/(?:accuracy|Accuracy|ACC|acc)[\s:=]+([0-9.]+)/i);
+                    if (accuracyMatch) extractedMetrics.accuracy = parseFloat(accuracyMatch[1]);
+
+                    // Precision patterns  
+                    const precisionMatch = logStr.match(/(?:precision|Precision)[\s:=]+([0-9.]+)/i);
+                    if (precisionMatch) extractedMetrics.precision = parseFloat(precisionMatch[1]);
+
+                    // Recall patterns
+                    const recallMatch = logStr.match(/(?:recall|Recall)[\s:=]+([0-9.]+)/i);
+                    if (recallMatch) extractedMetrics.recall = parseFloat(recallMatch[1]);
+
+                    // F1 patterns
+                    const f1Match = logStr.match(/(?:f1[\s_-]?score|F1[\s_-]?Score|f1)[\s:=]+([0-9.]+)/i);
+                    if (f1Match) extractedMetrics.f1 = parseFloat(f1Match[1]);
+
+                    // MSE patterns
+                    const mseMatch = logStr.match(/(?:mse|MSE|mean_squared_error)[\s:=]+([0-9.]+)/i);
+                    if (mseMatch) extractedMetrics.mse = parseFloat(mseMatch[1]);
+
+                    // RMSE patterns
+                    const rmseMatch = logStr.match(/(?:rmse|RMSE|root_mean_squared_error)[\s:=]+([0-9.]+)/i);
+                    if (rmseMatch) extractedMetrics.rmse = parseFloat(rmseMatch[1]);
+
+                    // R2 patterns
+                    const r2Match = logStr.match(/(?:r2[\s_-]?score|R2|r_squared)[\s:=]+([0-9.]+)/i);
+                    if (r2Match) extractedMetrics.r2 = parseFloat(r2Match[1]);
+
+                    // Silhouette score (for clustering)
+                    const silhouetteMatch = logStr.match(/(?:silhouette[\s_-]?score|silhouette)[\s:=]+([0-9.-]+)/i);
+                    if (silhouetteMatch) extractedMetrics.silhouette = parseFloat(silhouetteMatch[1]);
+
+                    if (Object.keys(extractedMetrics).length > 0) {
+                        metrics = { ...extractedMetrics, extractedFrom: 'output.log' };
+                        console.log(`[Job Complete] Extracted metrics from output.log:`, metrics);
+                    } else {
+                        console.log(`[Job Complete] No metrics pattern found in output.log`);
+                    }
+                } catch (logErr) {
+                    console.error(`[Job Complete] Failed to read output.log:`, logErr);
+                }
+            }
+
+            // Also check status.json for metrics
+            if (!metrics && statusData.metrics) {
+                metrics = statusData.metrics;
+                console.log(`[Job Complete] Using metrics from status.json:`, metrics);
+            }
         }
 
         // Calculate actual runtime and cost
@@ -166,18 +229,17 @@ export async function POST(
         }
 
         // If completed successfully, register in model registry (only if not already registered)
-        // NOTE: Register even without metrics - model can still be deployed
         if (statusData.status === 'completed' && !job.modelId) {
             try {
                 // Get project details
                 const projectDoc = await adminDb.collection('projects').doc(projectId).get();
                 const project = projectDoc.data();
 
-                if (project?.ownerId || project?.owner_email) {
+                if (project && (project.ownerId || project.owner_email)) {
                     // Extract feature columns from project metadata
-                    const featureColumns = project.inferredColumns ||
-                        project.dataset?.columns?.filter((c: string) => c !== project.targetColumn) ||
-                        [];
+                    const validFeatureColumns = project.inferredColumns ||
+                        (project.dataset?.columns ? project.dataset.columns.filter((c: string) => c !== project.targetColumn) : []);
+
                     const targetColumn = project.targetColumn || project.dataset?.targetColumn || 'target';
 
                     const modelData = {
@@ -185,17 +247,17 @@ export async function POST(
                         taskType: project.inferredTaskType || 'classification',
                         projectId,
                         ownerId: project.ownerId || project.owner_email,
-                        ownerEmail: project.owner_email,
+                        ownerEmail: project.owner_email || project.ownerId || '',
                         version: job.scriptVersion || 1,
-                        metrics,
+                        metrics: metrics || {}, // Ensure not null
                         gcsPath: `gs://${bucket.name}/projects/${projectId}/jobs/${jobId}/model/`,
-                        visibility: 'public' as const, // Changed to public for marketplace display
+                        visibility: 'public' as const,
                         status: 'ready' as const,
                         trainedAt: statusData.completedAt || new Date().toISOString(),
                         updatedAt: new Date().toISOString(),
                         jobId,
                         // Add feature columns for prediction forms
-                        feature_columns: featureColumns,
+                        feature_columns: Array.isArray(validFeatureColumns) ? validFeatureColumns : [],
                         target_column: targetColumn,
                         algorithm: job.algorithm || job.config?.algorithm || 'Unknown'
                     };
@@ -205,8 +267,10 @@ export async function POST(
 
                     // Link model to job
                     await jobRef.update({ modelId });
+                } else {
+                    console.warn(`[Job Complete] Could not register model: Project data missing or no owner. Project exists: ${projectDoc.exists}`);
                 }
-            } catch (regError) {
+            } catch (regError: any) {
                 console.error('[Job Complete] Model registration failed:', regError);
                 // Don't fail the whole request
             }

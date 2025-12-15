@@ -26,6 +26,8 @@ import Link from "next/link";
 import ColorBends from "@/components/react-bits/ColorBends";
 
 interface PublicModel {
+    visibility: string;
+    model: string;
     id: string;
     name: string;
     description: string;
@@ -43,6 +45,9 @@ interface PublicModel {
     isPublic?: boolean;
     algorithm?: string;
     forkCount?: number;
+    userId?: string;
+    createdBy?: string;
+    user_id?: string;
 }
 
 export default function MarketplacePage() {
@@ -280,119 +285,104 @@ export default function MarketplacePage() {
                                             }}
                                         />
 
-                                        {/* Header with Icon */}
-                                        <div className="flex items-start justify-between mb-4 relative z-10">
-                                            <div className="flex items-center gap-3">
+                                        {/* Top Section: Icon, Title, Badge */}
+                                        <div className="flex items-start justify-between gap-4 relative z-10 mb-3">
+                                            <div className="flex items-start gap-3 min-w-0">
+                                                {/* Icon */}
                                                 <div
-                                                    className="w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 mx-auto"
+                                                    className="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center shadow-lg mt-0.5"
                                                     style={{
                                                         background: `linear-gradient(135deg, ${themeColor}30, ${themeColor}10)`,
-                                                        boxShadow: `0 4px 20px ${themeColor}20`
+                                                        boxShadow: `0 4px 15px ${themeColor}10`
                                                     }}
                                                 >
-                                                    <GitBranch className="w-6 h-6" style={{ color: themeColor }} />
+                                                    <GitBranch className="w-5 h-5" style={{ color: themeColor }} />
+                                                </div>
+
+                                                {/* Title & Task Type */}
+                                                <div className="flex flex-col min-w-0">
+                                                    <h3 className="font-bold text-base text-white truncate pr-2" title={model.name}>
+                                                        {model.name}
+                                                    </h3>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <span className="px-1.5 py-0.5 rounded-md text-[9px] font-medium bg-white/5 text-white/50 border border-white/10 uppercase tracking-wider">
+                                                            {model.taskType || 'ML Model'}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
+
+                                            {/* Accuracy Badge (Top Right) */}
                                             {model.bestMetricValue && (
                                                 <div
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+                                                    className="flex items-center gap-1 px-2 py-1 rounded-full border flex-shrink-0"
                                                     style={{
-                                                        background: 'linear-gradient(135deg, rgba(234,179,8,0.2), rgba(234,179,8,0.05))',
-                                                        border: '1px solid rgba(234,179,8,0.3)'
+                                                        background: 'rgba(234,179,8,0.1)',
+                                                        borderColor: 'rgba(234,179,8,0.2)'
                                                     }}
                                                 >
-                                                    <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
-                                                    <span className="text-xs font-bold text-yellow-400">
+                                                    <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                                                    <span className="text-[10px] font-bold text-yellow-400">
                                                         {(model.bestMetricValue * 100).toFixed(0)}%
                                                     </span>
                                                 </div>
                                             )}
                                         </div>
 
-                                        {/* Model Info - Center Aligned */}
-                                        <div className="flex-1 relative z-10 text-center">
-                                            <h3 className="font-bold text-lg text-white mb-2 line-clamp-1">
-                                                {model.name}
-                                            </h3>
-                                            {/* Only show taskType badge if it's a valid value */}
-                                            {model.taskType && model.taskType !== 'unknown' && (
-                                                <span className={`inline-block text-[10px] px-3 py-1 rounded-full mb-3 ${model.taskType === 'classification'
-                                                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                                    : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                                    }`}>
-                                                    {model.taskType === 'classification' ? 'Classification' : 'Regression'}
-                                                </span>
-                                            )}
-                                            {/* Show ML badge if taskType is unknown */}
-                                            {(!model.taskType || model.taskType === 'unknown') && (
-                                                <span className="inline-block text-[10px] px-3 py-1 rounded-full mb-3 bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                                                    ML Model
-                                                </span>
-                                            )}
-                                            <p className="text-xs text-white/40 line-clamp-2 mb-3 mx-auto max-w-[180px]">
-                                                {model.description || 'Trained machine learning model'}
-                                            </p>
-                                        </div>
+                                        {/* Divider */}
+                                        <div className="h-px w-full bg-white/5 mb-3" />
 
-                                        {/* Stats Row - Center */}
-                                        <div className="flex items-center justify-center gap-4 text-[11px] text-white/30 mb-4 relative z-10">
-                                            <span className="flex items-center gap-1.5">
-                                                <TrendingUp className="w-3.5 h-3.5" style={{ color: themeColor }} />
-                                                <span className="text-white/50">{model.usageCount || 0} uses</span>
-                                            </span>
-                                            <span className="flex items-center gap-1.5">
-                                                <GitBranch className="w-3.5 h-3.5 text-purple-400" />
-                                                <span className="text-white/50">v{model.totalVersions || 1}</span>
-                                            </span>
-                                        </div>
-
-                                        {/* Footer - Center aligned with stacked layout */}
-                                        <div className="pt-3 border-t border-white/5 relative z-10 space-y-3">
-                                            <div className="flex items-center justify-center gap-2">
-                                                {model.ownerPhotoURL ? (
-                                                    <img
-                                                        src={model.ownerPhotoURL}
-                                                        alt=""
-                                                        className="w-6 h-6 rounded-full object-cover border border-white/20"
-                                                    />
+                                        {/* Meta Row: Owner & Stats */}
+                                        <div className="flex items-center justify-between mb-4 relative z-10">
+                                            {/* Owner (Left) */}
+                                            <div className="flex items-center gap-2">
+                                                {(model.ownerPhotoURL || user?.photoURL) ? (
+                                                    <img src={model.ownerPhotoURL || user?.photoURL || ''} alt="" className="w-5 h-5 rounded-full object-cover ring-1 ring-white/10" />
                                                 ) : (
-                                                    <div
-                                                        className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold bg-white/10 border border-white/20"
-                                                    >
-                                                        {(model.ownerName || 'M')[0]?.toUpperCase()}
+                                                    <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[9px] font-bold text-white/50 ring-1 ring-white/10">
+                                                        {(model.ownerName || user?.displayName || user?.email || 'U')[0].toUpperCase()}
                                                     </div>
                                                 )}
-                                                <span className="text-xs text-white/50 flex items-center gap-1">
-                                                    {model.ownerName || 'MLForge User'}
-                                                    {model.verified && (
-                                                        <span title="Verified">
-                                                            <BadgeCheck className="w-3.5 h-3.5 text-blue-400" />
-                                                        </span>
-                                                    )}
+                                                <span className="text-[10px] text-white/40 truncate max-w-[80px]">
+                                                    {model.ownerName || user?.displayName || 'Owner'}
                                                 </span>
                                             </div>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => handleForkModel(model)}
-                                                    disabled={forking === model.id}
-                                                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all hover:scale-105 bg-white/5 border border-white/10 hover:bg-white/10 text-white/70"
-                                                >
-                                                    {forking === model.id ? (
-                                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                    ) : (
-                                                        <GitFork className="w-3.5 h-3.5" />
-                                                    )}
-                                                    Fork
-                                                </button>
-                                                <button
-                                                    onClick={() => handleTryModel(model)}
-                                                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all hover:scale-105 bg-white/10 border border-white/20 hover:bg-white/15 hover:border-white/30"
-                                                    style={{ color: themeColor }}
-                                                >
-                                                    <Zap className="w-3.5 h-3.5" />
-                                                    Try
-                                                </button>
+
+                                            {/* Stats (Right) */}
+                                            <div className="flex items-center gap-3 text-[10px] text-white/30">
+                                                <span className="flex items-center gap-1">
+                                                    <TrendingUp className="w-3 h-3 opacity-50" />
+                                                    {model.usageCount || 0}
+                                                </span>
+                                                <span className="flex items-center gap-1">
+                                                    <GitBranch className="w-3 h-3 opacity-50" />
+                                                    v{model.totalVersions || 1}
+                                                </span>
                                             </div>
+                                        </div>
+
+                                        {/* Action Buttons */}
+                                        <div className="grid grid-cols-2 gap-2 relative z-10">
+                                            <button
+                                                onClick={() => handleForkModel(model)}
+                                                disabled={forking === model.id}
+                                                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] bg-white/5 border border-white/10 hover:bg-white/10 text-white/60 hover:text-white"
+                                            >
+                                                {forking === model.id ? (
+                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                ) : (
+                                                    <GitFork className="w-3 h-3" />
+                                                )}
+                                                Fork
+                                            </button>
+                                            <button
+                                                onClick={() => handleTryModel(model)}
+                                                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white"
+                                                style={{ color: themeColor, borderColor: `${themeColor}20`, background: `${themeColor}05` }}
+                                            >
+                                                <Zap className="w-3 h-3" />
+                                                Try Model
+                                            </button>
                                         </div>
                                     </div>
                                 </motion.div>
@@ -510,7 +500,7 @@ function TryModelModal({ isOpen, onClose, model, themeColor }: {
                         initial={{ scale: 0.9, opacity: 0, y: 20 }}
                         animate={{ scale: 1, opacity: 1, y: 0 }}
                         exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                        className="relative w-full max-w-lg"
+                        className="relative w-full max-w-5xl"
                     >
                         {/* Subtle Border Glow */}
                         <div
@@ -521,122 +511,124 @@ function TryModelModal({ isOpen, onClose, model, themeColor }: {
                             }}
                         />
 
-                        {/* Modal Content - Transparent Glassmorphic - No Scrollbar */}
-                        <div className="relative rounded-3xl p-6 backdrop-blur-xl bg-black/40 border border-white/10 overflow-hidden">
+                        {/* Modal Content - Transparent Glassmorphic - Scrollable */}
+                        <div className="relative rounded-3xl backdrop-blur-xl bg-black/80 border border-white/10 overflow-hidden flex flex-col max-h-[85vh]">
                             {/* Close Button */}
                             <button
                                 onClick={onClose}
-                                className="absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center transition-all hover:bg-white/10 bg-white/5 border border-white/10"
+                                className="absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center transition-all hover:bg-white/10 bg-white/5 border border-white/10 z-20"
                             >
                                 <X className="w-3.5 h-3.5 text-white/60" />
                             </button>
 
-                            {/* Centered Header - Compact */}
-                            <div className="text-center mb-5">
-                                <div
-                                    className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center bg-white/5 border border-white/10"
-                                >
-                                    <Play className="w-5 h-5" style={{ color: themeColor }} />
+                            <div className="p-6 overflow-y-auto custom-scrollbar">
+                                {/* Centered Header - Compact */}
+                                <div className="text-center mb-5 mt-2">
+                                    <div
+                                        className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center bg-white/5 border border-white/10"
+                                    >
+                                        <Play className="w-5 h-5" style={{ color: themeColor }} />
+                                    </div>
+                                    <h2 className="text-lg font-bold text-white mb-0.5">{model.name}</h2>
+                                    <p className="text-xs text-white/40">
+                                        {model.taskType && model.taskType !== 'unknown' ? model.taskType : 'ML Model'} {model.ownerName ? `• ${model.ownerName}` : ''}
+                                    </p>
                                 </div>
-                                <h2 className="text-lg font-bold text-white mb-0.5">{model.name}</h2>
-                                <p className="text-xs text-white/40">
-                                    {model.taskType && model.taskType !== 'unknown' ? model.taskType : 'ML Model'} {model.ownerName ? `• ${model.ownerName}` : ''}
-                                </p>
-                            </div>
 
-                            {/* Accuracy Badge - Compact */}
-                            {model.bestMetricValue && (
-                                <div className="flex justify-center mb-4">
-                                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-                                        <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
-                                        <span className="text-xs font-bold text-yellow-400">
-                                            {(model.bestMetricValue * 100).toFixed(0)}%
-                                        </span>
+                                {/* Accuracy Badge - Compact */}
+                                {model.bestMetricValue && (
+                                    <div className="flex justify-center mb-4">
+                                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+                                            <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                                            <span className="text-xs font-bold text-yellow-400">
+                                                {(model.bestMetricValue * 100).toFixed(0)}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Input Form - Compact */}
+                                <div className="mb-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <label className="text-xs font-medium text-white/60">
+                                            Features ({featureColumns.length})
+                                        </label>
+                                        <button
+                                            onClick={fillSampleData}
+                                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all hover:scale-105 bg-white/5 border border-white/10 hover:bg-white/10"
+                                            style={{ color: themeColor }}
+                                        >
+                                            <Sparkles className="w-3 h-3" />
+                                            Fill
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                                        {featureColumns.map((col, idx) => (
+                                            <div key={col}>
+                                                <label className="text-xs text-white/40 mb-1.5 block font-medium truncate" title={col}>{col}</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData[col] || ''}
+                                                    onChange={e => setFormData({ ...formData, [col]: e.target.value })}
+                                                    className={`w-full rounded-xl px-3 py-2.5 text-sm text-white outline-none transition-all bg-white/5 border ${formData[col] ? 'border-white/30' : 'border-white/10'} focus:border-white/30 placeholder-white/20`}
+                                                    placeholder={`Enter value`}
+                                                />
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
-                            )}
 
-                            {/* Input Form - Compact */}
-                            <div className="mb-4">
-                                <div className="flex items-center justify-between mb-3">
-                                    <label className="text-xs font-medium text-white/60">
-                                        Features ({featureColumns.length})
-                                    </label>
-                                    <button
-                                        onClick={fillSampleData}
-                                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all hover:scale-105 bg-white/5 border border-white/10 hover:bg-white/10"
-                                        style={{ color: themeColor }}
-                                    >
-                                        <Sparkles className="w-3 h-3" />
-                                        Fill
-                                    </button>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {featureColumns.map((col, idx) => (
-                                        <div key={col}>
-                                            <label className="text-xs text-white/40 mb-1.5 block font-medium">{col}</label>
-                                            <input
-                                                type="text"
-                                                value={formData[col] || ''}
-                                                onChange={e => setFormData({ ...formData, [col]: e.target.value })}
-                                                className={`w-full rounded-xl px-4 py-3 text-sm text-white outline-none transition-all bg-white/5 border ${formData[col] ? 'border-white/30' : 'border-white/10'} focus:border-white/30`}
-                                                placeholder={`Enter ${col}`}
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Result - Compact */}
-                            {result && (
-                                <div className="mb-4">
-                                    <div className={`rounded-xl p-4 text-center bg-white/5 border ${result.error ? 'border-red-500/30' : 'border-white/10'}`}>
-                                        {result.error ? (
-                                            <p className="text-red-400 text-xs">{result.error}</p>
-                                        ) : (
-                                            <div className="space-y-2">
-                                                <div>
-                                                    <span className="text-white/50 text-[10px] block mb-0.5">Prediction</span>
-                                                    <span className="text-xl font-bold" style={{ color: themeColor }}>
-                                                        {result.prediction ?? 'N/A'}
-                                                    </span>
-                                                </div>
-                                                {result.probability && (
-                                                    <div className="flex items-center justify-center gap-2">
-                                                        <div className="h-1 w-16 rounded-full overflow-hidden bg-white/10">
-                                                            <div
-                                                                className="h-full rounded-full"
-                                                                style={{ width: `${result.probability * 100}%`, background: themeColor }}
-                                                            />
-                                                        </div>
-                                                        <span className="text-[10px] font-bold text-white/50">
-                                                            {(result.probability * 100).toFixed(0)}%
+                                {/* Result - Compact */}
+                                {result && (
+                                    <div className="mb-4">
+                                        <div className={`rounded-xl p-4 text-center bg-white/5 border ${result.error ? 'border-red-500/30' : 'border-white/10'}`}>
+                                            {result.error ? (
+                                                <p className="text-red-400 text-xs">{result.error}</p>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    <div>
+                                                        <span className="text-white/50 text-[10px] block mb-0.5">Prediction</span>
+                                                        <span className="text-xl font-bold" style={{ color: themeColor }}>
+                                                            {result.prediction ?? 'N/A'}
                                                         </span>
                                                     </div>
-                                                )}
-                                            </div>
-                                        )}
+                                                    {result.probability && (
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <div className="h-1 w-16 rounded-full overflow-hidden bg-white/10">
+                                                                <div
+                                                                    className="h-full rounded-full"
+                                                                    style={{ width: `${result.probability * 100}%`, background: themeColor }}
+                                                                />
+                                                            </div>
+                                                            <span className="text-[10px] font-bold text-white/50">
+                                                                {(result.probability * 100).toFixed(0)}%
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
-
-                            {/* Predict Button - Compact */}
-                            <button
-                                onClick={handlePredict}
-                                disabled={loading || Object.values(formData).some(v => !v)}
-                                className="w-full py-3 rounded-xl font-bold text-sm disabled:opacity-50 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 bg-white/10 border border-white/20 hover:bg-white/15 hover:border-white/30"
-                                style={{ color: themeColor }}
-                            >
-                                {loading ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <>
-                                        <Play className="w-4 h-4" />
-                                        Run Prediction
-                                    </>
                                 )}
-                            </button>
+
+                                {/* Predict Button - Compact */}
+                                <button
+                                    onClick={handlePredict}
+                                    disabled={loading || Object.values(formData).some(v => !v)}
+                                    className="w-full py-3 rounded-xl font-bold text-sm disabled:opacity-50 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 bg-white/10 border border-white/20 hover:bg-white/15 hover:border-white/30 mt-4"
+                                    style={{ color: themeColor }}
+                                >
+                                    {loading ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Play className="w-4 h-4" />
+                                            Run Prediction
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     </motion.div>
                 </div>

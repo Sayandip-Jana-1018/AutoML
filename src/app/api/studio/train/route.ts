@@ -5,9 +5,125 @@ import { uploadScriptToGCS } from '@/lib/gcp';
 import { validateTrainingConfig, type SubscriptionTier } from '@/lib/resource-policy';
 import { createCleaningMetadata, type CleaningConfig, DEFAULT_CLEANING_CONFIG } from '@/lib/data-cleaning';
 import { submitComputeEngineJob, COMPUTE_ENGINE_CONFIGS, estimateTrainingCost } from '@/lib/compute-training';
-import { routeTraining, detectDatasetType, validateDatasetSize, type DatasetType } from '@/lib/training-router';
+import { routeTraining, detectDatasetType, validateDatasetSize, validateDatasetModelCompatibility, type DatasetType } from '@/lib/training-router';
 
 export const runtime = 'nodejs'; // Required for Google Cloud SDK
+
+/**
+ * Detect algorithm from script content
+ * Looks for common ML algorithm imports and instantiations
+ */
+function detectAlgorithmFromScript(script: string): string {
+    const scriptLower = script.toLowerCase();
+
+    // Common algorithm patterns (order matters - check specific patterns first)
+    const algorithmPatterns: [RegExp | string, string][] = [
+        // Clustering
+        [/agglomerativeclustering|hierarchical.*cluster/i, 'HierarchicalClustering'],
+        [/kmeans|k-means/i, 'KMeans'],
+        [/dbscan/i, 'DBSCAN'],
+
+        // Deep Learning
+        [/torch|pytorch|nn\.module/i, 'PyTorch'],
+        [/tensorflow|keras|sequential\(/i, 'TensorFlow/Keras'],
+
+        // Gradient Boosting
+        [/xgboost|xgbclassifier|xgbregressor/i, 'XGBoost'],
+        [/lightgbm|lgbm/i, 'LightGBM'],
+        [/catboost/i, 'CatBoost'],
+        [/gradientboosting/i, 'GradientBoosting'],
+
+        // Ensemble
+        [/randomforest/i, 'RandomForest'],
+        [/extratrees/i, 'ExtraTrees'],
+        [/adaboost/i, 'AdaBoost'],
+        [/bagging/i, 'Bagging'],
+
+        // Linear Models
+        [/logisticregression/i, 'LogisticRegression'],
+        [/linearregression/i, 'LinearRegression'],
+        [/ridge/i, 'Ridge'],
+        [/lasso/i, 'Lasso'],
+        [/elasticnet/i, 'ElasticNet'],
+
+        // SVM
+        [/svc\(|svm\.svc/i, 'SVC'],
+        [/svr\(|svm\.svr/i, 'SVR'],
+
+        // Tree-based
+        [/decisiontree/i, 'DecisionTree'],
+
+        // Neighbors
+        [/kneighbors|knn/i, 'KNN'],
+
+        // Naive Bayes
+        [/naivebayes|gaussiannb|multinomialnb/i, 'NaiveBayes'],
+    ];
+
+    for (const [pattern, algorithm] of algorithmPatterns) {
+        if (pattern instanceof RegExp) {
+            if (pattern.test(script)) return algorithm;
+        } else {
+            if (scriptLower.includes(pattern.toLowerCase())) return algorithm;
+        }
+    }
+
+    return 'Unknown';
+}
+
+/**
+ * Pre-flight validation to catch common script errors BEFORE training
+ * This saves compute costs by rejecting broken scripts early
+ */
+function validateScriptPreFlight(script: string): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // 1. Check for placeholder file paths (common AI mistake)
+    const placeholderPaths = [
+        /['"]path_to/i,
+        /['"]your_file/i,
+        /['"]dataset\.csv['"]/i,  // Without /tmp/
+        /['"]data\.csv['"]/i,     // Without /tmp/
+        /load_data\(['"](?!\/tmp\/)/i,  // load_data with non-/tmp/ path
+    ];
+    for (const pattern of placeholderPaths) {
+        if (pattern.test(script)) {
+            errors.push(`Script contains placeholder path. Use '/tmp/dataset.csv' instead.`);
+            break;
+        }
+    }
+
+    // 2. Check for required functions
+    if (!script.includes('def load_data')) {
+        errors.push("Missing 'load_data' function");
+    }
+    if (!script.includes('if __name__') && !script.includes('main()') && !script.includes('main(')) {
+        errors.push("Missing main execution block (if __name__ == '__main__' or main())");
+    }
+
+    // 3. Check for basic imports
+    if (!script.includes('import pandas') && !script.includes('from pandas')) {
+        errors.push("Missing pandas import");
+    }
+
+    // 4. Check for obvious syntax issues (basic patterns)
+    const openParens = (script.match(/\(/g) || []).length;
+    const closeParens = (script.match(/\)/g) || []).length;
+    if (Math.abs(openParens - closeParens) > 5) {
+        errors.push("Possible unbalanced parentheses");
+    }
+
+    // 5. Check script uses a valid dataset path (startup script will fix common paths)
+    // Accept: ./dataset.csv, /tmp/dataset.csv, /tmp/training/dataset.csv, DATASET_GCS_PATH
+    if (!script.includes('./dataset.csv') &&
+        !script.includes('/tmp/dataset.csv') &&
+        !script.includes('DATASET_GCS_PATH') &&
+        !script.includes('/tmp/training/dataset')) {
+        errors.push("Script should use './dataset.csv' as the data path (startup script will place dataset here)");
+    }
+
+    return { valid: errors.length === 0, errors };
+}
 
 export async function POST(req: Request) {
     try {
@@ -32,6 +148,17 @@ export async function POST(req: Request) {
 
         if (!projectId || !script) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+        }
+
+        // PRE-FLIGHT VALIDATION - catch common errors before wasting compute
+        const preFlightResult = validateScriptPreFlight(script);
+        if (!preFlightResult.valid) {
+            console.log(`[Train API] Pre-flight validation failed:`, preFlightResult.errors);
+            return NextResponse.json({
+                error: `Script validation failed: ${preFlightResult.errors.join('; ')}`,
+                validationErrors: preFlightResult.errors,
+                suggestion: "Please fix the script and try again. The AI chat should generate scripts using '/tmp/dataset.csv' as the data path."
+            }, { status: 400 });
         }
 
         console.log(`[Train API] Starting training for Project: ${projectId} (Tier: ${tier}, TaskType: ${taskType})`);
@@ -59,6 +186,24 @@ export async function POST(req: Request) {
 
         // 3. Detect dataset type and route to appropriate backend
         const datasetType: DatasetType = detectDatasetType(datasetFilename);
+
+        // 3b. Validate dataset-model compatibility (e.g., block LinearRegression on images)
+        const detectedAlgorithm = detectAlgorithmFromScript(script);
+        const compatValidation = validateDatasetModelCompatibility(datasetType, taskType, detectedAlgorithm);
+        if (!compatValidation.valid) {
+            return NextResponse.json({
+                error: "Dataset-Model Incompatibility",
+                message: compatValidation.error,
+                suggestions: compatValidation.suggestions,
+                datasetType,
+                algorithm: detectedAlgorithm
+            }, { status: 400 });
+        }
+        // Log warning if present
+        if (compatValidation.warning) {
+            console.warn(`[Train API] Compatibility warning: ${compatValidation.warning}`);
+        }
+
         const routeDecision = routeTraining({
             tier,
             datasetType,
@@ -266,8 +411,8 @@ export async function POST(req: Request) {
             startedAt: null,
             completedAt: null,
 
-            // Algorithm from config
-            algorithm: config.algorithm || 'RandomForest',
+            // Algorithm detected from script content
+            algorithm: config.algorithm || detectAlgorithmFromScript(script),
 
             // Logs - Use originalFilename and show cost in INR
             logs: [
@@ -276,7 +421,7 @@ export async function POST(req: Request) {
                 `Script version: ${scriptVersionId} (v${versionNumber})`,
                 `Dataset: ${originalFilename} (${datasetSizeMB} MB, ${datasetType})`,
                 `Task Type: ${taskType}`,
-                `Algorithm: ${config.algorithm || 'RandomForest'}`,
+                `Algorithm: ${config.algorithm || detectAlgorithmFromScript(script)}`,
                 `Estimated time: ${costEstimate.estimatedMinutes} minutes`,
                 `Estimated cost: ₹${(costEstimate.estimatedCost * 83).toFixed(4)} (≈$${costEstimate.estimatedCost.toFixed(4)})`,
                 ...(retryOf ? [`Retry #${retryCount} of job ${retryOf} (reason: ${retryReason || 'manual'})`] : [])
