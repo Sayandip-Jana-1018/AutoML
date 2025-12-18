@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Rocket, Code2, GitCompare, ShieldAlert, ShieldCheck, AlertCircle, Sparkles, Zap, Copy, Check, FileCode, Save, TrendingUp, Settings, Database } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useThemeColor } from "@/context/theme-context";
 import DiffViewer from "./DiffViewer";
 
@@ -54,6 +55,7 @@ export function SuggestionPanel({
     loading = false
 }: SuggestionPanelProps) {
     const { themeColor } = useThemeColor();
+    const { resolvedTheme } = useTheme();
     const [activeTab, setActiveTab] = useState<'suggestion' | 'diff' | 'summary'>('suggestion');
     const [copied, setCopied] = useState(false);
 
@@ -112,7 +114,7 @@ export function SuggestionPanel({
                     exit={{ opacity: 0 }}
                     className="absolute inset-0 backdrop-blur-sm"
                     style={{
-                        background: `radial-gradient(circle at center, ${themeColor}08, transparent 70%), linear-gradient(135deg, rgba(0,0,0,0.3), rgba(0,0,0,0.4))`
+                        background: `radial-gradient(circle at center, ${themeColor}08, transparent 70%), linear-gradient(135deg, rgba(255,255,255,0.1), rgba(0,0,0,0.1))`
                     }}
                     onClick={onClose}
                 />
@@ -123,19 +125,13 @@ export function SuggestionPanel({
                     animate={{ opacity: 1, x: 0, scale: 1, rotateY: 0 }}
                     exit={{ opacity: 0, x: 100, scale: 0.96, rotateY: -10 }}
                     transition={{ type: "spring", damping: 25, stiffness: 250 }}
-                    className="relative w-full max-w-3xl h-[85vh] rounded-3xl overflow-hidden"
+
+                    className="relative w-full max-w-3xl h-[85vh] rounded-3xl overflow-hidden bg-white/60 dark:bg-[#0a0a0a]/80"
                     style={{
-                        background: `linear-gradient(135deg, 
-                            rgba(255,255,255,0.10) 0%, 
-                            rgba(255,255,255,0.06) 50%, 
-                            rgba(255,255,255,0.04) 100%)`,
-                        border: `1px solid ${themeColor}35`,
                         backdropFilter: 'blur(40px) saturate(150%)',
                         boxShadow: `
-                            0 25px 70px -15px rgba(0,0,0,0.6), 
-                            0 0 80px ${themeColor}15,
-                            inset 0 1px 0 rgba(255,255,255,0.12),
-                            inset 0 -1px 0 rgba(0,0,0,0.2)`
+                            0 25px 70px -15px rgba(0,0,0,0.2), 
+                            0 0 80px ${themeColor}15`
                     }}
                 >
                     {/* Animated Background Pattern */}
@@ -178,13 +174,7 @@ export function SuggestionPanel({
 
                     {/* Header - Compact Design */}
                     <div
-                        className="relative px-6 py-4 border-b backdrop-blur-2xl"
-                        style={{
-                            borderColor: `${themeColor}25`,
-                            background: `linear-gradient(to bottom, 
-                                rgba(0,0,0,0.4) 0%, 
-                                rgba(0,0,0,0.2) 100%)`
-                        }}
+                        className="relative px-6 py-4 border-b border-black/5 dark:border-white/5 backdrop-blur-2xl bg-white/40 dark:bg-black/20"
                     >
                         {/* Macbook Traffic Lights - Compact */}
                         <div className="absolute left-6 top-5 flex items-center gap-2">
@@ -209,13 +199,9 @@ export function SuggestionPanel({
                         {/* Close Button - Glass Style */}
                         <button
                             onClick={onClose}
-                            className="absolute right-6 top-5 p-2 rounded-xl backdrop-blur-xl transition-all active:scale-95 hover:rotate-90"
-                            style={{
-                                background: 'rgba(255,255,255,0.05)',
-                                border: '1px solid rgba(255,255,255,0.1)'
-                            }}
+                            className="absolute right-6 top-5 p-2 rounded-xl backdrop-blur-xl transition-all active:scale-95 hover:rotate-90 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10"
                         >
-                            <X className="w-4 h-4 text-white/70 hover:text-white" />
+                            <X className="w-4 h-4 text-black/70 dark:text-white/70 hover:text-black dark:hover:text-white" />
                         </button>
 
                         {/* Centered Title Section - Compact */}
@@ -229,9 +215,10 @@ export function SuggestionPanel({
                                 }}
                             >
                                 <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
-                                <Sparkles className="w-6 h-6 text-white relative z-10" />
+                                <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
+                                <Sparkles className={`w-6 h-6 relative z-10 ${resolvedTheme === 'light' ? 'text-black' : 'text-white'}`} />
                             </div>
-                            <h3 className="text-lg font-bold text-white tracking-tight">
+                            <h3 className="text-lg font-bold text-black dark:text-white tracking-tight">
                                 AI Code Enhancement
                             </h3>
                         </div>
@@ -246,16 +233,16 @@ export function SuggestionPanel({
                                     transition={{ delay: idx * 0.1 }}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all overflow-hidden ${activeTab === tab.id
-                                        ? 'text-white'
-                                        : 'text-white/40 hover:text-white/70'
+                                        ? (resolvedTheme === 'light' ? 'text-black' : 'text-white')
+                                        : 'text-black/40 dark:text-white/40 hover:text-black/70 dark:hover:text-white/70'
                                         }`}
                                     style={activeTab === tab.id ? {
-                                        background: `linear-gradient(135deg, ${themeColor}50, ${themeColor}30)`,
-                                        boxShadow: `0 4px 20px ${themeColor}30, inset 0 1px 0 rgba(255,255,255,0.2)`,
+                                        background: `linear-gradient(135deg, ${themeColor}90, ${themeColor}70)`,
+                                        boxShadow: `0 4px 20px ${themeColor}30`,
                                         border: `1px solid ${themeColor}60`
                                     } : {
-                                        background: 'rgba(255,255,255,0.03)',
-                                        border: '1px solid rgba(255,255,255,0.08)'
+                                        background: 'transparent',
+                                        border: '1px solid transparent'
                                     }}
                                 >
                                     {activeTab === tab.id && (
@@ -356,15 +343,13 @@ export function SuggestionPanel({
                                         <motion.div
                                             initial={{ opacity: 0, y: 20 }}
                                             animate={{ opacity: 1, y: 0 }}
-                                            className="rounded-xl overflow-hidden border relative group"
+                                            className="rounded-xl overflow-hidden border relative group border-black/10 dark:border-white/10"
                                             style={{
-                                                background: 'rgba(0,0,0,0.5)',
-                                                borderColor: `${themeColor}30`,
-                                                boxShadow: `0 10px 35px rgba(0,0,0,0.4), 0 0 50px ${themeColor}08`
+                                                background: 'rgba(0,0,0,0.05)',
                                             }}
                                         >
                                             {/* Mac Terminal Header */}
-                                            <div className="flex items-center justify-between px-4 py-2.5 bg-[#1a1a1a] border-b border-white/5">
+                                            <div className="flex items-center justify-between px-4 py-2.5 bg-gray-100 dark:bg-[#1a1a1a] border-b border-black/5 dark:border-white/5">
                                                 <div className="flex items-center gap-2.5">
                                                     <div className="flex items-center gap-1.5">
                                                         <div className="w-2.5 h-2.5 rounded-full bg-[#FF5F57]" style={{ boxShadow: '0 0 5px rgba(255,95,87,0.4)' }} />
@@ -372,9 +357,9 @@ export function SuggestionPanel({
                                                         <div className="w-2.5 h-2.5 rounded-full bg-[#28C840]" style={{ boxShadow: '0 0 5px rgba(40,200,64,0.4)' }} />
                                                     </div>
                                                     <div className="flex items-center gap-2">
-                                                        <Code2 className="w-3.5 h-3.5 text-white/40" />
-                                                        <span className="text-white/60 text-xs font-mono">suggestion.py</span>
-                                                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/5">
+                                                        <Code2 className="w-3.5 h-3.5 text-black/40 dark:text-white/40" />
+                                                        <span className="text-black/60 dark:text-white/60 text-xs font-mono">suggestion.py</span>
+                                                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/5">
                                                             <Zap className="w-2.5 h-2.5" style={{ color: themeColor }} />
                                                             <span className="text-[10px] font-mono font-bold" style={{ color: themeColor }}>python</span>
                                                         </div>
@@ -384,7 +369,7 @@ export function SuggestionPanel({
                                                 {/* Copy Button */}
                                                 <button
                                                     onClick={copyCode}
-                                                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 transition-all border border-white/10"
+                                                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-all border border-black/5 dark:border-white/10"
                                                 >
                                                     {copied ? (
                                                         <>
@@ -393,15 +378,15 @@ export function SuggestionPanel({
                                                         </>
                                                     ) : (
                                                         <>
-                                                            <Copy className="w-3 h-3 text-white/60" />
-                                                            <span className="text-[10px] text-white/60 font-medium">Copy</span>
+                                                            <Copy className="w-3 h-3 text-black/60 dark:text-white/60" />
+                                                            <span className="text-[10px] text-black/60 dark:text-white/60 font-medium">Copy</span>
                                                         </>
                                                     )}
                                                 </button>
                                             </div>
 
                                             {/* Code Content with Proper Syntax Highlighting */}
-                                            <div className="p-5 overflow-x-auto suggestion-panel-scroll max-h-80 bg-gradient-to-br from-[#0d0d0d] to-[#1a1a1a]">
+                                            <div className="p-5 overflow-x-auto suggestion-panel-scroll max-h-80 bg-white/40 dark:bg-gradient-to-br dark:from-[#0d0d0d] dark:to-[#1a1a1a]">
                                                 <pre className="text-sm font-mono leading-relaxed">
                                                     {cleanCode.split('\n').map((line, i) => {
                                                         const keywords = ['import', 'from', 'as', 'def', 'class', 'if', 'else', 'elif', 'for', 'while', 'return', 'try', 'except', 'finally', 'with', 'lambda', 'yield', 'async', 'await', 'in', 'is', 'not', 'and', 'or'];
@@ -414,24 +399,24 @@ export function SuggestionPanel({
                                                                 {tokens.map((token, j) => {
                                                                     // Keywords
                                                                     if (keywords.includes(token.trim())) {
-                                                                        return <span key={j} style={{ color: '#C586C0' }}>{token}</span>;
+                                                                        return <span key={j} style={{ color: resolvedTheme === 'light' ? '#af00db' : '#C586C0' }}>{token}</span>;
                                                                     }
                                                                     // Strings
                                                                     if (/^['"].*['"]$/.test(token.trim())) {
-                                                                        return <span key={j} style={{ color: '#CE9178' }}>{token}</span>;
+                                                                        return <span key={j} style={{ color: resolvedTheme === 'light' ? '#a31515' : '#CE9178' }}>{token}</span>;
                                                                     }
                                                                     // Comments
                                                                     if (token.trim().startsWith('#')) {
                                                                         // Rest of line is comment
                                                                         const restOfLine = tokens.slice(j).join('');
-                                                                        return <span key={j} style={{ color: '#6A9955' }}>{restOfLine}</span>;
+                                                                        return <span key={j} style={{ color: resolvedTheme === 'light' ? '#008000' : '#6A9955' }}>{restOfLine}</span>;
                                                                     }
                                                                     // Numbers
                                                                     if (/^\d+\.?\d*$/.test(token.trim())) {
-                                                                        return <span key={j} style={{ color: '#B5CEA8' }}>{token}</span>;
+                                                                        return <span key={j} style={{ color: resolvedTheme === 'light' ? '#098658' : '#B5CEA8' }}>{token}</span>;
                                                                     }
                                                                     // Default
-                                                                    return <span key={j} style={{ color: '#D4D4D4' }}>{token}</span>;
+                                                                    return <span key={j} style={{ color: resolvedTheme === 'light' ? '#000000' : '#D4D4D4' }}>{token}</span>;
                                                                 })}
                                                             </div>
                                                         );
@@ -497,7 +482,7 @@ export function SuggestionPanel({
                                                                     initial={{ opacity: 0, y: 20 }}
                                                                     animate={{ opacity: 1, y: 0 }}
                                                                     transition={{ delay: idx * 0.1 }}
-                                                                    className="rounded-2xl p-6 border backdrop-blur-xl text-center"
+                                                                    className="rounded-2xl p-6 border backdrop-blur-xl text-center bg-white/50 dark:bg-black/20"
                                                                     style={{
                                                                         background: `linear-gradient(135deg, ${severityColor}18, ${severityColor}08)`,
                                                                         borderColor: `${severityColor}40`,
@@ -519,8 +504,9 @@ export function SuggestionPanel({
                                                                         </div>
                                                                     </div>
 
-                                                                    <h4 className="font-bold text-white mb-3 text-lg">{change.title}</h4>
-                                                                    <p className="text-white/70 text-sm leading-relaxed mx-auto max-w-md">{change.description}</p>
+
+                                                                    <h4 className="font-bold text-black dark:text-white mb-3 text-lg">{change.title}</h4>
+                                                                    <p className="text-black/70 dark:text-white/70 text-sm leading-relaxed mx-auto max-w-md">{change.description}</p>
 
                                                                     {/* Severity badge */}
                                                                     <div className="mt-4 flex justify-center">
@@ -579,19 +565,15 @@ export function SuggestionPanel({
 
                     {/* Footer - Enhanced Blur */}
                     <div
-                        className="absolute bottom-0 left-0 right-0 px-6 py-5 border-t backdrop-blur-2xl"
+                        className="absolute bottom-0 left-0 right-0 px-6 py-5 border-t border-black/5 dark:border-white/5 backdrop-blur-2xl bg-white/40 dark:bg-black/40"
                         style={{
                             borderColor: `${themeColor}25`,
-                            background: `linear-gradient(to top, 
-                                rgba(0,0,0,0.95) 0%, 
-                                rgba(0,0,0,0.85) 50%,
-                                rgba(0,0,0,0.6) 100%)`
                         }}
                     >
                         <div className="flex items-center justify-between gap-3">
                             <button
                                 onClick={onClose}
-                                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white/60 hover:text-white transition-all backdrop-blur-xl border border-white/10 hover:bg-white/5"
+                                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white transition-all backdrop-blur-xl border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5"
                             >
                                 Cancel
                             </button>
@@ -615,7 +597,7 @@ export function SuggestionPanel({
                     </div>
                 </motion.div>
             </motion.div>
-        </AnimatePresence>
+        </AnimatePresence >
     );
 }
 

@@ -45,7 +45,7 @@ export function Navbar() {
       className="fixed top-6 left-0 right-0 z-50 flex justify-center px-4"
     >
       {/* Glass Pill Container */}
-      <nav className="relative flex items-center gap-1 p-1.5 rounded-full bg-black/20 dark:bg-black/40 backdrop-blur-2xl border border-white/10 shadow-2xl dark:shadow-[0_0_30px_-10px_rgba(0,0,0,0.5)] shadow-black/5 overflow-hidden">
+      <nav className="relative flex items-center gap-1 p-1.5 rounded-full bg-white/60 dark:bg-black/40 backdrop-blur-2xl border border-black/10 dark:border-white/10 shadow-2xl dark:shadow-[0_0_30px_-10px_rgba(0,0,0,0.5)] shadow-black/5 overflow-hidden">
 
         {navItems.map((item, index) => {
           const isActive = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href))
@@ -59,8 +59,8 @@ export function Navbar() {
               onMouseEnter={() => setHoveredIndex(index)}
               onMouseLeave={() => setHoveredIndex(null)}
               className={cn(
-                "relative px-4 py-2 rounded-full flex items-center gap-2 transition-all duration-300 group z-10",
-                isActive ? "text-foreground font-semibold" : "text-muted-foreground"
+                "relative px-2.5 md:px-4 py-2 rounded-full flex items-center gap-2 transition-all duration-300 group z-10",
+                isActive ? "text-foreground font-semibold" : "text-black/60 dark:text-white/60"
               )}
               style={{
                 color: (isHovered || isActive) ? itemColor : undefined,
@@ -90,7 +90,7 @@ export function Navbar() {
               />
 
               <span
-                className="text-sm relative z-10 transition-all duration-300"
+                className="text-sm relative z-10 transition-all duration-300 hidden md:inline"
                 style={{
                   color: (isHovered || isActive) ? itemColor : undefined
                 }}
@@ -98,6 +98,7 @@ export function Navbar() {
             </Link>
           )
         })}
+
 
       </nav>
     </motion.div>

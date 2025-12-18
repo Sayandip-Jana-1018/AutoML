@@ -96,25 +96,22 @@ export const TrainingConfigOverlay = ({
                         className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
                     />
 
-                    {/* Panel - Vertically centered */}
+                    {/* Panel - Full screen on mobile, positioned on desktop */}
                     <motion.div
                         initial={{ opacity: 0, x: 50, scale: 0.95 }}
                         animate={{ opacity: 1, x: 0, scale: 1 }}
                         exit={{ opacity: 0, x: 50, scale: 0.95 }}
                         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                        className="fixed z-50 w-[420px] max-h-[80vh] bg-[#0a0a0a]/95 
-                        backdrop-blur-xl border border-white/10 
+                        className="fixed inset-4 md:inset-auto md:w-[420px] md:max-h-[80vh] z-50 bg-white/60 dark:bg-black/60 
+                        backdrop-blur-xl border border-black/10 dark:border-white/10 
                         rounded-2xl shadow-2xl overflow-hidden flex flex-col"
                         style={{
                             boxShadow: `0 0 60px ${themeColor}20`,
-                            top: '11%',
-                            left: '8%',
-                            transform: 'translate(0%, 50%)'
                         }}
                     >
 
                         {/* Header */}
-                        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-black/10 dark:border-white/10">
                             <div className="flex items-center gap-3">
                                 <div
                                     className="w-10 h-10 rounded-xl flex items-center justify-center"
@@ -123,7 +120,7 @@ export const TrainingConfigOverlay = ({
                                     <Zap className="w-5 h-5" style={{ color: themeColor }} />
                                 </div>
                                 <div>
-                                    <h2 className="font-bold text-white">Start Training</h2>
+                                    <h2 className="font-bold text-black dark:text-white">Start Training</h2>
                                     <div className="flex items-center gap-2">
                                         <span
                                             className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full"
@@ -139,7 +136,7 @@ export const TrainingConfigOverlay = ({
                             </div>
                             <button
                                 onClick={onClose}
-                                className="p-2 rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+                                className="p-2 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 text-black/50 dark:text-white/50 hover:text-black dark:hover:text-white transition-colors"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -148,33 +145,33 @@ export const TrainingConfigOverlay = ({
                         {/* Scrollable Content */}
                         <div className="flex-1 overflow-y-auto">
                             {/* Dataset & Backend Info */}
-                            <div className="px-5 py-4 bg-white/[0.02] border-b border-white/5">
+                            <div className="px-5 py-4 bg-black/5 dark:bg-white/[0.02] border-b border-black/5 dark:border-white/5">
                                 <div className="grid grid-cols-2 gap-3">
                                     {/* Dataset Info */}
-                                    <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                                    <div className="p-3 rounded-xl bg-white/50 dark:bg-white/5 border border-black/10 dark:border-white/10">
                                         <div className="flex items-center gap-2 mb-1">
-                                            <FileText className="w-3.5 h-3.5 text-white/40" />
-                                            <span className="text-[10px] text-white/40 uppercase">Dataset</span>
+                                            <FileText className="w-3.5 h-3.5 text-black/40 dark:text-white/40" />
+                                            <span className="text-[10px] text-black/40 dark:text-white/40 uppercase">Dataset</span>
                                         </div>
-                                        <p className="text-sm text-white font-medium truncate">{datasetFilename}</p>
+                                        <p className="text-sm text-black dark:text-white font-medium truncate">{datasetFilename}</p>
                                         <div className="flex items-center gap-2 mt-1">
-                                            <span className="text-xs text-white/50">{datasetSizeMB} MB</span>
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/60">
+                                            <span className="text-xs text-black/50 dark:text-white/50">{datasetSizeMB} MB</span>
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 text-black/60 dark:text-white/60">
                                                 {datasetType}
                                             </span>
                                         </div>
                                     </div>
 
                                     {/* Backend Info */}
-                                    <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                                    <div className="p-3 rounded-xl bg-white/50 dark:bg-white/5 border border-black/10 dark:border-white/10">
                                         <div className="flex items-center gap-2 mb-1">
-                                            <Server className="w-3.5 h-3.5 text-white/40" />
-                                            <span className="text-[10px] text-white/40 uppercase">Backend</span>
+                                            <Server className="w-3.5 h-3.5 text-black/40 dark:text-white/40" />
+                                            <span className="text-[10px] text-black/40 dark:text-white/40 uppercase">Backend</span>
                                         </div>
-                                        <p className="text-sm text-white font-medium">
+                                        <p className="text-sm text-black dark:text-white font-medium">
                                             {routeDecision.backend === 'gcp-compute-engine' ? 'Google Cloud' : 'RunPod GPU'}
                                         </p>
-                                        <p className="text-xs text-white/50 mt-1">{routeDecision.specs}</p>
+                                        <p className="text-xs text-black/50 dark:text-white/50 mt-1">{routeDecision.specs}</p>
                                     </div>
                                 </div>
 
@@ -203,7 +200,7 @@ export const TrainingConfigOverlay = ({
                             </div>
 
                             {/* Pricing Summary */}
-                            <div className="px-5 py-3 bg-gradient-to-r from-green-500/10 to-transparent border-b border-white/5">
+                            <div className="px-5 py-3 bg-gradient-to-r from-green-500/10 to-transparent border-b border-black/5 dark:border-white/5">
                                 <div className="flex items-center justify-center gap-6">
                                     <div className="flex items-center gap-1.5">
                                         <DollarSign className="w-4 h-4 text-green-400" />
@@ -223,15 +220,15 @@ export const TrainingConfigOverlay = ({
                             {/* Advanced Toggle */}
                             <button
                                 onClick={() => setShowAdvanced(!showAdvanced)}
-                                className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-white/[0.02] hover:bg-white/[0.04] transition-colors border-b border-white/5"
+                                className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-black/5 dark:bg-white/[0.02] hover:bg-black/10 dark:hover:bg-white/[0.04] transition-colors border-b border-black/5 dark:border-white/5"
                             >
-                                <span className="text-xs text-white/60 font-medium">
+                                <span className="text-xs text-black/60 dark:text-white/60 font-medium">
                                     {showAdvanced ? 'Hide' : 'Show'} Advanced Options
                                 </span>
                                 {showAdvanced ? (
-                                    <ChevronUp className="w-4 h-4 text-white/40" />
+                                    <ChevronUp className="w-4 h-4 text-black/40 dark:text-white/40" />
                                 ) : (
-                                    <ChevronDown className="w-4 h-4 text-white/40" />
+                                    <ChevronDown className="w-4 h-4 text-black/40 dark:text-white/40" />
                                 )}
                             </button>
 

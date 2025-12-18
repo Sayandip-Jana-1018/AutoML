@@ -7,7 +7,7 @@ import { useThemeColor } from "@/context/theme-context"
 import { cn } from "@/lib/utils"
 import { motion, AnimatePresence } from "framer-motion"
 
-export function ThemeToggle() {
+export function ThemeToggle({ inline = false }: { inline?: boolean } = {}) {
   const { setTheme, theme } = useTheme()
   const { themeColor, setThemeColor, silkConfig, setSilkConfig } = useThemeColor()
   const [isOpen, setIsOpen] = React.useState(false)
@@ -46,7 +46,7 @@ export function ThemeToggle() {
   }
 
   return (
-    <div className="fixed top-6 right-6 z-[100]" ref={menuRef}>
+    <div className={inline ? "relative z-[100]" : "fixed top-6 right-6 z-[100]"} ref={menuRef}>
       <motion.div
         className="relative"
         initial={false}
@@ -54,22 +54,38 @@ export function ThemeToggle() {
       >
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-white/10 transition-colors shadow-lg"
+          className={inline
+            ? `w-9 h-9 rounded-full backdrop-blur-xl border border-white/20 flex items-center justify-center transition-colors shadow-lg ${themeColor === '#ffffff' || themeColor === '#00ffff' ? 'text-black' : 'text-white'}`
+            : `w-12 h-12 rounded-full backdrop-blur-xl border border-white/20 flex items-center justify-center transition-colors shadow-lg ${themeColor === '#ffffff' || themeColor === '#00ffff' ? 'text-black' : 'text-white'}`
+          }
+          style={{
+            background: `linear-gradient(135deg, ${themeColor}, ${themeColor}cc)`,
+            boxShadow: `0 4px 15px ${themeColor}40`
+          }}
         >
-          <Palette className="w-5 h-5" />
+          <Palette className={inline ? "w-4 h-4" : "w-5 h-5"} />
         </button>
 
         <AnimatePresence>
           {isOpen && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: -20, x: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: -20, x: 20 }}
-              className="absolute top-12 right-0 w-80 p-4 rounded-2xl bg-black/40 backdrop-blur-2xl border border-white/10 shadow-2xl origin-top-right max-h-[80vh] overflow-y-auto"
+              initial={{ opacity: 0, scale: 0.9, y: inline ? 10 : -20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: inline ? 10 : -20 }}
+              className={inline
+                ? "fixed inset-4 z-[200] m-auto w-[calc(100%-2rem)] max-w-[320px] h-fit max-h-[70vh] p-4 rounded-3xl backdrop-blur-3xl border border-white/30 shadow-2xl overflow-y-auto scrollbar-none"
+                : "absolute top-14 right-0 w-80 p-4 rounded-3xl backdrop-blur-3xl border border-white/30 shadow-2xl origin-top-right max-h-[80vh] overflow-y-auto scrollbar-none"
+              }
+              style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05))',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.2), 0 0 80px rgba(255,255,255,0.1)',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none'
+              }}
             >
               <div className="space-y-6">
                 {/* Mode Toggle */}
-                <div className="space-y-2">
+                <div className="space-y-2 text-center">
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Theme Mode</label>
                   <div className="flex items-center justify-between p-1 rounded-full bg-white/5 border border-white/5">
                     {["light", "dark", "system"].map((mode) => (

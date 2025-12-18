@@ -52,20 +52,20 @@ export const DatasetPreviewOverlay = ({ dataset, isOpen, onClose }: DatasetPrevi
                         className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
                     />
 
-                    {/* Centered Overlay Panel - Glassmorphic */}
+                    {/* Centered Overlay Panel - Glassmorphic - Full screen on mobile */}
                     <motion.div
                         initial={{ opacity: 0, scale: 0.9, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.9, y: 20 }}
                         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                        className="fixed left-24 top-16 -translate-x-1/2 -translate-y-1/2 z-50 w-[850px] max-w-[90vw] max-h-[80vh] bg-[#0c0c0c]/90 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+                        className="fixed inset-4 md:left-24 md:top-16 md:inset-auto md:-translate-x-1/2 md:-translate-y-1/2 z-50 md:w-[850px] md:max-w-[90vw] md:max-h-[80vh] bg-white/60 dark:bg-black/60 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-2xl md:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
                         style={{ boxShadow: `0 0 80px ${themeColor}30, 0 25px 50px rgba(0,0,0,0.5)` }}
                     >
                         {/* Header - Centered */}
-                        <div className="flex flex-col items-center justify-center px-6 py-5 border-b border-white/10 bg-gradient-to-r from-white/5 to-transparent relative">
+                        <div className="flex flex-col items-center justify-center px-6 py-5 border-b border-black/10 dark:border-white/10 bg-gradient-to-r from-black/5 dark:from-white/5 to-transparent relative">
                             <button
                                 onClick={onClose}
-                                className="absolute right-4 top-4 p-2.5 rounded-xl hover:bg-white/10 text-white/50 hover:text-white transition-all"
+                                className="absolute right-4 top-4 p-2.5 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 text-black/50 dark:text-white/50 hover:text-black dark:hover:text-white transition-all"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -75,8 +75,8 @@ export const DatasetPreviewOverlay = ({ dataset, isOpen, onClose }: DatasetPrevi
                             >
                                 <Database className="w-7 h-7" style={{ color: themeColor }} />
                             </div>
-                            <h2 className="font-bold text-white text-xl text-center">{dataset.filename || 'Dataset'}</h2>
-                            <div className="flex items-center justify-center gap-4 text-white/50 text-sm mt-2">
+                            <h2 className="font-bold text-black dark:text-white text-xl text-center">{dataset.filename || 'Dataset'}</h2>
+                            <div className="flex items-center justify-center gap-4 text-black/50 dark:text-white/50 text-sm mt-2">
                                 <span className="flex items-center gap-1.5">
                                     <Rows className="w-4 h-4" /> {dataset.rowCount?.toLocaleString() || 0} rows
                                 </span>
@@ -92,7 +92,7 @@ export const DatasetPreviewOverlay = ({ dataset, isOpen, onClose }: DatasetPrevi
                         </div>
 
                         {/* Tab Navigation - Centered */}
-                        <div className="flex items-center justify-center gap-2 px-6 py-3 border-b border-white/5 bg-black/20">
+                        <div className="flex items-center justify-center gap-2 px-6 py-3 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/20">
                             {[
                                 { id: 'overview', label: 'Overview & Quality' },
                                 { id: 'data', label: 'Data Preview' }
@@ -119,15 +119,15 @@ export const DatasetPreviewOverlay = ({ dataset, isOpen, onClose }: DatasetPrevi
                                         {/* Data Quality Summary */}
                                         <div className="grid grid-cols-3 gap-4">
                                             {/* Quality Score */}
-                                            <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
-                                                <div className="flex items-center gap-2 mb-3">
-                                                    <Sparkles className="w-4 h-4" style={{ color: themeColor }} />
-                                                    <span className="text-xs font-medium text-white/50">Quality Score</span>
+                                            <div className="p-3 md:p-4 rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
+                                                <div className="flex items-center gap-2 mb-2 md:mb-3">
+                                                    <Sparkles className="w-3 h-3 md:w-4 md:h-4" style={{ color: themeColor }} />
+                                                    <span className="text-[10px] md:text-xs font-medium text-white/50">Quality Score</span>
                                                 </div>
-                                                <div className="text-3xl font-bold" style={{
+                                                <div className="text-xl md:text-3xl font-bold" style={{
                                                     color: (dataset.qualityScore || 80) >= 80 ? '#22c55e' : (dataset.qualityScore || 80) >= 60 ? '#f59e0b' : '#ef4444'
                                                 }}>
-                                                    {dataset.qualityScore || 80}/100
+                                                    {dataset.qualityScore || 80}<span className="text-sm md:text-lg text-white/40">/100</span>
                                                 </div>
                                             </div>
 

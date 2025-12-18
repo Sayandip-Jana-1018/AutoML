@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
-import { ArrowLeft, Edit3, Check, X, Loader2, Play, Zap, Rocket, User, RefreshCw, Share2, Github, FileDown, FileUp, Code2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, Edit3, Check, X, Loader2, Play, Zap, Rocket, User, RefreshCw, Share2, Github, FileDown, FileUp, Code2, MoreHorizontal, ChevronDown, Pencil } from 'lucide-react';
 import { GlassCard } from './GlassCard';
 
 interface StudioHeaderProps {
@@ -64,6 +64,7 @@ export const StudioHeader = ({
     const [isEditingName, setIsEditingName] = useState(false);
     const [editedName, setEditedName] = useState(projectName);
     const [savingName, setSavingName] = useState(false);
+    const [showMoreMenu, setShowMoreMenu] = useState(false);
 
     const handleUpdateProjectName = async () => {
         if (!editedName.trim() || editedName === projectName) {
@@ -82,8 +83,9 @@ export const StudioHeader = ({
     };
 
     return (
-        <GlassCard className="mx-auto max-w-7xl mb-4 px-6 py-4" hover={false}>
-            <div className="grid grid-cols-[auto_1fr_auto] items-center gap-6">
+        <GlassCard className="mx-auto max-w-7xl mb-6 md:mb-4 px-2 md:px-6 py-2 md:py-4 relative z-[60]" hover={false}>
+            {/* Desktop Layout */}
+            <div className="hidden lg:grid grid-cols-[auto_1fr_auto] items-center gap-6">
                 {/* LEFT: Back + Project Name */}
                 <div className="flex items-center gap-4">
                     <Link href="/profile" className="text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors">
@@ -312,6 +314,188 @@ export const StudioHeader = ({
                             </div>
                         )}
                     </Link>
+                </div>
+            </div>
+
+            {/* Mobile/Tablet Layout */}
+            <div className="lg:hidden flex items-center justify-between gap-3">
+                {/* Left: Back + Name (inline editable) */}
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Link href="/profile" className="text-white/40 hover:text-white transition-colors flex-shrink-0">
+                        <ArrowLeft className="w-5 h-5" />
+                    </Link>
+                    {isEditingName ? (
+                        <div className="flex items-center gap-1 flex-1 min-w-0">
+                            <input
+                                type="text"
+                                value={editedName}
+                                onChange={(e) => setEditedName(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleUpdateProjectName();
+                                    if (e.key === 'Escape') setIsEditingName(false);
+                                }}
+                                autoFocus
+                                className="flex-1 min-w-0 font-bold text-sm bg-transparent border-b-2 focus:outline-none text-white py-1"
+                                style={{ borderColor: themeColor }}
+                            />
+                            <button onClick={handleUpdateProjectName} disabled={savingName} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors" style={{ color: themeColor }}>
+                                {savingName ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                            </button>
+                            <button onClick={() => setIsEditingName(false)} className="p-1.5 rounded-lg hover:bg-white/10 text-red-400 transition-colors">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <h1
+                                className="font-bold text-base truncate"
+                                style={{ color: themeColor }}
+                                title={projectName}
+                            >
+                                {projectName}
+                            </h1>
+                            <button
+                                onClick={() => { setEditedName(projectName); setIsEditingName(true); }}
+                                className="flex-shrink-0 p-1 rounded-lg hover:bg-white/10 transition-colors"
+                                title="Edit project name"
+                            >
+                                <Pencil className="w-3.5 h-3.5 text-white/40 hover:text-white/70" />
+                            </button>
+                        </>
+                    )}
+                </div>
+
+                {/* Right: Key Actions */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                    {/* Run/Train Button - Primary */}
+                    <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        onClick={onRunTraining}
+                        disabled={isRunning || isDeploying}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold disabled:opacity-40"
+                        style={{
+                            background: `linear-gradient(135deg, ${themeColor}40, ${themeColor}20)`,
+                            color: themeColor,
+                            border: `1px solid ${themeColor}40`
+                        }}
+                    >
+                        {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                        <span className="hidden sm:inline">{isRunning ? 'Running...' : 'Run'}</span>
+                    </motion.button>
+
+                    {/* More Menu Button */}
+                    <div className="relative z-[100]">
+                        <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setShowMoreMenu(!showMoreMenu)}
+                            className="w-10 h-10 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/20"
+                            style={{
+                                background: `linear-gradient(145deg, ${themeColor}30, ${themeColor}15)`,
+                            }}
+                        >
+                            <MoreHorizontal className="w-5 h-5 text-white/70" />
+                        </motion.button>
+
+                        {/* More Menu Dropdown */}
+                        <AnimatePresence>
+                            {showMoreMenu && (
+                                <>
+                                    {/* Backdrop */}
+                                    <motion.div
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="fixed inset-0 z-40"
+                                        onClick={() => setShowMoreMenu(false)}
+                                    />
+                                    {/* Menu */}
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                        className="absolute right-0 top-12 z-[100] w-56 bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+                                    >
+                                        <div className="p-2 space-y-1">
+                                            {/* AutoML */}
+                                            <button
+                                                onClick={() => { onAutoML(); setShowMoreMenu(false); }}
+                                                disabled={isAutoMLRunning || !datasetUploaded}
+                                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/80 hover:bg-white/10 disabled:opacity-40 transition-colors"
+                                            >
+                                                <Zap className="w-4 h-4 text-purple-400" />
+                                                AutoML
+                                            </button>
+                                            {/* Deploy */}
+                                            <button
+                                                onClick={() => { onDeploy(); setShowMoreMenu(false); }}
+                                                disabled={!hasActiveJob || isRunning || isDeploying}
+                                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/80 hover:bg-white/10 disabled:opacity-40 transition-colors"
+                                            >
+                                                <Rocket className="w-4 h-4 text-rose-400" />
+                                                Deploy
+                                            </button>
+                                            {/* Divider */}
+                                            <div className="h-px bg-white/10 my-1" />
+                                            {/* Share */}
+                                            {onShare && (
+                                                <button
+                                                    onClick={() => { onShare(); setShowMoreMenu(false); }}
+                                                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/80 hover:bg-white/10 transition-colors"
+                                                >
+                                                    <Share2 className="w-4 h-4 text-emerald-400" />
+                                                    Share Project
+                                                </button>
+                                            )}
+                                            {/* GitHub */}
+                                            {onGitHubPush && (
+                                                <button
+                                                    onClick={() => { onGitHubPush(); setShowMoreMenu(false); }}
+                                                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/80 hover:bg-white/10 transition-colors"
+                                                >
+                                                    <Github className="w-4 h-4 text-fuchsia-400" />
+                                                    Push to GitHub
+                                                </button>
+                                            )}
+                                            {/* VS Code */}
+                                            {onOpenVSCode && (
+                                                <button
+                                                    onClick={() => { onOpenVSCode(); setShowMoreMenu(false); }}
+                                                    disabled={isConnectingVSCode}
+                                                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/80 hover:bg-white/10 disabled:opacity-40 transition-colors"
+                                                >
+                                                    <Code2 className="w-4 h-4 text-blue-400" />
+                                                    Open in VS Code
+                                                </button>
+                                            )}
+                                            {/* Import */}
+                                            {onImportNotebook && (
+                                                <button
+                                                    onClick={() => { onImportNotebook(); setShowMoreMenu(false); }}
+                                                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/80 hover:bg-white/10 transition-colors"
+                                                >
+                                                    <FileDown className="w-4 h-4 text-orange-400" />
+                                                    Import Notebook
+                                                </button>
+                                            )}
+                                            {/* Reset */}
+                                            {datasetUploaded && (
+                                                <>
+                                                    <div className="h-px bg-white/10 my-1" />
+                                                    <button
+                                                        onClick={() => { onResetDataset(); setShowMoreMenu(false); }}
+                                                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                                                    >
+                                                        <RefreshCw className="w-4 h-4" />
+                                                        Reset Dataset
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </motion.div>
+                                </>
+                            )}
+                        </AnimatePresence>
+                    </div>
                 </div>
             </div>
         </GlassCard>

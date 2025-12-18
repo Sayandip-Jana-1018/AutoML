@@ -7,7 +7,7 @@ import { useThemeColor } from '@/context/theme-context';
 import { useTraining } from '@/context/training-context';
 import { doc, getDoc, onSnapshot, updateDoc, collection, orderBy, query, serverTimestamp, addDoc, getDocs, limit, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Loader2, BarChart3, Terminal, History, Code, Clock, Globe, Lock, Sparkles, CheckCircle } from 'lucide-react';
+import { Loader2, BarChart3, Terminal, History, Code, Clock, Globe, Lock, Sparkles, CheckCircle, FileSpreadsheet, Settings2, Palette } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Navbar } from '@/components/navbar';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -40,12 +40,15 @@ import { TrainingSuccessOverlay } from '@/components/studio/TrainingSuccessOverl
 
 import { RESOURCE_POLICIES } from '@/lib/resource-policy';
 
+import { useTheme } from 'next-themes';
+
 // --- Main Page ---
 export default function StudioPage() {
     const params = useParams();
     const searchParams = useSearchParams();
     const { user, userTier } = useAuth();
     const { themeColor } = useThemeColor();
+    const { resolvedTheme } = useTheme();
     const { showToast } = useToast();
     const projectId = params?.projectId as string;
 
@@ -1034,6 +1037,9 @@ export default function StudioPage() {
         if (!job.metrics) return;
         setLoadingVersionId(job.id);
         try {
+            // Update the active job immediately so TerminalView shows the correct metadata
+            setActiveJob(job);
+
             // 1. ALWAYS update the Project (Local Workspace)
             // This ensures Deploy, Profile, and Chat pages see the loaded version
             await updateDoc(doc(db, 'projects', projectId), {
@@ -1182,7 +1188,7 @@ export default function StudioPage() {
 
     // --- Main Render ---
     return (
-        <div className="min-h-screen bg-[#020202] text-black dark:text-white relative overflow-hidden">
+        <div className="min-h-screen bg-gray-50 dark:bg-[#020202] text-black dark:text-white relative overflow-hidden">
             {/* Upload Overlay */}
             <AnimatePresence>
                 {showUploadStage && (
@@ -1214,8 +1220,8 @@ export default function StudioPage() {
                 <LightPillar topColor={themeColor} bottomColor={themeColor} intensity={1.2} pillarWidth={20} glowAmount={0.0015} />
             </div>
 
-            {/* Theme Toggle */}
-            <div className="fixed top-0 right-0 z-50">
+            {/* Theme Toggle - Desktop: top-right, Mobile: small FAB at top-right */}
+            <div className="fixed top-0 right-0 z-50 hidden lg:block">
                 <ThemeToggle />
             </div>
 
@@ -1224,12 +1230,14 @@ export default function StudioPage() {
                 <Navbar />
             </div>
 
-            {/* Floating Dataset Trigger Button */}
-            <DatasetTriggerButton
-                onClick={() => setShowDatasetOverlay(true)}
-                hasDataset={!!project.datasetUploaded && !!project.dataset}
-                themeColor={themeColor}
-            />
+            {/* Floating Dataset Trigger Button - Hidden on mobile */}
+            <div className="hidden lg:block">
+                <DatasetTriggerButton
+                    onClick={() => setShowDatasetOverlay(true)}
+                    hasDataset={!!project.datasetUploaded && !!project.dataset}
+                    themeColor={themeColor}
+                />
+            </div>
 
             {/* Dataset Preview Overlay */}
             <DatasetPreviewOverlay
@@ -1251,12 +1259,14 @@ export default function StudioPage() {
                 onClose={() => setShowDatasetOverlay(false)}
             />
 
-            {/* Floating Training Config Trigger Button (Right Side) */}
+            {/* Floating Training Config Trigger Button (Right Side) - Hidden on mobile */}
             {project.datasetUploaded && (
-                <TrainingConfigTrigger
-                    onClick={() => setShowTrainingConfig(true)}
-                    themeColor={themeColor}
-                />
+                <div className="hidden lg:block">
+                    <TrainingConfigTrigger
+                        onClick={() => setShowTrainingConfig(true)}
+                        themeColor={themeColor}
+                    />
+                </div>
             )}
 
             {/* Training Config Overlay */}
@@ -1307,27 +1317,29 @@ export default function StudioPage() {
             />
 
 
-            {/* Workflow Timeline */}
+            {/* Workflow Timeline - Hidden on mobile/tablet to prevent overlap */}
             {project.datasetUploaded && (
-                <WorkflowTimeline
-                    currentStep={
-                        // Calculate step based on actual job status
-                        allJobs.some(j => j.status === 'deployed') ? 7 :
-                            allJobs.some(j => j.status === 'succeeded') ? 6 :
-                                allJobs.some(j => j.status === 'running' || j.status === 'provisioning') ? 5 :
-                                    project.workflow?.step ?? 4
-                    }
-                    status={
-                        allJobs.some(j => j.status === 'failed') ? 'error' :
-                            allJobs.some(j => j.status === 'succeeded' || j.status === 'deployed') ? 'success' :
-                                'pending'
-                    }
-                    errorMessage={project.workflow?.errorMessage || project.workflow?.error}
-                />
+                <div className="hidden lg:block">
+                    <WorkflowTimeline
+                        currentStep={
+                            // Calculate step based on actual job status
+                            allJobs.some(j => j.status === 'deployed') ? 7 :
+                                allJobs.some(j => j.status === 'succeeded') ? 6 :
+                                    allJobs.some(j => j.status === 'running' || j.status === 'provisioning') ? 5 :
+                                        project.workflow?.step ?? 4
+                        }
+                        status={
+                            allJobs.some(j => j.status === 'failed') ? 'error' :
+                                allJobs.some(j => j.status === 'succeeded' || j.status === 'deployed') ? 'success' :
+                                    'pending'
+                        }
+                        errorMessage={project.workflow?.errorMessage || project.workflow?.error}
+                    />
+                </div>
             )}
 
             {/* Main Content */}
-            <main className="relative z-10 pt-20 px-4 pb-8 min-h-screen">
+            <main className="relative z-10 pt-24 md:pt-20 px-2 md:px-4 pb-8 min-h-screen">
                 {/* Header */}
                 <StudioHeader
                     projectId={projectId}
@@ -1364,8 +1376,62 @@ export default function StudioPage() {
                     isConnectingVSCode={isConnectingVSCode}
                 />
 
-                {/* Main Grid */}
-                <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-6" style={{ height: 'calc(100vh - 200px)' }}>
+                {/* Mobile Quick Actions Bar - Horizontal row between header and content */}
+                <div className="lg:hidden flex items-center justify-center gap-3 mb-3 px-4">
+                    {/* Theme Toggle */}
+                    <ThemeToggle inline />
+
+                    {/* AI Suggestion */}
+                    {suggestionData && (
+                        <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setShowSuggestionPanel(true)}
+                            className="w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-xl border border-white/20 shadow-lg"
+                            style={{
+                                background: resolvedTheme === 'light' ? 'rgba(255,255,255,0.8)' : `linear-gradient(135deg, ${themeColor}, ${themeColor}cc)`,
+                                boxShadow: resolvedTheme === 'light' ? '0 4px 15px rgba(0,0,0,0.1)' : `0 4px 15px ${themeColor}40`
+                            }}
+                            title="AI Suggestions"
+                        >
+                            <Sparkles className="w-4 h-4 text-black dark:text-white" />
+                        </motion.button>
+                    )}
+
+                    {/* Dataset Button */}
+                    {project.datasetUploaded && project.dataset && (
+                        <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setShowDatasetOverlay(true)}
+                            className="w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-xl border border-white/20 shadow-lg"
+                            style={{
+                                background: resolvedTheme === 'light' ? 'rgba(255,255,255,0.8)' : `linear-gradient(135deg, ${themeColor}, ${themeColor}cc)`,
+                                boxShadow: resolvedTheme === 'light' ? '0 4px 15px rgba(0,0,0,0.1)' : `0 4px 15px ${themeColor}40`
+                            }}
+                            title="View Dataset"
+                        >
+                            <FileSpreadsheet className="w-4 h-4 text-black dark:text-white" />
+                        </motion.button>
+                    )}
+
+                    {/* Config Button */}
+                    {project.datasetUploaded && (
+                        <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setShowTrainingConfig(true)}
+                            className="w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-xl border border-white/20 shadow-lg"
+                            style={{
+                                background: resolvedTheme === 'light' ? 'rgba(255,255,255,0.8)' : `linear-gradient(135deg, ${themeColor}, ${themeColor}cc)`,
+                                boxShadow: resolvedTheme === 'light' ? '0 4px 15px rgba(0,0,0,0.1)' : `0 4px 15px ${themeColor}40`
+                            }}
+                            title="Training Config"
+                        >
+                            <Settings2 className="w-4 h-4 text-black dark:text-white" />
+                        </motion.button>
+                    )}
+                </div>
+
+                {/* Main Grid - Stacks on mobile, side-by-side on lg */}
+                <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 px-4 lg:px-0 lg:h-[calc(100vh-200px)]">
                     {/* Left: Code Editor */}
                     <CodeEditor
                         code={localCode}
@@ -1381,35 +1447,39 @@ export default function StudioPage() {
                         {/* Terminal / History Tabs - All top level */}
                         <div className="h-[280px]">
                             <div className="h-full flex flex-col">
-                                {/* Single Row of 4 Tabs - Center Aligned */}
-                                <GlassCard className="px-4 py-2 mb-4 flex items-center justify-center gap-2" hover={false}>
+                                {/* Single Row of 4 Tabs - Centered on mobile, icon-only */}
+                                <GlassCard className="px-2 md:px-4 py-1.5 md:py-2 mb-3 md:mb-4 flex items-center justify-center gap-1 md:gap-2" hover={false}>
                                     <button
                                         onClick={() => setActiveTab('terminal')}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'terminal' ? 'bg-emerald-500/20 ring-1 ring-emerald-500/40' : 'text-white/40 hover:text-white/70 hover:bg-white/5'}`}
+                                        className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap min-w-fit ${activeTab === 'terminal' ? 'bg-emerald-500/20 ring-1 ring-emerald-500/40' : 'text-black/40 dark:text-white/40 hover:text-black/70 dark:hover:text-white/70 hover:bg-black/5 dark:hover:bg-white/5'}`}
+                                        title="Terminal"
                                     >
                                         <Terminal className={`w-4 h-4 ${activeTab === 'terminal' ? 'text-emerald-400' : 'text-emerald-500/60'}`} />
-                                        <span className={activeTab === 'terminal' ? 'text-emerald-300' : ''}>Terminal</span>
+                                        <span className={`hidden md:inline ${activeTab === 'terminal' ? 'text-emerald-300' : ''}`}>Terminal</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('versions')}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'versions' ? 'bg-violet-500/20 ring-1 ring-violet-500/40' : 'text-white/40 hover:text-white/70 hover:bg-white/5'}`}
+                                        className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap min-w-fit ${activeTab === 'versions' ? 'bg-violet-500/20 ring-1 ring-violet-500/40' : 'text-black/40 dark:text-white/40 hover:text-black/70 dark:hover:text-white/70 hover:bg-black/5 dark:hover:bg-white/5'}`}
+                                        title="Versions"
                                     >
                                         <Code className={`w-4 h-4 ${activeTab === 'versions' ? 'text-violet-400' : 'text-violet-500/60'}`} />
-                                        <span className={activeTab === 'versions' ? 'text-violet-300' : ''}>Versions</span>
+                                        <span className={`hidden md:inline ${activeTab === 'versions' ? 'text-violet-300' : ''}`}>Versions</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('journey')}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'journey' ? 'bg-amber-500/20 ring-1 ring-amber-500/40' : 'text-white/40 hover:text-white/70 hover:bg-white/5'}`}
+                                        className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap min-w-fit ${activeTab === 'journey' ? 'bg-amber-500/20 ring-1 ring-amber-500/40' : 'text-black/40 dark:text-white/40 hover:text-black/70 dark:hover:text-white/70 hover:bg-black/5 dark:hover:bg-white/5'}`}
+                                        title="Journey"
                                     >
                                         <History className={`w-4 h-4 ${activeTab === 'journey' ? 'text-amber-400' : 'text-amber-500/60'}`} />
-                                        <span className={activeTab === 'journey' ? 'text-amber-300' : ''}>Journey</span>
+                                        <span className={`hidden md:inline ${activeTab === 'journey' ? 'text-amber-300' : ''}`}>Journey</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('metrics')}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'metrics' ? 'bg-cyan-500/20 ring-1 ring-cyan-500/40' : 'text-white/40 hover:text-white/70 hover:bg-white/5'}`}
+                                        className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap min-w-fit ${activeTab === 'metrics' ? 'bg-cyan-500/20 ring-1 ring-cyan-500/40' : 'text-black/40 dark:text-white/40 hover:text-black/70 dark:hover:text-white/70 hover:bg-black/5 dark:hover:bg-white/5'}`}
+                                        title="Metrics"
                                     >
                                         <BarChart3 className={`w-4 h-4 ${activeTab === 'metrics' ? 'text-cyan-400' : 'text-cyan-500/60'}`} />
-                                        <span className={activeTab === 'metrics' ? 'text-cyan-300' : ''}>Metrics</span>
+                                        <span className={`hidden md:inline ${activeTab === 'metrics' ? 'text-cyan-300' : ''}`}>Metrics</span>
                                     </button>
                                 </GlassCard>
 
@@ -1507,7 +1577,7 @@ export default function StudioPage() {
                                                 {allJobs.length > 0 ? (
                                                     <div className="relative pl-4 border-l border-white/10 space-y-4">
                                                         {allJobs.slice(0, 5).map((job, i) => {
-                                                            const isCurrentlyLoaded = projectModel?.bestVersionId === job.id;
+                                                            const isCurrentlyLoaded = activeJob?.id === job.id || projectModel?.bestVersionId === job.id;
                                                             const isLoading = loadingVersionId === job.id;
                                                             return (
                                                                 <motion.div key={job.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }} className="relative pl-5">
@@ -1521,7 +1591,7 @@ export default function StudioPage() {
                                                                             isCurrentlyLoaded ? (
                                                                                 <span className="text-[9px] font-bold px-2 py-1 rounded-lg bg-green-500/20 text-green-400 border border-green-500/30 flex items-center gap-1">
                                                                                     <CheckCircle className="w-2.5 h-2.5" />
-                                                                                    Loaded Globally
+                                                                                    Loaded
                                                                                 </span>
                                                                             ) : (
                                                                                 <button
@@ -1657,21 +1727,21 @@ export default function StudioPage() {
                 loading={suggestionLoading}
             />
 
-            {/* Floating AI Icon - Click to Open Suggestions */}
+            {/* Floating AI Icon - Desktop only (mobile uses unified FAB group) */}
             {suggestionData && (
                 <motion.button
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     whileHover={{ scale: 1.1 }}
                     onClick={() => setShowSuggestionPanel(true)}
-                    className="fixed bottom-8 right-8 w-12 h-12 rounded-full flex items-center justify-center shadow-2xl cursor-pointer z-40 group"
+                    className="hidden lg:flex fixed bottom-8 right-8 w-12 h-12 rounded-full items-center justify-center shadow-2xl cursor-pointer z-40 group"
                     style={{
                         background: `linear-gradient(135deg, ${themeColor}, ${themeColor}cc)`,
                         boxShadow: `0 8px 32px ${themeColor}60, 0 0 60px ${themeColor}30`
                     }}
                     title="Click to open AI suggestions"
                 >
-                    <Sparkles className="w-5 h-5 text-white group-hover:rotate-12 transition-transform" />
+                    <Sparkles className="w-4 h-4 lg:w-5 lg:h-5 text-white group-hover:rotate-12 transition-transform" />
                     <motion.div
                         className="absolute inset-0 rounded-full"
                         style={{

@@ -139,9 +139,11 @@ export const ChatInterface = ({ projectId, currentScript, currentScriptVersion, 
 
     return (
         <GlassCard className="flex flex-col h-full overflow-hidden" hover={false}>
-            <div className="p-3 border-b border-white/10 dark:border-white/10 flex items-center justify-between">
-                <div className="text-xs uppercase tracking-wider text-black/40 dark:text-white/40 font-bold flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4" style={{ color: themeColor }} /> AI Orchestrator
+            <div className="p-2 md:p-3 border-b border-black/10 dark:border-white/10 flex items-center justify-between gap-2">
+                <div className="text-[10px] md:text-xs uppercase tracking-wider text-black/40 dark:text-white/40 font-bold flex items-center gap-1.5 md:gap-2 whitespace-nowrap">
+                    <MessageSquare className="w-3.5 h-3.5 md:w-4 md:h-4" style={{ color: themeColor }} />
+                    <span className="hidden sm:inline">AI Orchestrator</span>
+                    <span className="sm:hidden">AI</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full" style={{
@@ -159,7 +161,7 @@ export const ChatInterface = ({ projectId, currentScript, currentScriptVersion, 
                                 localStorage.setItem('mlforge_selected_model', value);
                             }
                         }}
-                        className="appearance-none bg-black/40 backdrop-blur-sm border rounded-lg px-3 py-1.5 text-[11px] font-medium focus:outline-none cursor-pointer transition-all hover:bg-black/60"
+                        className="appearance-none bg-white/40 dark:bg-black/40 backdrop-blur-sm border rounded-lg px-3 py-1.5 text-[11px] font-medium focus:outline-none cursor-pointer transition-all hover:bg-white/60 dark:hover:bg-black/60"
                         style={{
                             borderColor: `${themeColor}50`,
                             color: themeColor,
@@ -207,10 +209,8 @@ export const ChatInterface = ({ projectId, currentScript, currentScriptVersion, 
             `}} />
             <div
                 id="chat-messages-scroll"
-                className="flex-1 p-4 space-y-4"
+                className="flex-1 min-h-0 p-3 md:p-4 space-y-3 md:space-y-4 overflow-auto"
                 style={{
-                    overflow: 'auto',
-                    maxHeight: '260px',
                     scrollbarWidth: 'thin',
                     scrollbarColor: `${themeColor}40 rgba(0,0,0,0.2)`,
                 }}
@@ -225,9 +225,9 @@ export const ChatInterface = ({ projectId, currentScript, currentScriptVersion, 
                 {messages.map((msg, i) => (
                     <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                         <div
-                            className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm backdrop-blur-sm ${msg.role === 'user'
+                            className={`max-w-[90%] md:max-w-[85%] rounded-2xl px-3 md:px-4 py-2 md:py-2.5 text-xs md:text-sm backdrop-blur-sm ${msg.role === 'user'
                                 ? 'text-white'
-                                : 'bg-white/5 text-white/90 border border-white/10'
+                                : 'bg-white/40 dark:bg-white/5 text-black/80 dark:text-white/90 border border-black/5 dark:border-white/10'
                                 }`}
                             style={msg.role === 'user' ? {
                                 background: `linear-gradient(135deg, ${themeColor}50 0%, ${themeColor}30 100%)`,
@@ -249,20 +249,20 @@ export const ChatInterface = ({ projectId, currentScript, currentScriptVersion, 
                             }}
                         >
                             <Loader2 className="w-4 h-4 animate-spin" style={{ color: themeColor }} />
-                            <span className="text-xs text-white/70">Generating code...</span>
+                            <span className="text-xs text-black/70 dark:text-white/70">Generating code...</span>
                         </div>
                     </div>
                 )}
                 <div ref={scrollRef} />
             </div>
 
-            <div className="p-4 border-t border-white/10 dark:border-white/10">
+            <div className="p-3 md:p-4 border-t border-black/10 dark:border-white/10">
                 <div className="flex gap-2">
                     <button
                         onClick={toggleVoice}
-                        className={`p-2 rounded-lg transition-all duration-300 ${isListening
+                        className={`p-2 md:p-2.5 rounded-lg transition-all duration-300 min-w-[40px] min-h-[40px] flex items-center justify-center ${isListening
                             ? 'bg-red-500/20 text-red-500 animate-pulse border border-red-500/50'
-                            : 'bg-white/5 dark:bg-white/5 text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white border border-white/10 dark:border-white/10'
+                            : 'bg-black/5 dark:bg-white/5 text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white border border-black/10 dark:border-white/10'
                             }`}
                         title="Voice Command"
                     >
@@ -275,14 +275,15 @@ export const ChatInterface = ({ projectId, currentScript, currentScriptVersion, 
                         onChange={e => setInput(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleSend()}
                         placeholder={isListening ? "Listening..." : "Type instruction..."}
-                        className="flex-1 bg-white/5 dark:bg-white/5 border border-white/10 dark:border-white/10 rounded-lg px-3 py-2 text-black dark:text-white text-sm focus:outline-none focus:border-blue-500/50 transition-colors placeholder:text-black/30 dark:placeholder:text-white/30"
+                        className="flex-1 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg px-2 md:px-3 py-1.5 md:py-2.5 text-black dark:text-white text-xs md:text-sm focus:outline-none focus:border-blue-500/50 transition-colors placeholder:text-black/30 dark:placeholder:text-white/30 min-h-[36px] md:min-h-[44px]"
                         disabled={sending}
                     />
                     <button
                         onClick={handleSend}
                         disabled={sending || !input.trim()}
                         style={{ backgroundColor: themeColor }}
-                        className="hover:brightness-110 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all"
+                        className={`hover:brightness-110 disabled:opacity-50 px-3 md:px-4 py-1.5 md:py-2.5 rounded-lg text-xs md:text-sm font-bold transition-all min-w-[50px] md:min-w-[60px] min-h-[36px] md:min-h-[44px] ${['#ffffff', '#00ffff', '#f59e0b', '#84cc16', '#FEBC2E'].includes(themeColor) ? 'text-black' : 'text-white'
+                            }`}
                     >
                         Send
                     </button>
