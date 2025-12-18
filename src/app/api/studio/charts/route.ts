@@ -5,9 +5,9 @@ import { FieldValue } from 'firebase-admin/firestore';
 
 // Tier-based model selection
 const TIER_MODELS = {
-    free: { provider: 'gemini', model: 'gemini-1.5-flash' },
+    free: { provider: 'gemini', model: 'gemini-2.5-flash' },
     silver: { provider: 'openai', model: 'gpt-4o-mini' },
-    gold: { provider: 'anthropic', model: 'claude-sonnet-4-20250514' }
+    gold: { provider: 'anthropic', model: 'claude-3-opus-20240229' }
 };
 
 // Popular chart types to auto-generate
@@ -154,9 +154,9 @@ Generate only the Python code, no explanations.`;
         if (selectedModel === 'openai') {
             model = openai('gpt-4o');
         } else if (selectedModel === 'claude') {
-            model = anthropic('claude-3-5-sonnet-20240620');
+            model = anthropic('claude-3-opus-20240229');
         } else {
-            model = google('models/gemini-2.5-pro');
+            model = google('models/gemini-2.5-flash');
         }
 
         const { text } = await generateText({

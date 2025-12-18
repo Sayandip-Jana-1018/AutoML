@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Outfit } from "next/font/google";
+import { Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
@@ -8,7 +8,11 @@ import { ToastProvider } from "@/components/ToastProvider";
 import { ThemeColorProvider } from "@/context/theme-context";
 import { TrainingProvider } from "@/context/training-context";
 
-const outfit = Outfit({ subsets: ["latin"] });
+const playfairDisplay = Playfair_Display({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+  style: ["normal", "italic"]
+});
 
 export const metadata: Metadata = {
   title: "AutoForgeML",
@@ -22,7 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={cn(outfit.className, "min-h-screen bg-background font-sans antialiased overflow-x-hidden")}>
+      <body className={cn(playfairDisplay.className, "min-h-screen bg-background font-sans antialiased overflow-x-hidden")}>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

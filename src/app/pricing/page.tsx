@@ -218,7 +218,7 @@ export default function PricingPage() {
             missing: [
                 "GPU Training",
                 "Large Datasets (100MB+)",
-                "Claude 3.5 Sonnet"
+                "Claude 3.5 Opus "
             ]
         },
         {
@@ -240,7 +240,7 @@ export default function PricingPage() {
             missing: [
                 "GPU Training (RunPod)",
                 "500 MB Datasets",
-                "Claude 3.5 Sonnet"
+                "Claude 3.5 Opus"
             ]
         },
         {
@@ -258,7 +258,7 @@ export default function PricingPage() {
                 "500 MB Dataset Limit",
                 "Image/CNN Training Support",
                 `${RESOURCE_POLICIES.gold.maxHpoTrials}+ HPO Trials`,
-                "Claude 3.5 Sonnet (Best for Code)",
+                "Claude 3.5 Opus (Best for Code)",
                 "GPT-4o (Full)",
                 "Priority Support"
             ],

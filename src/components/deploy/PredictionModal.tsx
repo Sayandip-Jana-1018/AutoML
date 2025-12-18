@@ -223,7 +223,13 @@ export const PredictionModal = ({ isOpen, onClose, model, themeColor }: Predicti
                                     {model.algorithm || 'Unknown Algorithm'}
                                 </span>
                                 <span className="px-3 py-1 rounded-full text-[10px] font-bold border" style={{ background: `${themeColor}20`, borderColor: `${themeColor}40`, color: themeColor }}>
-                                    {model.metrics?.accuracy ? `${(model.metrics.accuracy * 100).toFixed(1)}% Accuracy` : 'N/A'}
+                                    {model.metrics?.accuracy
+                                        ? `${(model.metrics.accuracy * 100).toFixed(1)}%`
+                                        : model.metrics?.silhouette
+                                            ? `${(Math.abs(model.metrics.silhouette) * 100).toFixed(1)}%`
+                                            : model.metrics?.r2
+                                                ? `${(model.metrics.r2 * 100).toFixed(1)}%`
+                                                : 'N/A'}
                                 </span>
                                 <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${model.status === 'deployed'
                                     ? 'bg-green-500/20 border-green-500/30 text-green-400'
@@ -260,13 +266,6 @@ export const PredictionModal = ({ isOpen, onClose, model, themeColor }: Predicti
                                                 style={{ background: `${themeColor}30`, color: themeColor }}
                                             >
                                                 <Sparkles className="w-3 h-3" /> Fill Sample
-                                            </button>
-                                            <button
-                                                onClick={getAiSuggestions}
-                                                disabled={loadingSuggestions}
-                                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-bold bg-purple-500/20 text-purple-300 transition-all hover:brightness-110"
-                                            >
-                                                {loadingSuggestions ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} AI Tips
                                             </button>
                                         </div>
                                     </div>
@@ -312,10 +311,21 @@ export const PredictionModal = ({ isOpen, onClose, model, themeColor }: Predicti
                                         <p className="text-red-400 text-sm text-center">{result.error}</p>
                                     ) : (
                                         <div className="text-center">
-                                            <p className="text-xs text-white/40 mb-1 uppercase tracking-wider">Prediction Result</p>
-                                            <p className="text-3xl font-black mb-2" style={{ color: themeColor }}>{result.prediction}</p>
+                                            <p className="text-xs text-white/40 mb-1 uppercase tracking-wider">
+                                                {model.target_column ? `Predicted ${model.target_column}` : 'Prediction Result'}
+                                            </p>
+                                            <div className="flex items-center justify-center gap-2">
+                                                <p className="text-4xl font-black mb-1" style={{ color: themeColor }}>
+                                                    {typeof result.prediction === 'number'
+                                                        ? result.prediction.toFixed(4).replace(/\.?0+$/, '')
+                                                        : result.prediction}
+                                                </p>
+                                            </div>
                                             {result.probability && (
-                                                <p className="text-sm text-white/60">{(result.probability * 100).toFixed(1)}% confidence</p>
+                                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 mt-2">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                                                    <p className="text-xs text-white/60">{(result.probability * 100).toFixed(1)}% Confidence</p>
+                                                </div>
                                             )}
                                         </div>
                                     )}

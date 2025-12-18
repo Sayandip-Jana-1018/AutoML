@@ -129,7 +129,8 @@ export default function ProfilePage() {
 
         setLoadingAssets(true)
 
-        // Listen to models collection filtered by user email
+        // Listen to models collection filtered by owner email
+        // Note: Your data stores ownerEmail, not uid in ownerId field
         const modelsQuery = query(
             collection(db, 'models'),
             where('ownerEmail', '==', user.email),
@@ -146,7 +147,9 @@ export default function ProfilePage() {
                 target_column: doc.data().target_column,
                 projectId: doc.data().projectId,
                 status: 'Deployed',
-                accuracy: doc.data().metrics?.accuracy ?? doc.data().bestMetricValue
+                accuracy: doc.data().metrics?.accuracy ?? doc.data().metrics?.silhouette ?? doc.data().metrics?.r2 ?? doc.data().bestMetricValue,
+                silhouette: doc.data().metrics?.silhouette,
+                r2: doc.data().metrics?.r2
             }))
             setUserModels(models)
             setLoadingAssets(false)

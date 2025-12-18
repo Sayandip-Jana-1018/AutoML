@@ -162,6 +162,35 @@ export async function POST(
             }
         }
 
+        // FLATTEN METRICS HERE - before using them, regardless of source
+        if (metrics && typeof metrics === 'object') {
+            // Convert algorithm_comparison from nested object to array
+            if (metrics.algorithm_comparison && typeof metrics.algorithm_comparison === 'object' && !Array.isArray(metrics.algorithm_comparison)) {
+                const algComparison = metrics.algorithm_comparison as Record<string, any>;
+                metrics.algorithm_comparison = Object.entries(algComparison).map(([algorithm, scores]) => ({
+                    algorithm,
+                    cv_score: scores.cv_score,
+                    cv_std: scores.cv_std
+                }));
+                console.log(`[Job Complete] Flattened algorithm_comparison from object to array`);
+            }
+
+            // Flatten confusion_matrix - Firestore doesn't support nested arrays
+            if (metrics.confusion_matrix && Array.isArray(metrics.confusion_matrix)) {
+                // Check if it's a nested array (2D matrix)
+                if (Array.isArray(metrics.confusion_matrix[0])) {
+                    const matrix = metrics.confusion_matrix as number[][];
+                    // Flatten the 2D array to 1D and store dimensions
+                    const flatMatrix = matrix.flat();
+                    const dimensions = [matrix.length, matrix[0]?.length || 0];
+                    metrics.confusion_matrix_flat = flatMatrix;
+                    metrics.confusion_matrix_dims = dimensions;
+                    delete metrics.confusion_matrix; // Remove nested array
+                    console.log(`[Job Complete] Flattened confusion_matrix from ${dimensions[0]}x${dimensions[1]} to flat array`);
+                }
+            }
+        }
+
         // Calculate actual runtime and cost
         const USD_TO_INR = parseFloat(process.env.USD_TO_INR || '83.0');
         let actualRuntimeSeconds = 0;
@@ -211,6 +240,7 @@ export async function POST(
             currentPhase: statusData.phase || 'completed',
             phaseProgress: statusData.progress || 100
         };
+
 
         if (metrics) {
             updateData.metrics = metrics;
@@ -284,7 +314,9 @@ export async function POST(
         });
 
     } catch (error: any) {
-        console.error('[Job Complete] Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const errorMessage = error?.message || error?.toString() || 'Unknown error';
+        console.error('[Job Complete] Error:', errorMessage);
+        if (error) console.error('[Job Complete] Error stack:', error.stack);
+        return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 }

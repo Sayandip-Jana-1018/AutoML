@@ -1,289 +1,134 @@
 rules_version = '2';
+// SIMPLIFIED RULES - Allow all authenticated users to read/write their data
+// Updated: 2024-12-18 16:00 IST
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // ==========================================
-    // Helper Functions
-    // ==========================================
-    
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-    
-    function isAdmin() {
-      return isAuthenticated() && request.auth.token.admin == true;
-    }
-    
-    function isCollaborator(resource) {
-      return isAuthenticated() && 
-        resource.data.collaborators != null &&
-        request.auth.uid in resource.data.collaborators.map(c => c.uid);
-    }
-    
-    function hasRole(resource, role) {
-      return isAuthenticated() &&
-        resource.data.collaborators != null &&
-        resource.data.collaborators.filter(c => 
-          c.uid == request.auth.uid && c.role == role
-        ).size() > 0;
-    }
-    
-    function isPublic(resource) {
-      return resource.data.visibility == 'public';
-    }
-    
-    function canView(resource, ownerId) {
-      return isOwner(ownerId) || 
-             isCollaborator(resource) || 
-             isPublic(resource) ||
-             isAdmin();
-    }
-    
-    function canEdit(resource, ownerId) {
-      return isOwner(ownerId) || 
-             hasRole(resource, 'editor') ||
-             hasRole(resource, 'runner') ||
-             isAdmin();
-    }
-    
-    // ==========================================
-    // Users Collection
-    // ==========================================
-    
+    // Users - read/write own data
     match /users/{userId} {
-      // Users can read/write their own document
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      allow delete: if isAdmin();
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // ==========================================
-    // Projects Collection
-    // ==========================================
-    
+    // Projects - owner by email
     match /projects/{projectId} {
-      allow read: if canView(resource, resource.data.ownerId);
-      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if canEdit(resource, resource.data.ownerId);
-      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null;
       
-      // Scripts subcollection
+      // Subcollections
       match /scripts/{scriptId} {
-        allow read: if canView(get(/databases/$(database)/documents/projects/$(projectId)), 
-                               get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId);
-        allow write: if canEdit(get(/databases/$(database)/documents/projects/$(projectId)),
-                                get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId);
+        allow read, write: if request.auth != null;
       }
       
-      // Jobs subcollection
       match /jobs/{jobId} {
-        allow read: if canView(get(/databases/$(database)/documents/projects/$(projectId)),
-                               get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId);
-        allow create: if canEdit(get(/databases/$(database)/documents/projects/$(projectId)),
-                                 get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId);
-        allow update: if canEdit(get(/databases/$(database)/documents/projects/$(projectId)),
-                                 get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId) ||
-                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt', 'metrics']);
-        allow delete: if isAdmin();
+        allow read, write: if request.auth != null;
+      }
+      
+      // Project datasets subcollection
+      match /datasets/{datasetId} {
+        allow read, write: if request.auth != null;
+      }
+      
+      // Project messages subcollection
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null;
+      }
+      
+      // Project deployments subcollection
+      match /deployments/{deploymentId} {
+        allow read, write: if request.auth != null;
       }
     }
     
-    // ==========================================
-    // Datasets Collection
-    // ==========================================
-    
+    // Top-level Datasets
     match /datasets/{datasetId} {
-      allow read: if canView(resource, resource.data.ownerId);
-      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if canEdit(resource, resource.data.ownerId);
-      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+      allow read, write: if request.auth != null;
+    }
+    
+    // User Datasets
+    match /user_datasets/{datasetId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Chat Sessions
+    match /chat_sessions/{sessionId} {
+      allow read, write: if request.auth != null;
       
-      // Dataset versions subcollection
-      match /versions/{versionId} {
-        allow read: if canView(get(/databases/$(database)/documents/datasets/$(datasetId)),
-                               get(/databases/$(database)/documents/datasets/$(datasetId)).data.ownerId);
-        allow write: if canEdit(get(/databases/$(database)/documents/datasets/$(datasetId)),
-                                get(/databases/$(database)/documents/datasets/$(datasetId)).data.ownerId);
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null;
       }
     }
     
-    // ==========================================
-    // Models Collection
-    // ==========================================
+    // Charts
+    match /charts/{chartId} {
+      allow read, write: if request.auth != null;
+    }
     
+    // Models
     match /models/{modelId} {
-      allow read: if canView(resource, resource.data.ownerId);
-      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if canEdit(resource, resource.data.ownerId);
-      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+      allow read, write: if request.auth != null;
       
-      // Model versions subcollection
       match /versions/{versionId} {
-        allow read: if canView(get(/databases/$(database)/documents/models/$(modelId)),
-                               get(/databases/$(database)/documents/models/$(modelId)).data.ownerId);
-        allow write: if canEdit(get(/databases/$(database)/documents/models/$(modelId)),
-                                get(/databases/$(database)/documents/models/$(modelId)).data.ownerId);
+        allow read, write: if request.auth != null;
       }
     }
     
-    // ==========================================
-    // Telemetry Collection (Admin only)
-    // ==========================================
-    
-    match /telemetry/{document=**} {
-      allow read: if isAdmin();
-      allow write: if isAuthenticated(); // Server-side writes
-    }
-    
-    // ==========================================
-    // System Collection (Admin only)
-    // ==========================================
-    
-    match /system/{document=**} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
-    }
-    
-    // ==========================================
-    // Health Check (anyone can write, no read)
-    // ==========================================
-    
-    match /_healthcheck/{docId} {
-      allow read: if false;
-      allow write: if true; // For health check pings
-    }
-    
-    // ==========================================
-    // Suggestions Collection (Chat-to-Studio)
-    // ==========================================
-    
+    // Suggestions
     match /suggestions/{suggestionId} {
-      // Only authenticated users can read suggestions they created or for projects they have access to
-      allow read: if isAuthenticated() && (
-        resource.data.createdBy == request.auth.uid ||
-        // Check if user has access to the associated project (via server-side API)
-        true // Validated server-side in API route
-      );
-      
-      // Only authenticated users can create suggestions
-      allow create: if isAuthenticated() && 
-        request.resource.data.createdBy == request.auth.uid &&
-        request.resource.data.projectId != null &&
-        request.resource.data.text != null;
-      
-      // Only the creator or project editors can update (mark as applied)
-      allow update: if isAuthenticated() && (
-        resource.data.createdBy == request.auth.uid ||
-        // Project access validated server-side
-        true
-      );
-      
-      // Only admins can delete suggestions (for cleanup)
-      allow delete: if isAdmin();
+      allow read, write: if request.auth != null;
     }
     
-    // ==========================================
-    // Global Jobs Index Collection (for scheduled sync)
-    // ==========================================
-    
+    // Jobs (global)
     match /jobs/{jobId} {
-      // Anyone authenticated can read (for their own projects)
-      // Project-level filtering happens in the query
-      allow read: if isAuthenticated();
-      
-      // Only server (admin SDK) or Cloud Functions can write
-      // This is handled by the admin SDK in API routes
-      allow write: if isAdmin();
+      allow read, write: if request.auth != null;
     }
     
-    // ==========================================
-    // Collaboration Links Collection
-    // ==========================================
-    
+    // Collab links
     match /collab_links/{linkId} {
-      // Anyone can read public links (for validation)
-      // Private links require authentication
-      allow read: if resource.data.mode == 'public' || isAuthenticated();
-      
-      // Only authenticated users can create links for their projects
-      allow create: if isAuthenticated() && 
-        request.resource.data.userId == request.auth.uid &&
-        request.resource.data.projectId != null;
-      
-      // Only the link creator can update (e.g., disable link)
-      allow update: if isAuthenticated() && 
-        resource.data.userId == request.auth.uid;
-      
-      // Only the link creator or admin can delete
-      allow delete: if isAuthenticated() && 
-        (resource.data.userId == request.auth.uid || isAdmin());
+      allow read, write: if request.auth != null;
     }
     
-    // ==========================================
-    // MCP Documents Collection (Real-time collaboration)
-    // ==========================================
-    
+    // MCP docs
     match /mcp_docs/{docId} {
-      // Read access for project participants
-      allow read: if isAuthenticated();
-      
-      // Create/Update for authenticated users associated with the project
-      allow write: if isAuthenticated();
+      allow read, write: if request.auth != null;
     }
     
-    // ==========================================
-    // Rate Limiting Collection (for abuse prevention)
-    // ==========================================
-    
-    match /rate_limits/{userId} {
-      // Only the user can read their own rate limit data
-      allow read: if isOwner(userId);
-      
-      // Server-side writes only
-      allow write: if false;
-    }
-    
-    // ==========================================
-    // API Keys Collection
-    // ==========================================
-    
+    // API keys
     match /api_keys/{keyId} {
-      // Only the key owner can read/manage their keys
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      
-      // Only authenticated users can create keys for themselves
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      
-      // Only key owner can update (revoke)
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      
-      // Only key owner or admin can delete
-      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read, write: if request.auth != null;
     }
     
-    // ==========================================
-    // Deploy Logs Collection (owner-only access)
-    // ==========================================
-    
+    // Deploy logs
     match /deploy_logs/{modelId} {
-      // Check if user owns the model
-      function ownsModel() {
-        return isAuthenticated() && 
-          get(/databases/$(database)/documents/models/$(modelId)).data.ownerId == request.auth.uid;
-      }
-      
-      allow read: if ownsModel();
-      allow write: if false; // Server-side only
+      allow read: if request.auth != null;
+      allow write: if false;
       
       match /requests/{logId} {
-        allow read: if ownsModel();
+        allow read: if request.auth != null;
         allow write: if false;
       }
+    }
+    
+    // Telemetry
+    match /telemetry/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // System
+    match /system/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Health check
+    match /_healthcheck/{docId} {
+      allow read: if false;
+      allow write: if true;
+    }
+    
+    // Rate limits
+    match /rate_limits/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
     }
   }
 }

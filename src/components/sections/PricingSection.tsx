@@ -31,7 +31,7 @@ export function PricingSection({ themeColor }: PricingSectionProps) {
             price: "₹2499",
             icon: CreditCard,
             color: "from-yellow-400 to-yellow-600",
-            features: ["Everything in Silver", "8 vCPU • 64GB RAM", "🚀 RunPod GPU (RTX 4000)", "24 Hours Training", "500MB Dataset Limit", "Claude 3.5 Sonnet", "GPT-4o (Full)"],
+            features: ["Everything in Silver", "8 vCPU • 64GB RAM", "🚀 RunPod GPU (RTX 4000)", "24 Hours Training", "500MB Dataset Limit", "Claude 3.5 Opus", "GPT-4o (Full)"],
             highlight: false
         }
     ]

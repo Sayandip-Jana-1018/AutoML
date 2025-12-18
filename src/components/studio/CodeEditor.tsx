@@ -132,61 +132,26 @@ function highlightLine(line: string): React.ReactNode[] {
 export const CodeEditor = ({ code, onChange, onSave, onRun, onSyncVSCode, saving, running, syncing }: CodeEditorProps) => {
     const { themeColor } = useThemeColor();
     const [displayedLines, setDisplayedLines] = useState<string[]>([]);
-    const [isAnimating, setIsAnimating] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [wordWrap, setWordWrap] = useState(false);
     const [fontSize, setFontSize] = useState(13);
-    const lastCodeLengthRef = useRef<number>(0);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const animationRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Sync code to display - with optional animation
+    // Sync code to display - immediate update
     useEffect(() => {
         if (!code) {
             setDisplayedLines([]);
-            lastCodeLengthRef.current = 0;
             return;
         }
 
         const lines = code.split('\n');
-        const lengthDiff = code.length - lastCodeLengthRef.current;
-
-        // Animate if: not editing, new code is much longer (e.g. from AutoML/AI)
-        if (!isEditing && lengthDiff > 100 && lines.length > 5) {
-            // Clear any existing animation
-            if (animationRef.current) clearInterval(animationRef.current);
-
-            setIsAnimating(true);
-            setDisplayedLines([]);
-            let idx = 0;
-
-            animationRef.current = setInterval(() => {
-                if (idx < lines.length) {
-                    setDisplayedLines(prev => [...prev, lines[idx]]);
-                    idx++;
-                } else {
-                    if (animationRef.current) clearInterval(animationRef.current);
-                    setIsAnimating(false);
-                }
-            }, 20); // 20ms per line = fast typing
-
-            lastCodeLengthRef.current = code.length;
-            return () => {
-                if (animationRef.current) clearInterval(animationRef.current);
-            };
-        } else {
-            // Immediate update (small changes or user editing)
-            setDisplayedLines(lines);
-            lastCodeLengthRef.current = code.length;
-            setIsAnimating(false);
-        }
-    }, [code, isEditing]);
+        setDisplayedLines(lines);
+    }, [code]);
 
     const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         setIsEditing(true);
         onChange(e.target.value);
         setDisplayedLines(e.target.value.split('\n'));
-        lastCodeLengthRef.current = e.target.value.length;
     };
 
     const handleFocus = () => setIsEditing(true);
@@ -353,9 +318,6 @@ export const CodeEditor = ({ code, onChange, onSave, onRun, onSyncVSCode, saving
                             {displayedLines.map((line, i) => (
                                 <div key={i} style={{ minHeight: `${fontSize * 1.6}px` }}>
                                     {highlightLine(line)}
-                                    {isAnimating && i === displayedLines.length - 1 && (
-                                        <span className="animate-pulse text-white">▊</span>
-                                    )}
                                 </div>
                             ))}
                         </pre>
@@ -394,15 +356,10 @@ export const CodeEditor = ({ code, onChange, onSave, onRun, onSyncVSCode, saving
                     <span className="text-white/30">Ctrl+S to save</span>
                 </div>
                 <div className="flex items-center gap-4">
-                    <span>Ln {displayedLines.length}</span>
+                    <span>Lines: {displayedLines.length}</span>
                     <span>{wordWrap ? 'Wrap: On' : 'Wrap: Off'}</span>
                     <span>Size: {fontSize}px</span>
-                    {isAnimating && (
-                        <span className="text-yellow-400 animate-pulse">● Generating...</span>
-                    )}
-                    {!isAnimating && (
-                        <span className="text-green-400">● Ready</span>
-                    )}
+                    <span className="text-green-400">● Ready</span>
                 </div>
             </div>
         </GlassCard>

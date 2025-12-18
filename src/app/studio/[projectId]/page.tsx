@@ -7,7 +7,7 @@ import { useThemeColor } from '@/context/theme-context';
 import { useTraining } from '@/context/training-context';
 import { doc, getDoc, onSnapshot, updateDoc, collection, orderBy, query, serverTimestamp, addDoc, getDocs, limit, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Loader2, BarChart3, Terminal, History, Code, Clock, Globe, Lock } from 'lucide-react';
+import { Loader2, BarChart3, Terminal, History, Code, Clock, Globe, Lock, Sparkles, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Navbar } from '@/components/navbar';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -60,7 +60,8 @@ export default function StudioPage() {
     const [allJobs, setAllJobs] = useState<Job[]>([]);
     const [activeDataset, setActiveDataset] = useState<any>(null);
     const [activeTab, setActiveTab] = useState<'terminal' | 'versions' | 'journey' | 'metrics'>('terminal');
-    const [projectModel, setProjectModel] = useState<{ id: string; visibility: 'public' | 'private' } | null>(null);
+    const [projectModel, setProjectModel] = useState<{ id: string; visibility: 'public' | 'private'; bestVersionId?: string } | null>(null);
+    const [loadingVersionId, setLoadingVersionId] = useState<string | null>(null);
     const [userAvatar, setUserAvatar] = useState<string | null>(null);
     const [isAutoMLRunning, setIsAutoMLRunning] = useState(false);
 
@@ -125,6 +126,12 @@ export default function StudioPage() {
         text: string;
         extractedCode: string;
         createdAt?: string;
+        targetScriptVersion?: number | null;
+        sanitization?: {
+            safe: boolean;
+            warnings: Array<{ pattern: string; severity: 'low' | 'medium' | 'high'; message: string }>;
+            blockers: Array<{ pattern: string; message: string }>;
+        };
     } | null>(null);
     const [suggestionLoading, setSuggestionLoading] = useState(false);
 
@@ -149,6 +156,35 @@ export default function StudioPage() {
         }
     }, [searchParams, suggestionData, showToast]);
 
+    // Real-time listener for latest suggestion
+    useEffect(() => {
+        if (!projectId || !user) return;
+
+        const q = query(
+            collection(db, 'suggestions'),
+            where('projectId', '==', projectId),
+            orderBy('createdAt', 'desc'),
+            limit(1)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            if (!snapshot.empty && !searchParams?.get('suggestionId')) {
+                const doc = snapshot.docs[0];
+                const data = doc.data();
+                setSuggestionData({
+                    id: doc.id,
+                    text: data.text || '',
+                    extractedCode: data.extractedCode || '',
+                    createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+                    targetScriptVersion: data.targetScriptVersion,
+                    sanitization: data.sanitization
+                });
+            }
+        });
+
+        return () => unsubscribe();
+    }, [projectId, searchParams, user]);
+
     // Fetch user avatar
     useEffect(() => {
         if (user?.photoURL) {
@@ -169,7 +205,7 @@ export default function StudioPage() {
     const lastServerScriptRef = React.useRef<string | null>(null);
 
     useEffect(() => {
-        if (!projectId) return;
+        if (!projectId || !user) return;
 
         const unsubscribe = onSnapshot(doc(db, 'projects', projectId), (docSnap) => {
             if (docSnap.exists()) {
@@ -191,11 +227,11 @@ export default function StudioPage() {
             }
         });
         return () => unsubscribe();
-    }, [projectId, loading]);
+    }, [projectId, loading, user]);
 
     // Sync datasets
     useEffect(() => {
-        if (!projectId) return;
+        if (!projectId || !user) return;
         const q = query(
             collection(db, 'projects', projectId, 'datasets'),
             orderBy('createdAt', 'desc')
@@ -206,11 +242,11 @@ export default function StudioPage() {
             }
         });
         return () => unsubscribe();
-    }, [projectId]);
+    }, [projectId, user]);
 
     // Fetch latest model for this project (for visibility toggle)
     useEffect(() => {
-        if (!projectId) return;
+        if (!projectId || !user) return;
         const q = query(
             collection(db, 'models'),
             where('projectId', '==', projectId),
@@ -227,11 +263,11 @@ export default function StudioPage() {
             }
         });
         return () => unsubscribe();
-    }, [projectId]);
+    }, [projectId, user]);
 
     // Sync jobs
     useEffect(() => {
-        if (!projectId) return;
+        if (!projectId || !user) return;
         const q = query(
             collection(db, 'projects', projectId, 'jobs'),
             orderBy('createdAt', 'desc')
@@ -275,7 +311,7 @@ export default function StudioPage() {
             }
         });
         return () => unsubscribe();
-    }, [projectId]);
+    }, [projectId, user]);
 
     // Poll for job completion from GCS (every 10 seconds when running)
     useEffect(() => {
@@ -992,6 +1028,65 @@ export default function StudioPage() {
         }
     };
 
+    // Load a specific version across all pages
+    // Load a specific version across all pages
+    const handleLoadVersion = async (job: Job) => {
+        if (!job.metrics) return;
+        setLoadingVersionId(job.id);
+        try {
+            // 1. ALWAYS update the Project (Local Workspace)
+            // This ensures Deploy, Profile, and Chat pages see the loaded version
+            await updateDoc(doc(db, 'projects', projectId), {
+                activeVersion: `v${job.scriptVersion || '?'}`,
+                metrics: job.metrics,
+                lastDeployedAt: new Date(),
+                currentScriptId: job.id,
+                algorithm: job.config?.algorithm || 'Custom Model'
+            });
+
+            // 2. CONDITIONALLY update the Model Registry (Public Marketplace)
+            if (projectModel?.id) {
+                if (projectModel.visibility === 'public') {
+                    // If Public: Update the registry so everyone sees the new version
+                    await updateDoc(doc(db, 'models', projectModel.id), {
+                        bestVersionId: job.id,
+                        bestMetricValue: job.metrics.accuracy || 0,
+                        metrics: job.metrics,
+                        updatedAt: serverTimestamp()
+                    });
+
+                    // Update local state
+                    setProjectModel(prev => prev ? { ...prev, bestVersionId: job.id } : null);
+
+                    showToast({
+                        type: 'success',
+                        title: '✅ Version Loaded & Published!',
+                        message: `Active in Deploy page AND updated in Marketplace (Public)`,
+                        duration: 5000
+                    });
+                } else {
+                    // If Private: Do NOT update registry metrics. Keep experiments private.
+                    showToast({
+                        type: 'success',
+                        title: '✅ Version Loaded Locally',
+                        message: `Active in Deploy page. Marketplace remains unchanged (Private).`,
+                        duration: 5000
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load version:', error);
+            showToast({
+                type: 'error',
+                title: 'Load Failed',
+                message: 'Could not update version state',
+                duration: 3000
+            });
+        } finally {
+            setLoadingVersionId(null);
+        }
+    };
+
     // Sync code from VS Code - fetches latest script from project
     const handleSyncFromVSCode = async () => {
         setIsSyncingVSCode(true);
@@ -1374,8 +1469,27 @@ export default function StudioPage() {
                                                             onClick={async () => {
                                                                 const newVis = projectModel.visibility === 'public' ? 'private' : 'public';
                                                                 try {
-                                                                    await updateDoc(doc(db, 'models', projectModel.id), { visibility: newVis });
+                                                                    // Update visibility
+                                                                    const updates: any = { visibility: newVis };
+
+                                                                    // If switching to PUBLIC, sync the currently active project metrics to the model
+                                                                    // This ensures the Marketplace shows what the user is currently looking at
+                                                                    if (newVis === 'public' && project) {
+                                                                        // We use the project's current view of metrics
+                                                                        // Note: project.metrics might need to be fetched or assumed from context 
+                                                                        // Ideally we read from 'activeJob' or the project doc, but for now we sync visibility.
+                                                                        // To be safe and simple: We just toggle visibility. 
+                                                                        // The USER should "Load Globally" to start the specific version they want publicly.
+                                                                    }
+
+                                                                    await updateDoc(doc(db, 'models', projectModel.id), updates, { merge: true });
                                                                     setProjectModel(prev => prev ? { ...prev, visibility: newVis } : null);
+
+                                                                    showToast({
+                                                                        type: 'success',
+                                                                        title: newVis === 'public' ? 'Model Published' : 'Model Privated',
+                                                                        message: newVis === 'public' ? 'Visible in Marketplace' : 'Hidden from Marketplace'
+                                                                    });
                                                                 } catch (err) { console.error(err); }
                                                             }}
                                                             title={projectModel.visibility === 'public' ? 'Public model' : 'Private model'}
@@ -1392,16 +1506,49 @@ export default function StudioPage() {
                                                 </div>
                                                 {allJobs.length > 0 ? (
                                                     <div className="relative pl-4 border-l border-white/10 space-y-4">
-                                                        {allJobs.slice(0, 5).map((job, i) => (
-                                                            <motion.div key={job.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }} className="relative pl-5">
-                                                                <div className={`absolute -left-[9px] top-1 w-2.5 h-2.5 rounded-full ${job.status === 'succeeded' ? 'bg-green-500' : job.status === 'failed' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'}`} />
-                                                                <div className="flex items-center justify-between">
-                                                                    <span className="text-xs text-white/50">v{allJobs.length - i}</span>
-                                                                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${job.status === 'succeeded' ? 'bg-green-500/20 text-green-400' : job.status === 'failed' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{job.status}</span>
-                                                                </div>
-                                                                {job.metrics?.accuracy !== undefined && <div className="text-xs text-white/40 mt-1">Accuracy: {(job.metrics.accuracy * 100).toFixed(1)}%</div>}
-                                                            </motion.div>
-                                                        ))}
+                                                        {allJobs.slice(0, 5).map((job, i) => {
+                                                            const isCurrentlyLoaded = projectModel?.bestVersionId === job.id;
+                                                            const isLoading = loadingVersionId === job.id;
+                                                            return (
+                                                                <motion.div key={job.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }} className="relative pl-5">
+                                                                    <div className={`absolute -left-[9px] top-1 w-2.5 h-2.5 rounded-full ${job.status === 'succeeded' ? 'bg-green-500' : job.status === 'failed' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'}`} />
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-xs text-white/50">v{allJobs.length - i}</span>
+                                                                            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${job.status === 'succeeded' ? 'bg-green-500/20 text-green-400' : job.status === 'failed' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{job.status}</span>
+                                                                        </div>
+                                                                        {['succeeded', 'completed', 'DEPLOYED', 'deployed'].includes(job.status) && (
+                                                                            isCurrentlyLoaded ? (
+                                                                                <span className="text-[9px] font-bold px-2 py-1 rounded-lg bg-green-500/20 text-green-400 border border-green-500/30 flex items-center gap-1">
+                                                                                    <CheckCircle className="w-2.5 h-2.5" />
+                                                                                    Loaded Globally
+                                                                                </span>
+                                                                            ) : (
+                                                                                <button
+                                                                                    onClick={() => handleLoadVersion(job)}
+                                                                                    disabled={isLoading}
+                                                                                    className="text-[9px] font-bold px-2 py-1 rounded-lg transition-all hover:scale-105 disabled:opacity-50 flex items-center gap-1"
+                                                                                    style={{
+                                                                                        background: `linear-gradient(135deg, ${themeColor}30, ${themeColor}15)`,
+                                                                                        color: themeColor,
+                                                                                        border: `1px solid ${themeColor}40`
+                                                                                    }}
+                                                                                >
+                                                                                    {isLoading ? (
+                                                                                        <><Loader2 className="w-2.5 h-2.5 animate-spin" /> Loading...</>
+                                                                                    ) : (
+                                                                                        <><Sparkles className="w-2.5 h-2.5" /> Load Globally</>
+                                                                                    )}
+                                                                                </button>
+                                                                            )
+                                                                        )}
+                                                                    </div>
+                                                                    {job.metrics?.accuracy !== undefined && <div className="text-xs text-white/40 mt-1">Accuracy: {(job.metrics.accuracy * 100).toFixed(1)}%</div>}
+                                                                    {job.metrics?.silhouette !== undefined && <div className="text-xs text-white/40 mt-1">Score: {(Math.abs(job.metrics.silhouette) * 100).toFixed(1)}%</div>}
+                                                                    {job.metrics?.r2 !== undefined && <div className="text-xs text-white/40 mt-1">R²: {(job.metrics.r2 * 100).toFixed(1)}%</div>}
+                                                                </motion.div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 ) : (
                                                     <div className="text-center py-8 text-white/40"><Clock className="w-8 h-8 mx-auto mb-2 opacity-50" /><p className="text-sm">No training jobs yet</p></div>
@@ -1466,14 +1613,23 @@ export default function StudioPage() {
                     }
                     window.history.replaceState({}, '', `/studio/${projectId}`);
                 }}
-                onRetrain={(mergedCode) => {
-                    // Apply suggestion
-                    const finalCode = mergedCode || (localCode + '\n\n# === AI Improvement Suggestion ===\n' + (suggestionData?.extractedCode || ''));
-                    setLocalCode(finalCode);
+                onRetrain={async (cleanCode) => {
+                    // ALWAYS replace with the AI-generated code
+                    if (!cleanCode) {
+                        showToast({
+                            type: 'error',
+                            title: 'No Code',
+                            message: 'No code to apply from suggestion.',
+                            duration: 3000
+                        });
+                        return;
+                    }
 
+                    // Replace editor content
+                    setLocalCode(cleanCode);
                     setShowSuggestionPanel(false);
 
-                    // Mark as applied in DB (mirroring onApply logic)
+                    // Mark as applied in DB
                     if (suggestionData?.id && user?.uid) {
                         fetch(`/api/studio/suggestions/${suggestionData.id}`, {
                             method: 'PATCH',
@@ -1486,11 +1642,13 @@ export default function StudioPage() {
                         }).catch(console.error);
                     }
 
-                    // Just update state and notify user, do NOT auto-open training config
+                    // Auto-save as new version
+                    await handleSave();
+
                     showToast({
-                        type: 'info',
-                        title: 'Ready to Train',
-                        message: 'Code updated. Review changes and click "Train Model" when ready.',
+                        type: 'success',
+                        title: 'Code Replaced & Saved',
+                        message: 'AI code applied and saved as new version. Ready to train!',
                         duration: 4000
                     });
 
@@ -1498,6 +1656,39 @@ export default function StudioPage() {
                 }}
                 loading={suggestionLoading}
             />
+
+            {/* Floating AI Icon - Click to Open Suggestions */}
+            {suggestionData && (
+                <motion.button
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    whileHover={{ scale: 1.1 }}
+                    onClick={() => setShowSuggestionPanel(true)}
+                    className="fixed bottom-8 right-8 w-12 h-12 rounded-full flex items-center justify-center shadow-2xl cursor-pointer z-40 group"
+                    style={{
+                        background: `linear-gradient(135deg, ${themeColor}, ${themeColor}cc)`,
+                        boxShadow: `0 8px 32px ${themeColor}60, 0 0 60px ${themeColor}30`
+                    }}
+                    title="Click to open AI suggestions"
+                >
+                    <Sparkles className="w-5 h-5 text-white group-hover:rotate-12 transition-transform" />
+                    <motion.div
+                        className="absolute inset-0 rounded-full"
+                        style={{
+                            background: `radial-gradient(circle, ${themeColor}40, transparent 70%)`
+                        }}
+                        animate={{
+                            scale: [1, 1.5, 1],
+                            opacity: [0.5, 0, 0.5]
+                        }}
+                        transition={{
+                            duration: 2,
+                            repeat: Infinity,
+                            ease: "easeInOut"
+                        }}
+                    />
+                </motion.button>
+            )}
 
             {/* MCP/VS Code Fallback Modal */}
             <AnimatePresence>

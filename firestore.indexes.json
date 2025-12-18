@@ -33,6 +33,34 @@
             "queryScope": "COLLECTION",
             "fields": [
                 {
+                    "fieldPath": "ownerId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "chat_sessions",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "userEmail",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "updatedAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "models",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
                     "fieldPath": "visibility",
                     "order": "ASCENDING"
                 },
@@ -72,6 +100,20 @@
         },
         {
             "collectionGroup": "datasets",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "projectId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "suggestions",
             "queryScope": "COLLECTION",
             "fields": [
                 {

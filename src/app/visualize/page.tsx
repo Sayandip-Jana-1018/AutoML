@@ -28,6 +28,7 @@ interface Model {
     precision?: number;
     recall?: number;
     f1?: number;
+    silhouette?: number;  // Clustering metric
     createdAt: any;
     status: string;
     scriptVersion?: number;
@@ -36,6 +37,7 @@ interface Model {
         precision?: number;
         recall?: number;
         f1?: number;
+        silhouette?: number;
     };
     bestMetricValue?: number;
 }
@@ -58,6 +60,10 @@ export default function VisualizePage() {
     const [selectedProjectName, setSelectedProjectName] = useState<string>('');
     const [projectDatasetPath, setProjectDatasetPath] = useState<string | null>(null);
     const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+
+    // Custom alert modal state (replacing browser alert)
+    const [alertModal, setAlertModal] = useState({ open: false, title: '', message: '' });
+    const showAlertModal = (title: string, message: string) => setAlertModal({ open: true, title, message });
 
     // Derived state for generated chart types (auto-updates when charts change)
     const generatedChartTypes = React.useMemo(() => charts.map(c => c.chartType), [charts]);
@@ -110,7 +116,10 @@ export default function VisualizePage() {
                             precision: data.metrics?.precision ?? data.precision,
                             recall: data.metrics?.recall ?? data.recall,
                             f1: data.metrics?.f1 ?? data.f1,
-                            bestMetricValue: data.bestMetricValue
+                            // Clustering metrics
+                            silhouette: data.metrics?.silhouette,
+                            // Use best available metric for display
+                            bestMetricValue: data.bestMetricValue ?? data.metrics?.accuracy ?? data.metrics?.silhouette ?? data.metrics?.r2
                         } as Model & { ownerId?: string };
                     })
                     .filter(m => m.ownerId === user.uid || m.projectId); // Filter by owner
@@ -172,7 +181,7 @@ export default function VisualizePage() {
 
     const handleGenerateChart = useCallback(async (chartTypeOrPrompt: string) => {
         if (!selectedProject) {
-            alert('Please select a project first!');
+            showAlertModal('No Project Selected', 'Please select a project first to generate charts. Click the "Project: Select a Project" button above to choose one.');
             return;
         }
         if (!user) return;
@@ -201,7 +210,7 @@ export default function VisualizePage() {
             const data = await response.json();
 
             if (data.alreadyExists) {
-                alert('This chart was already generated!');
+                showAlertModal('Chart Already Exists', 'This chart type has already been generated for this project. You can find it in the Generated Charts section below.');
             } else if (data.success && data.chart) {
                 setCharts(prev => [data.chart, ...prev]);
 
@@ -455,8 +464,9 @@ export default function VisualizePage() {
                                                     <div className="text-xs text-white/40">v{model.scriptVersion || 1}</div>
                                                 </td>
                                                 <td className="p-4 text-center">
-                                                    <span className="font-bold" style={{ color: model.accuracy ? themeColor : 'rgba(255,255,255,0.3)' }}>
-                                                        {model.accuracy ? `${(model.accuracy * 100).toFixed(1)}%` : '-'}
+                                                    <span className="font-bold" style={{ color: (model.accuracy || model.silhouette) ? themeColor : 'rgba(255,255,255,0.3)' }}>
+                                                        {model.accuracy ? `${(model.accuracy * 100).toFixed(1)}%` :
+                                                            model.silhouette ? `${(Math.abs(model.silhouette) * 100).toFixed(1)}%` : '-'}
                                                     </span>
                                                 </td>
                                                 <td className="p-4 text-center text-white/60">
@@ -515,7 +525,8 @@ export default function VisualizePage() {
                                             {selectedModels.map((modelId, idx) => {
                                                 const model = models.find(m => m.id === modelId);
                                                 if (!model) return null;
-                                                const value = metric === 'Accuracy' ? model.accuracy :
+                                                // For Accuracy, also check silhouette for clustering models
+                                                const value = metric === 'Accuracy' ? (model.accuracy ?? model.silhouette) :
                                                     metric === 'Precision' ? model.precision :
                                                         metric === 'Recall' ? model.recall : model.f1;
                                                 const percent = (value ?? 0) * 100;
@@ -731,6 +742,51 @@ export default function VisualizePage() {
                     >
                         {renderTabContent()}
                     </motion.div>
+                </AnimatePresence>
+
+                {/* Custom Alert Modal */}
+                <AnimatePresence>
+                    {alertModal.open && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                            style={{ background: 'rgba(0,0,0,0.7)' }}
+                            onClick={() => setAlertModal({ ...alertModal, open: false })}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                className="max-w-md w-full rounded-2xl p-6 backdrop-blur-xl"
+                                style={{
+                                    background: 'linear-gradient(135deg, rgba(0,0,0,0.8), rgba(0,0,0,0.6))',
+                                    border: `1px solid ${themeColor}40`,
+                                    boxShadow: `0 20px 60px rgba(0,0,0,0.5), 0 0 40px ${themeColor}20`
+                                }}
+                                onClick={e => e.stopPropagation()}
+                            >
+                                <div className="text-center">
+                                    <div
+                                        className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
+                                        style={{ background: `${themeColor}20` }}
+                                    >
+                                        <Sparkles className="w-8 h-8" style={{ color: themeColor }} />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-white mb-2">{alertModal.title}</h3>
+                                    <p className="text-white/60 text-sm mb-6">{alertModal.message}</p>
+                                    <button
+                                        onClick={() => setAlertModal({ ...alertModal, open: false })}
+                                        className="px-6 py-3 rounded-xl font-bold text-black transition-all hover:scale-105"
+                                        style={{ background: themeColor }}
+                                    >
+                                        Got it
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
                 </AnimatePresence>
             </main>
         </div>

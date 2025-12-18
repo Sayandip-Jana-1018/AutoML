@@ -78,24 +78,29 @@ ${context}
 Answer the user's questions based on this context. Be helpful and concise.`;
 
     let model;
-    const id = Number(modelId);
 
-    if (id === 1) {
+    // Map model IDs from chat page:
+    // ai-3 = Gemini Pro (free tier)
+    // ai-1 = GPT-4 Turbo (silver tier)  
+    // ai-2 = Claude 3 Opus (gold tier)
+
+    if (modelId === 'ai-2' || modelId === '1' || modelId === 1) {
         model = anthropic('claude-3-opus-20240229');
-        console.log('Using Claude model');
-    } else if (id === 2) {
-        model = google('models/gemini-2.5-pro');
-        console.log('Using Gemini model');
-    } else if (id === 3) {
-        model = openai('gpt-4o-mini');
-        console.log('Using GPT-4o-mini model');
-    } else {
+        console.log('✅ Using Claude model: claude-3-opus-20240229 (Anthropic)');
+    } else if (modelId === 'ai-3' || modelId === '2' || modelId === 2) {
+        model = google('models/gemini-2.5-flash');
+        console.log('✅ Using Gemini model: gemini-2.5-flash (Google)');
+    } else if (modelId === 'ai-1' || modelId === '3' || modelId === 3) {
         model = openai('gpt-4o');
-        console.log('Using GPT-4o model');
+        console.log('✅ Using GPT-4o model (OpenAI)');
+    } else {
+        // Default to Gemini (free tier)
+        model = google('models/gemini-2.5-flash');
+        console.log('⚠️ Unknown modelId, defaulting to Gemini');
     }
 
     try {
-        console.log('Calling streamText with model:', id);
+        console.log('Calling streamText with model:', modelId);
         const result = await streamText({
             model,
             system,
@@ -105,14 +110,11 @@ Answer the user's questions based on this context. Be helpful and concise.`;
         console.log('StreamText successful, returning response');
         return result.toTextStreamResponse();
     } catch (error: any) {
-        console.error('Primary model failed, falling back to Gemini:', error);
-
-        const fallbackResult = await streamText({
-            model: google('models/gemini-2.5-pro'),
-            system,
-            messages,
-        });
-
-        return fallbackResult.toTextStreamResponse();
+        console.error('Model API call failed:', error);
+        // No fallback - return the actual error so user knows which model failed
+        return new Response(
+            JSON.stringify({ error: `${modelId} failed: ${error.message}` }),
+            { status: 500, headers: { 'Content-Type': 'application/json' } }
+        );
     }
 }

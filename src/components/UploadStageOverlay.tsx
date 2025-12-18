@@ -408,11 +408,7 @@ export function UploadStageOverlay({
                                         onDragOver={handleDragOver}
                                         onDragLeave={handleDragLeave}
                                         onDrop={handleDrop}
-                                        onClick={() => {
-                                            if (!showUrlImport) {
-                                                fileInputRef.current?.click();
-                                            }
-                                        }}
+                                        onClick={() => fileInputRef.current?.click()}
                                         fileInputRef={fileInputRef}
                                         onFileSelect={parseLocalFile}
                                     >

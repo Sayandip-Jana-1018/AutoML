@@ -164,7 +164,9 @@ export async function registerModel(data: {
         jobId: data.jobId || '',
         trainedAt: data.trainedAt || new Date().toISOString(),
         bestVersionId: '',
-        bestMetricValue: data.metrics?.accuracy || 0,
+        // Calculate bestMetricValue from multiple metric types (for marketplace display)
+        // Priority: accuracy > silhouette > r2 > other metrics
+        bestMetricValue: data.metrics?.accuracy ?? data.metrics?.silhouette ?? data.metrics?.r2 ?? 0,
         totalVersions: 1,
         visibility: data.visibility || 'private',
         status: data.status || 'ready',

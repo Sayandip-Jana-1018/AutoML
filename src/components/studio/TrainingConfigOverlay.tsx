@@ -425,10 +425,13 @@ export const TrainingConfigTrigger = ({ onClick, themeColor }: TrainingConfigTri
             whileHover={{ scale: 1.1 }}
             onClick={onClick}
             className="fixed left-8 bottom-32 z-40 p-3 rounded-full backdrop-blur-xl bg-white/5 border border-white/10 shadow-lg transition-all hover:bg-white/10"
-            style={{ boxShadow: `0 0 15px ${themeColor}20` }}
+            style={{
+                background: `linear-gradient(135deg, ${themeColor}, ${themeColor}cc)`,
+                boxShadow: `0 8px 32px ${themeColor}60, 0 0 60px ${themeColor}30`,
+            }}
             title="Training Configuration"
         >
-            <Settings2 className="w-5 h-5" style={{ color: themeColor }} />
+            <Settings2 className="w-5 h-5" />
         </motion.button>
     );
 };

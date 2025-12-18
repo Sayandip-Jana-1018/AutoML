@@ -48,6 +48,13 @@ interface PublicModel {
     userId?: string;
     createdBy?: string;
     user_id?: string;
+    // Metrics object for fallback when bestMetricValue is 0
+    metrics?: {
+        accuracy?: number;
+        silhouette?: number;
+        r2?: number;
+        rmse?: number;
+    };
 }
 
 export default function MarketplacePage() {
@@ -313,7 +320,7 @@ export default function MarketplacePage() {
                                             </div>
 
                                             {/* Accuracy Badge (Top Right) */}
-                                            {model.bestMetricValue && (
+                                            {((model.bestMetricValue ?? 0) > 0 || model.metrics?.silhouette || model.metrics?.accuracy) && (
                                                 <div
                                                     className="flex items-center gap-1 px-2 py-1 rounded-full border flex-shrink-0"
                                                     style={{
@@ -323,7 +330,13 @@ export default function MarketplacePage() {
                                                 >
                                                     <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
                                                     <span className="text-[10px] font-bold text-yellow-400">
-                                                        {(model.bestMetricValue * 100).toFixed(0)}%
+                                                        {((model.bestMetricValue ?? 0) > 0)
+                                                            ? `${(model.bestMetricValue * 100).toFixed(1)}%`
+                                                            : model.metrics?.accuracy
+                                                                ? `${(model.metrics.accuracy * 100).toFixed(1)}%`
+                                                                : model.metrics?.silhouette
+                                                                    ? `${(Math.abs(model.metrics.silhouette) * 100).toFixed(1)}%`
+                                                                    : '0%'}
                                                     </span>
                                                 </div>
                                             )}
@@ -536,12 +549,18 @@ function TryModelModal({ isOpen, onClose, model, themeColor }: {
                                 </div>
 
                                 {/* Accuracy Badge - Compact */}
-                                {model.bestMetricValue && (
+                                {((model.bestMetricValue ?? 0) > 0 || model.metrics?.silhouette || model.metrics?.accuracy) && (
                                     <div className="flex justify-center mb-4">
                                         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
                                             <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
                                             <span className="text-xs font-bold text-yellow-400">
-                                                {(model.bestMetricValue * 100).toFixed(0)}%
+                                                {((model.bestMetricValue ?? 0) > 0)
+                                                    ? `${(model.bestMetricValue * 100).toFixed(1)}%`
+                                                    : model.metrics?.accuracy
+                                                        ? `${(model.metrics.accuracy * 100).toFixed(1)}%`
+                                                        : model.metrics?.silhouette
+                                                            ? `${(Math.abs(model.metrics.silhouette) * 100).toFixed(1)}%`
+                                                            : '0%'}
                                             </span>
                                         </div>
                                     </div>
@@ -588,9 +607,13 @@ function TryModelModal({ isOpen, onClose, model, themeColor }: {
                                             ) : (
                                                 <div className="space-y-2">
                                                     <div>
-                                                        <span className="text-white/50 text-[10px] block mb-0.5">Prediction</span>
-                                                        <span className="text-xl font-bold" style={{ color: themeColor }}>
-                                                            {result.prediction ?? 'N/A'}
+                                                        <span className="text-white/50 text-[10px] block mb-0.5 uppercase tracking-wider">
+                                                            {model.target_column ? `Predicted ${model.target_column}` : 'Prediction Result'}
+                                                        </span>
+                                                        <span className="text-3xl font-black" style={{ color: themeColor }}>
+                                                            {typeof result.prediction === 'number'
+                                                                ? result.prediction.toFixed(4).replace(/\.?0+$/, '')
+                                                                : (result.prediction ?? 'N/A')}
                                                         </span>
                                                     </div>
                                                     {result.probability && (

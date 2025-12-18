@@ -293,11 +293,11 @@ def load_data():
             print(f"Error downloading from GCS: {e}")
             raise
     else:
-        # Fallback paths for testing
+        # Fallback paths - use ./dataset.csv which startup script creates
         try:
-            df = pd.read_csv('/gcs/dataset.csv')
+            df = pd.read_csv('./dataset.csv')
         except:
-            df = pd.read_csv('dataset.csv')
+            df = pd.read_csv('/tmp/dataset.csv')
     
     print(f"Loaded {len(df)} rows, {len(df.columns)} columns")
     return df

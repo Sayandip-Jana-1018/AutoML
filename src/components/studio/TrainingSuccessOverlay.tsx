@@ -186,114 +186,185 @@ export const TrainingSuccessOverlay = ({
                     <AnimatePresence>
                         {showContent && (
                             <motion.div
-                                className="relative z-10 text-center"
+                                className="relative z-10"
                                 initial={{ scale: 0, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
                                 exit={{ scale: 0, opacity: 0 }}
                                 transition={{ type: 'spring', damping: 15, stiffness: 300 }}
                             >
-                                {/* Checkmark with glow */}
-                                <motion.div
-                                    className="relative mx-auto mb-6"
-                                    initial={{ scale: 0, rotate: -180 }}
-                                    animate={{ scale: 1, rotate: 0 }}
-                                    transition={{ type: 'spring', damping: 10, stiffness: 200, delay: 0.2 }}
+                                {/* Glass Card Container */}
+                                <div
+                                    className="relative px-12 py-10 rounded-3xl text-center backdrop-blur-2xl border"
+                                    style={{
+                                        background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)',
+                                        borderColor: `${themeColor}30`,
+                                        boxShadow: `0 25px 80px rgba(0,0,0,0.5), 0 0 60px ${themeColor}20, inset 0 0 60px rgba(255,255,255,0.03)`
+                                    }}
                                 >
-                                    <div
-                                        className="w-24 h-24 rounded-full flex items-center justify-center mx-auto"
-                                        style={{
-                                            background: `linear-gradient(135deg, ${themeColor}, #10B981)`,
-                                            boxShadow: `0 0 60px ${themeColor}80, 0 0 100px ${themeColor}40`,
-                                        }}
-                                    >
-                                        <motion.div
-                                            initial={{ pathLength: 0 }}
-                                            animate={{ pathLength: 1 }}
-                                            transition={{ duration: 0.5, delay: 0.5 }}
-                                        >
-                                            <CheckCircle2 className="w-12 h-12 text-white" />
-                                        </motion.div>
-                                    </div>
-                                </motion.div>
-
-                                {/* Title */}
-                                <motion.h1
-                                    className="text-4xl font-black text-white mb-2"
-                                    initial={{ y: 20, opacity: 0 }}
-                                    animate={{ y: 0, opacity: 1 }}
-                                    transition={{ delay: 0.3 }}
-                                >
-                                    🎉 Training Complete!
-                                </motion.h1>
-
-                                {/* Model name and version */}
-                                <motion.div
-                                    className="flex items-center justify-center gap-3 mb-4"
-                                    initial={{ y: 20, opacity: 0 }}
-                                    animate={{ y: 0, opacity: 1 }}
-                                    transition={{ delay: 0.4 }}
-                                >
-                                    <span className="text-xl text-white/80">{modelName}</span>
-                                    <span
-                                        className="px-3 py-1 rounded-full text-sm font-bold"
-                                        style={{
-                                            background: `${themeColor}30`,
-                                            color: themeColor,
-                                        }}
-                                    >
-                                        {version}
-                                    </span>
-                                </motion.div>
-
-                                {/* Metrics preview */}
-                                {metrics && (
+                                    {/* Floating decorative elements - corners */}
                                     <motion.div
-                                        className="flex items-center justify-center gap-6"
+                                        className="absolute -top-6 -left-6"
+                                        animate={{ rotate: 360, scale: [1, 1.2, 1] }}
+                                        transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+                                    >
+                                        <div className="p-2 rounded-full" style={{ background: `${themeColor}20` }}>
+                                            <Sparkles className="w-6 h-6" style={{ color: themeColor }} />
+                                        </div>
+                                    </motion.div>
+                                    <motion.div
+                                        className="absolute -top-6 -right-6"
+                                        animate={{ rotate: -360 }}
+                                        transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+                                    >
+                                        <div className="p-2 rounded-full bg-yellow-500/20">
+                                            <Zap className="w-6 h-6 text-yellow-400" />
+                                        </div>
+                                    </motion.div>
+                                    <motion.div
+                                        className="absolute -bottom-6 -left-6"
+                                        animate={{ y: [0, -8, 0] }}
+                                        transition={{ duration: 2, repeat: Infinity }}
+                                    >
+                                        <div className="p-2 rounded-full bg-green-500/20">
+                                            <Star className="w-6 h-6 text-green-400" />
+                                        </div>
+                                    </motion.div>
+
+                                    {/* Success Checkmark with enhanced glow */}
+                                    <motion.div
+                                        className="relative mx-auto mb-8"
+                                        initial={{ scale: 0, rotate: -180 }}
+                                        animate={{ scale: 1, rotate: 0 }}
+                                        transition={{ type: 'spring', damping: 10, stiffness: 200, delay: 0.2 }}
+                                    >
+                                        {/* Pulsing rings */}
+                                        <motion.div
+                                            className="absolute inset-0 rounded-full"
+                                            style={{ background: `${themeColor}30` }}
+                                            animate={{ scale: [1, 1.4, 1.4], opacity: [0.6, 0, 0] }}
+                                            transition={{ duration: 2, repeat: Infinity }}
+                                        />
+                                        <motion.div
+                                            className="absolute inset-0 rounded-full"
+                                            style={{ background: `${themeColor}20` }}
+                                            animate={{ scale: [1, 1.8, 1.8], opacity: [0.4, 0, 0] }}
+                                            transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
+                                        />
+                                        <div
+                                            className="relative w-28 h-28 rounded-full flex items-center justify-center mx-auto"
+                                            style={{
+                                                background: `linear-gradient(135deg, #10B981, ${themeColor})`,
+                                                boxShadow: `0 0 80px #10B98180, 0 0 120px ${themeColor}40`,
+                                            }}
+                                        >
+                                            <motion.div
+                                                initial={{ scale: 0 }}
+                                                animate={{ scale: 1 }}
+                                                transition={{ delay: 0.5, type: 'spring' }}
+                                            >
+                                                <CheckCircle2 className="w-14 h-14 text-white" />
+                                            </motion.div>
+                                        </div>
+                                    </motion.div>
+
+                                    {/* Title */}
+                                    <motion.h1
+                                        className="text-4xl font-black text-white mb-3"
                                         initial={{ y: 20, opacity: 0 }}
                                         animate={{ y: 0, opacity: 1 }}
-                                        transition={{ delay: 0.5 }}
+                                        transition={{ delay: 0.3 }}
                                     >
-                                        {metrics.accuracy !== undefined && (
-                                            <div className="text-center">
-                                                <div className="text-2xl font-bold text-green-400">
-                                                    {(metrics.accuracy * 100).toFixed(1)}%
-                                                </div>
-                                                <div className="text-xs text-white/50">Accuracy</div>
-                                            </div>
-                                        )}
-                                        {metrics.loss !== undefined && (
-                                            <div className="text-center">
-                                                <div className="text-2xl font-bold text-blue-400">
-                                                    {metrics.loss.toFixed(4)}
-                                                </div>
-                                                <div className="text-xs text-white/50">Loss</div>
-                                            </div>
-                                        )}
-                                    </motion.div>
-                                )}
+                                        🎉 Training Complete!
+                                    </motion.h1>
 
-                                {/* Sparkle decorations */}
-                                <motion.div
-                                    className="absolute -top-10 -left-10"
-                                    animate={{ rotate: 360 }}
-                                    transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
-                                >
-                                    <Sparkles className="w-8 h-8" style={{ color: themeColor }} />
-                                </motion.div>
-                                <motion.div
-                                    className="absolute -top-10 -right-10"
-                                    animate={{ rotate: -360 }}
-                                    transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
-                                >
-                                    <Zap className="w-8 h-8 text-yellow-400" />
-                                </motion.div>
-                                <motion.div
-                                    className="absolute -bottom-10 left-1/2 -translate-x-1/2"
-                                    animate={{ y: [0, -10, 0] }}
-                                    transition={{ duration: 2, repeat: Infinity }}
-                                >
-                                    <Rocket className="w-8 h-8 text-orange-400" />
-                                </motion.div>
+                                    {/* Model name and version */}
+                                    <motion.div
+                                        className="flex items-center justify-center gap-3 mb-6"
+                                        initial={{ y: 20, opacity: 0 }}
+                                        animate={{ y: 0, opacity: 1 }}
+                                        transition={{ delay: 0.4 }}
+                                    >
+                                        <span className="text-lg text-white/70">{modelName}</span>
+                                        <span
+                                            className="px-3 py-1.5 rounded-full text-sm font-bold"
+                                            style={{
+                                                background: `linear-gradient(135deg, ${themeColor}40, ${themeColor}20)`,
+                                                color: themeColor,
+                                                border: `1px solid ${themeColor}50`
+                                            }}
+                                        >
+                                            {version}
+                                        </span>
+                                    </motion.div>
+
+                                    {/* Metrics Cards */}
+                                    {metrics && (
+                                        <motion.div
+                                            className="flex items-stretch justify-center gap-4 mb-8"
+                                            initial={{ y: 20, opacity: 0 }}
+                                            animate={{ y: 0, opacity: 1 }}
+                                            transition={{ delay: 0.5 }}
+                                        >
+                                            {metrics.accuracy !== undefined && (
+                                                <div
+                                                    className="flex-1 min-w-[140px] p-5 rounded-2xl border text-center"
+                                                    style={{
+                                                        background: 'linear-gradient(135deg, rgba(34,197,94,0.15) 0%, rgba(34,197,94,0.05) 100%)',
+                                                        borderColor: 'rgba(34,197,94,0.3)'
+                                                    }}
+                                                >
+                                                    <div className="text-4xl font-black text-green-400 mb-1">
+                                                        {(metrics.accuracy * 100).toFixed(1)}%
+                                                    </div>
+                                                    <div className="text-sm text-green-400/60 font-medium">Accuracy</div>
+                                                </div>
+                                            )}
+                                            {metrics.loss !== undefined && (
+                                                <div
+                                                    className="flex-1 min-w-[140px] p-5 rounded-2xl border text-center"
+                                                    style={{
+                                                        background: 'linear-gradient(135deg, rgba(59,130,246,0.15) 0%, rgba(59,130,246,0.05) 100%)',
+                                                        borderColor: 'rgba(59,130,246,0.3)'
+                                                    }}
+                                                >
+                                                    <div className="text-4xl font-black text-blue-400 mb-1">
+                                                        {metrics.loss.toFixed(4)}
+                                                    </div>
+                                                    <div className="text-sm text-blue-400/60 font-medium">Loss</div>
+                                                </div>
+                                            )}
+                                        </motion.div>
+                                    )}
+
+                                    {/* CTA Button */}
+                                    <motion.button
+                                        onClick={onClose}
+                                        className="w-full py-4 rounded-2xl font-bold text-white text-lg transition-all relative overflow-hidden"
+                                        style={{
+                                            background: `linear-gradient(135deg, ${themeColor}, #8B5CF6, ${themeColor})`,
+                                            backgroundSize: '200% 200%',
+                                            boxShadow: `0 10px 40px ${themeColor}40`
+                                        }}
+                                        initial={{ y: 20, opacity: 0 }}
+                                        animate={{ y: 0, opacity: 1 }}
+                                        transition={{ delay: 0.6 }}
+                                        whileHover={{ scale: 1.02, boxShadow: `0 15px 50px ${themeColor}60` }}
+                                        whileTap={{ scale: 0.98 }}
+                                    >
+                                        <motion.div
+                                            className="absolute inset-0"
+                                            style={{
+                                                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+                                            }}
+                                            animate={{ x: ['-100%', '100%'] }}
+                                            transition={{ duration: 2, repeat: Infinity }}
+                                        />
+                                        <span className="relative flex items-center justify-center gap-3">
+                                            <Rocket className="w-5 h-5" />
+                                            View Your Model
+                                        </span>
+                                    </motion.button>
+                                </div>
                             </motion.div>
                         )}
                     </AnimatePresence>

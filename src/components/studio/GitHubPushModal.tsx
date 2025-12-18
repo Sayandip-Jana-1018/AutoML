@@ -101,8 +101,8 @@ export default function GitHubPushModal({ isOpen, onClose, projectId, code, onPu
 
                         {/* Result State */}
                         {result && (
-                            <div className={`mb-4 p-4 rounded-xl border ${result.success ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
-                                <div className="flex items-center gap-2 mb-2">
+                            <div className={`mb-4 p-4 rounded-xl border text-center ${result.success ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                                <div className="flex items-center justify-center gap-2 mb-2">
                                     {result.success ? (
                                         <Check className="w-5 h-5 text-green-400" />
                                     ) : (
@@ -117,7 +117,7 @@ export default function GitHubPushModal({ isOpen, onClose, projectId, code, onPu
                                         href={result.repoUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="flex items-center gap-2 text-xs text-white/60 hover:text-white transition-colors"
+                                        className="inline-flex items-center justify-center gap-2 text-xs text-white/60 hover:text-white transition-colors"
                                     >
                                         <ExternalLink className="w-3 h-3" />
                                         View Repository

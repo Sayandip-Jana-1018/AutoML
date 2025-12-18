@@ -30,6 +30,15 @@ interface Model {
         precision?: number
         recall?: number
         f1_score?: number
+        // Regression metrics
+        rmse?: number
+        r2?: number
+        mae?: number
+        mse?: number
+        // Clustering metrics
+        silhouette?: number
+        inertia?: number
+        extractedFrom?: string
     }
     feature_columns?: string[]
     created_at: string
@@ -38,6 +47,7 @@ interface Model {
     ownerName?: string
     ownerPhotoURL?: string
     user_email?: string
+    taskType?: string
 }
 
 export default function DeployPage() {
@@ -116,10 +126,49 @@ export default function DeployPage() {
         return () => unsubscribeModels()
     }, [user])
 
-    const getAccuracy = (model: Model) => {
-        const acc = model.metrics?.accuracy
-        if (acc === undefined || acc === null || isNaN(acc)) return "N/A"
-        return `${(acc * 100).toFixed(1)}%`
+    // Smart metric display - shows the most relevant metric for each model type
+    // All metrics displayed as user-friendly percentages
+    const getMetricDisplay = (model: Model) => {
+        const m = model.metrics || {}
+
+        // Classification metrics (accuracy first)
+        if (m.accuracy != null && !isNaN(m.accuracy)) {
+            // Accuracy is 0-1, convert to percentage
+            const pct = m.accuracy > 1 ? m.accuracy : m.accuracy * 100
+            return `${pct.toFixed(1)}%`
+        }
+
+        // Clustering metrics (silhouette score) - show as percentage for simplicity
+        // Silhouette ranges from -1 to 1, but positive values are good
+        if (m.silhouette != null && !isNaN(m.silhouette)) {
+            // Convert to percentage scale (e.g., 0.073 -> 7.3%)
+            const pct = Math.abs(m.silhouette) * 100
+            return `${pct.toFixed(1)}%`
+        }
+
+        // Regression metrics - R² as percentage, RMSE as-is
+        if (m.r2 != null && !isNaN(m.r2)) {
+            const pct = m.r2 * 100
+            return `${pct.toFixed(1)}%`
+        }
+        if (m.rmse != null && !isNaN(m.rmse)) {
+            return `${m.rmse.toFixed(2)}`
+        }
+        if (m.mae != null && !isNaN(m.mae)) {
+            return `${m.mae.toFixed(2)}`
+        }
+
+        return "N/A"
+    }
+
+    // Get metric label based on model type - simplified for beginners
+    const getMetricLabel = (model: Model) => {
+        const m = model.metrics || {}
+        if (m.accuracy != null) return "ACCURACY"
+        if (m.silhouette != null) return "SCORE"  // Simplified label for clustering
+        if (m.r2 != null) return "SCORE"
+        if (m.rmse != null) return "ERROR"
+        return "ACCURACY"
     }
 
     const handleOpenLogs = (modelId: string) => {
@@ -222,7 +271,7 @@ export default function DeployPage() {
                                                             boxShadow: `0 0 20px ${themeColor}20`
                                                         }}
                                                     >
-                                                        <Rocket className="w-5 h-5" style={{ color: themeColor }} />
+                                                        <Rocket className="w-5 h-5 dark:text-white" />
                                                     </div>
                                                     <div className="min-w-0 flex-1">
                                                         <h3 className="text-lg font-bold text-white truncate">
@@ -250,8 +299,8 @@ export default function DeployPage() {
                                         {/* Metrics Grid */}
                                         <div className="px-5 grid grid-cols-3 gap-2 mb-4">
                                             <div className="bg-white/5 rounded-lg p-2 border border-white/5 text-center">
-                                                <div className="text-[9px] text-white/40 uppercase tracking-wider">Accuracy</div>
-                                                <p className="text-sm font-bold" style={{ color: themeColor }}>{getAccuracy(model)}</p>
+                                                <div className="text-[9px] text-white/40 uppercase tracking-wider">{getMetricLabel(model)}</div>
+                                                <p className="text-sm font-bold" style={{ color: themeColor }}>{getMetricDisplay(model)}</p>
                                             </div>
                                             <div className="bg-white/5 rounded-lg p-2 border border-white/5 text-center">
                                                 <div className="text-[9px] text-white/40 uppercase tracking-wider">Features</div>

@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { TrendingUp, Target, BarChart3, AlertCircle, CheckCircle, Clock, Loader2, Globe, Lock } from 'lucide-react';
+import { TrendingUp, Target, BarChart3, AlertCircle, CheckCircle, Loader2, Globe, Lock } from 'lucide-react';
 import { GlassCard } from './GlassCard';
 import { Job } from './types';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
@@ -42,7 +42,10 @@ export const VisualizationView = ({
         }
     };
 
-    // Metric display component
+    // Use latest job metrics
+    const displayMetrics = latestJob?.metrics;
+
+    // Metric display component with smaller text
     const MetricCard = ({
         label,
         value,
@@ -59,7 +62,7 @@ export const VisualizationView = ({
         <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="relative p-4 rounded-2xl overflow-hidden group"
+            className="relative p-3 rounded-xl overflow-hidden group"
             style={{
                 background: `linear-gradient(135deg, ${color}15 0%, rgba(0,0,0,0.3) 100%)`,
                 border: `1px solid ${color}30`
@@ -71,16 +74,16 @@ export const VisualizationView = ({
                 style={{ background: `radial-gradient(circle at center, ${color}20 0%, transparent 70%)` }}
             />
 
-            <div className="relative flex items-center gap-3">
+            <div className="relative flex items-center gap-2">
                 <div
-                    className="p-2 rounded-xl"
+                    className="p-1.5 rounded-lg"
                     style={{ background: `${color}20` }}
                 >
-                    <Icon className="w-4 h-4" style={{ color }} />
+                    <Icon className="w-3 h-3" style={{ color }} />
                 </div>
                 <div>
-                    <div className="text-[10px] uppercase tracking-wider text-white/40 font-medium">{label}</div>
-                    <div className="text-sm font-bold text-white">
+                    <div className="text-[9px] uppercase tracking-wider text-white/40 font-medium">{label}</div>
+                    <div className="text-xs font-bold text-white">
                         {value !== undefined && value !== null
                             ? format === 'percent'
                                 ? `${(value * 100).toFixed(1)}%`
@@ -126,19 +129,20 @@ export const VisualizationView = ({
                 }}
             >
                 {/* Latest Job Metrics Dashboard */}
-                {latestJob && latestJob.status === 'succeeded' && latestJob.metrics ? (
-                    <div className="space-y-4">
-                        {/* Header */}
+                {displayMetrics ? (
+                    <div className="space-y-3">
+                        {/* Header - Simplified, no dropdown */}
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div
                                     className="p-2 rounded-xl"
                                     style={{ background: `${themeColor}20` }}
                                 >
-                                    <BarChart3 className="w-5 h-5" style={{ color: themeColor }} />
+                                    <BarChart3 className="w-4 h-4" style={{ color: themeColor }} />
                                 </div>
                                 <div>
-                                    <h3 className="text-sm font-bold text-white">Model Metrics</h3>
+                                    <h3 className="text-xs font-bold text-white">Model Metrics</h3>
+                                    <p className="text-[9px] text-white/40 mt-0.5">Currently Loaded Version</p>
                                 </div>
                             </div>
 
@@ -148,68 +152,154 @@ export const VisualizationView = ({
                                     <button
                                         onClick={handleVisibilityToggle}
                                         disabled={updatingVisibility}
-                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${visibility === 'public'
-                                                ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                                                : 'bg-white/10 text-white/60 border border-white/20'
+                                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-bold transition-all ${visibility === 'public'
+                                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                            : 'bg-white/10 text-white/60 border border-white/20'
                                             }`}
                                     >
                                         {updatingVisibility ? (
-                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                            <Loader2 className="w-2.5 h-2.5 animate-spin" />
                                         ) : visibility === 'public' ? (
-                                            <Globe className="w-3 h-3" />
+                                            <Globe className="w-2.5 h-2.5" />
                                         ) : (
-                                            <Lock className="w-3 h-3" />
+                                            <Lock className="w-2.5 h-2.5" />
                                         )}
                                         {visibility === 'public' ? 'Public' : 'Private'}
                                     </button>
 
                                     {/* Tooltip */}
-                                    <div className="absolute right-0 top-full mt-2 w-48 p-3 rounded-xl bg-black/90 border border-white/10 text-[10px] text-white/70 opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
-                                        <div className="font-bold text-white mb-1">
-                                            {visibility === 'public' ? '🌐 Public Model' : '🔒 Private Model'}
+                                    <div className="absolute right-0 top-full mt-2 w-40 p-2 rounded-lg bg-black/90 border border-white/10 text-[9px] text-white/70 opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
+                                        <div className="font-bold text-white text-[10px] mb-0.5">
+                                            {visibility === 'public' ? '🌐 Public' : '🔒 Private'}
                                         </div>
                                         {visibility === 'public' ? (
-                                            <p>Visible on Marketplace. Anyone can try your model via the Try button.</p>
+                                            <p>Visible on Marketplace</p>
                                         ) : (
-                                            <p>Only you can see this. Click to publish to the Marketplace.</p>
+                                            <p>Only you can view</p>
                                         )}
                                     </div>
                                 </div>
                             )}
                         </div>
-                        <div className="w-full h-px bg-white/10 my-2" />
+                        <div className="w-full h-px bg-white/10 my-1.5" />
 
-                        {/* Metrics Grid */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <MetricCard
-                                label="Accuracy"
-                                value={latestJob.metrics.accuracy}
-                                color="#22c55e"
-                                icon={Target}
-                            />
-                            <MetricCard
-                                label="Precision"
-                                value={latestJob.metrics.precision}
-                                color="#3b82f6"
-                                icon={CheckCircle}
-                            />
-                            <MetricCard
-                                label="Recall"
-                                value={latestJob.metrics.recall}
-                                color="#8b5cf6"
-                                icon={TrendingUp}
-                            />
-                            <MetricCard
-                                label="F1 Score"
-                                value={latestJob.metrics.f1}
-                                color="#f59e0b"
-                                icon={BarChart3}
-                            />
-                            {latestJob.metrics.log_loss !== undefined && (
+                        {/* Metrics Grid - Dynamic based on model type */}
+                        <div className="grid grid-cols-2 gap-2">
+                            {/* Classification Metrics */}
+                            {(displayMetrics.accuracy !== undefined || displayMetrics.precision !== undefined) && (
+                                <>
+                                    <MetricCard
+                                        label="Accuracy"
+                                        value={displayMetrics.accuracy}
+                                        color="#22c55e"
+                                        icon={Target}
+                                    />
+                                    <MetricCard
+                                        label="Precision"
+                                        value={displayMetrics.precision}
+                                        color="#3b82f6"
+                                        icon={CheckCircle}
+                                    />
+                                    <MetricCard
+                                        label="Recall"
+                                        value={displayMetrics.recall}
+                                        color="#8b5cf6"
+                                        icon={TrendingUp}
+                                    />
+                                    <MetricCard
+                                        label="F1 Score"
+                                        value={displayMetrics.f1}
+                                        color="#f59e0b"
+                                        icon={BarChart3}
+                                    />
+                                </>
+                            )}
+
+                            {/* Clustering Metrics - Show for clustering models */}
+                            {displayMetrics.silhouette !== undefined && (
+                                <>
+                                    <MetricCard
+                                        label="Silhouette Score"
+                                        value={displayMetrics.silhouette}
+                                        color="#22c55e"
+                                        icon={Target}
+                                    />
+                                    {displayMetrics.inertia !== undefined && (
+                                        <MetricCard
+                                            label="Inertia"
+                                            value={displayMetrics.inertia}
+                                            color="#3b82f6"
+                                            icon={BarChart3}
+                                            format="decimal"
+                                        />
+                                    )}
+                                    {displayMetrics.davies_bouldin !== undefined && (
+                                        <MetricCard
+                                            label="Davies-Bouldin"
+                                            value={displayMetrics.davies_bouldin}
+                                            color="#8b5cf6"
+                                            icon={TrendingUp}
+                                            format="decimal"
+                                        />
+                                    )}
+                                    {displayMetrics.calinski_harabasz !== undefined && (
+                                        <MetricCard
+                                            label="Calinski-Harabasz"
+                                            value={displayMetrics.calinski_harabasz}
+                                            color="#f59e0b"
+                                            icon={CheckCircle}
+                                            format="decimal"
+                                        />
+                                    )}
+                                </>
+                            )}
+
+                            {/* Regression Metrics */}
+                            {(displayMetrics.rmse !== undefined || displayMetrics.r2 !== undefined || displayMetrics.mae !== undefined) && (
+                                <>
+                                    {displayMetrics.r2 !== undefined && (
+                                        <MetricCard
+                                            label="R² Score"
+                                            value={displayMetrics.r2}
+                                            color="#22c55e"
+                                            icon={Target}
+                                        />
+                                    )}
+                                    {displayMetrics.rmse !== undefined && (
+                                        <MetricCard
+                                            label="RMSE"
+                                            value={displayMetrics.rmse}
+                                            color="#ef4444"
+                                            icon={AlertCircle}
+                                            format="decimal"
+                                        />
+                                    )}
+                                    {displayMetrics.mae !== undefined && (
+                                        <MetricCard
+                                            label="MAE"
+                                            value={displayMetrics.mae}
+                                            color="#3b82f6"
+                                            icon={BarChart3}
+                                            format="decimal"
+                                        />
+                                    )}
+                                    {displayMetrics.mse !== undefined && (
+                                        <MetricCard
+                                            label="MSE"
+                                            value={displayMetrics.mse}
+                                            color="#8b5cf6"
+                                            icon={TrendingUp}
+                                            format="decimal"
+                                        />
+                                    )}
+                                </>
+                            )}
+
+                            {displayMetrics.log_loss !== undefined && (
                                 <div className="col-span-2">
                                     <MetricCard
                                         label="Log Loss"
-                                        value={latestJob.metrics.log_loss}
+                                        value={displayMetrics.log_loss}
                                         color="#ef4444"
                                         icon={AlertCircle}
                                         format="decimal"
@@ -218,22 +308,22 @@ export const VisualizationView = ({
                             )}
                         </div>
 
-                        {/* Confusion Matrix (if available) */}
-                        {latestJob.metrics.confusion_matrix && (
-                            <div className="space-y-3">
-                                <h4 className="text-sm font-semibold text-white/60">Confusion Matrix</h4>
-                                <div className="p-4 rounded-xl" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        {/* Confusion Matrix (if available) - Smaller */}
+                        {displayMetrics.confusion_matrix && (
+                            <div className="space-y-2">
+                                <h4 className="text-[10px] font-semibold text-white/60">Confusion Matrix</h4>
+                                <div className="p-3 rounded-xl" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }}>
                                     <div className="grid gap-1" style={{
-                                        gridTemplateColumns: `repeat(${latestJob.metrics.confusion_matrix.length}, 1fr)`
+                                        gridTemplateColumns: `repeat(${displayMetrics.confusion_matrix.length}, 1fr)`
                                     }}>
-                                        {latestJob.metrics.confusion_matrix.map((row: number[], i: number) => (
+                                        {displayMetrics.confusion_matrix.map((row: number[], i: number) => (
                                             row.map((cell: number, j: number) => (
                                                 <motion.div
                                                     key={`${i}-${j}`}
                                                     initial={{ opacity: 0, scale: 0.8 }}
                                                     animate={{ opacity: 1, scale: 1 }}
                                                     transition={{ delay: (i * row.length + j) * 0.05 }}
-                                                    className="p-3 rounded-lg text-center font-bold text-sm"
+                                                    className="p-2 rounded-lg text-center font-bold text-xs"
                                                     style={{
                                                         background: i === j
                                                             ? `${themeColor}40`
@@ -246,7 +336,7 @@ export const VisualizationView = ({
                                             ))
                                         ))}
                                     </div>
-                                    <div className="mt-3 flex justify-between text-[10px] text-white/30">
+                                    <div className="mt-2 flex justify-between text-[8px] text-white/30">
                                         <span>Predicted →</span>
                                         <span>Actual ↓</span>
                                     </div>
@@ -263,22 +353,22 @@ export const VisualizationView = ({
                         >
                             <Loader2 className="w-12 h-12 text-yellow-500" />
                         </motion.div>
-                        <p className="mt-4 text-white/60 text-sm">Training in progress...</p>
-                        <p className="text-white/40 text-xs mt-1">Metrics will appear when training completes</p>
+                        <p className="mt-4 text-white/60 text-xs">Training in progress...</p>
+                        <p className="text-white/40 text-[10px] mt-1">Metrics will appear when training completes</p>
                     </div>
                 ) : latestJob && latestJob.status === 'failed' ? (
                     /* Training Failed */
                     <div className="flex flex-col items-center justify-center h-full py-12 text-center">
                         <AlertCircle className="w-12 h-12 text-red-400" />
-                        <p className="mt-4 text-white/60 text-sm">Training Failed</p>
-                        <p className="text-white/40 text-xs mt-1">Check terminal for error details</p>
+                        <p className="mt-4 text-white/60 text-xs">Training Failed</p>
+                        <p className="text-white/40 text-[10px] mt-1">Check terminal for error details</p>
                     </div>
                 ) : (
                     /* No Jobs */
                     <div className="flex flex-col items-center justify-center h-full py-12 text-center">
                         <BarChart3 className="w-12 h-12 text-white/20" />
-                        <p className="mt-4 text-white/40 text-sm">No training results yet</p>
-                        <p className="text-white/30 text-xs mt-1">Run training to see metrics and visualizations</p>
+                        <p className="mt-4 text-white/40 text-xs">No training results yet</p>
+                        <p className="text-white/30 text-[10px] mt-1">Run training to see metrics and visualizations</p>
                     </div>
                 )}
             </div>

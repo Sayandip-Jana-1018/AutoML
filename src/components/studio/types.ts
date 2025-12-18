@@ -59,8 +59,15 @@ export interface Job {
         rmse?: number;  // Regression
         r2?: number;    // Regression
         mae?: number;   // Regression
+        mse?: number;   // Regression
+        // Clustering metrics
+        silhouette?: number;
+        inertia?: number;
+        davies_bouldin?: number;
+        calinski_harabasz?: number;
         num_classes?: number;
         confusion_matrix?: number[][];
+        extractedFrom?: string;  // Source of metrics extraction
     };
     createdAt: any;
     logs?: string[];

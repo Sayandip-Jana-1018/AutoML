@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { History, Code2, Download, GitCompare, RotateCcw, Loader2, Clock, User, Sparkles, CheckCircle2, Trash2 } from "lucide-react";
-import { collection, query, orderBy, limit, onSnapshot, doc, deleteDoc } from "firebase/firestore";
+import { collection, query, orderBy, limit, onSnapshot, doc, deleteDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { GlassCard } from "./GlassCard";
 
@@ -37,7 +37,7 @@ interface ScriptVersionsViewProps {
 // Extract model name from script content
 const getModelFromScript = (content?: string): string | null => {
     if (!content) return null;
-    // Common ML model patterns
+    // Common ML model patterns - classification, regression, and clustering
     const patterns = [
         /(\w+Classifier)\s*\(/,
         /(\w+Regressor)\s*\(/,
@@ -55,6 +55,13 @@ const getModelFromScript = (content?: string): string | null => {
         /KNeighbors\w+\s*\(/,
         /DecisionTree\w+\s*\(/,
         /NeuralNetwork\s*\(/,
+        // Clustering models
+        /KMeans\s*\(/,
+        /DBSCAN\s*\(/,
+        /AgglomerativeClustering\s*\(/,
+        /MiniBatchKMeans\s*\(/,
+        /SpectralClustering\s*\(/,
+        /GaussianMixture\s*\(/,
     ];
 
     for (const pattern of patterns) {
@@ -70,12 +77,13 @@ export function ScriptVersionsView({ projectId, onVersionSelect, themeColor }: S
     const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
     const [loadingVersion, setLoadingVersion] = useState<string | null>(null);
     const [deletingVersion, setDeletingVersion] = useState<string | null>(null);
-    // Diff modal state
     const [showDiffModal, setShowDiffModal] = useState(false);
     const [diffOldVersion, setDiffOldVersion] = useState<ScriptVersion | null>(null);
     const [diffNewVersion, setDiffNewVersion] = useState<ScriptVersion | null>(null);
     const [diffContent, setDiffContent] = useState<{ old: string; new: string } | null>(null);
     const [loadingDiff, setLoadingDiff] = useState(false);
+    // Delete confirmation modal
+    const [deleteConfirmVersion, setDeleteConfirmVersion] = useState<ScriptVersion | null>(null);
 
     useEffect(() => {
         if (!projectId) return;
@@ -197,16 +205,49 @@ export function ScriptVersionsView({ projectId, onVersionSelect, themeColor }: S
 
     const handleDeleteVersion = async (version: ScriptVersion, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!confirm(`Delete version ${version.version}? This cannot be undone.`)) return;
+        setDeleteConfirmVersion(version);
+    };
 
-        setDeletingVersion(version.id);
+    const confirmDelete = async () => {
+        if (!deleteConfirmVersion) return;
+
+        setDeletingVersion(deleteConfirmVersion.id);
+        setDeleteConfirmVersion(null);
+
         try {
-            await deleteDoc(doc(db, 'projects', projectId, 'scripts', version.id));
+            await deleteDoc(doc(db, 'projects', projectId, 'scripts', deleteConfirmVersion.id));
         } catch (err) {
             console.error('Failed to delete version:', err);
-            alert('Failed to delete version');
         } finally {
             setDeletingVersion(null);
+        }
+    };
+
+
+
+    // Activate version globally (Load in all pages)
+    const handleActivateVersion = async (version: ScriptVersion, e: React.MouseEvent) => {
+        e.stopPropagation();
+
+        // 1. Load into editor locally
+        handleLoadVersion(version);
+
+        try {
+            // 2. Propagate to Project (Profile, Dashboard, etc.)
+            const projectRef = doc(db, 'projects', projectId);
+            await updateDoc(projectRef, {
+                activeVersion: version.version,
+                metrics: version.metricsSummary || {},
+                lastDeployedAt: new Date(),
+                currentScriptId: version.id,
+                algorithm: version.config?.algorithm || 'Custom Model'
+            });
+
+            // 3. UI Feedback
+            alert(`Version v${version.version} Loaded! Metrics propagated to Profile, Marketplace & Deploy pages.`);
+        } catch (error) {
+            console.error('Failed to activate version:', error);
+            alert('Failed to propagate version. Please try again.');
         }
     };
 
@@ -439,15 +480,21 @@ export function ScriptVersionsView({ projectId, onVersionSelect, themeColor }: S
 
                             {/* Actions */}
                             <div className="flex items-center gap-2 mt-3 pt-2 border-t border-white/5">
+                                {/* Load to Editor Only */}
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         handleLoadVersion(version);
                                     }}
-                                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs hover:bg-white/10 transition-colors"
-                                    style={{ color: themeColor }}
+                                    disabled={loadingVersion === version.id}
+                                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/10 text-white/70 hover:bg-white/15 transition-colors disabled:opacity-50"
+                                    title="Load this version in code editor only"
                                 >
-                                    <RotateCcw className="w-3 h-3" />
+                                    {loadingVersion === version.id ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                        <Code2 className="w-3.5 h-3.5" />
+                                    )}
                                     Load
                                 </button>
                                 <button
@@ -612,6 +659,73 @@ export function ScriptVersionsView({ projectId, onVersionSelect, themeColor }: S
                 </div>
             )
             }
+
+            {/* Delete Confirmation Modal */}
+            {deleteConfirmVersion && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={() => setDeleteConfirmVersion(null)}>
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="relative w-full max-w-md rounded-2xl overflow-hidden"
+                        style={{
+                            background: 'linear-gradient(135deg, rgba(30,30,30,0.98), rgba(20,20,20,0.98))',
+                            border: '1px solid rgba(239,68,68,0.3)',
+                            boxShadow: '0 25px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)'
+                        }}
+                    >
+                        {/* Header with warning */}
+                        <div className="p-6 pb-4 text-center">
+                            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
+                                <Trash2 className="w-8 h-8 text-red-400" />
+                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2">Delete Version {deleteConfirmVersion.version}?</h3>
+                            <p className="text-white/60 text-sm">
+                                This action cannot be undone. The script version will be permanently removed.
+                            </p>
+                        </div>
+
+                        {/* Version info card */}
+                        <div className="mx-6 mb-4 p-4 rounded-xl bg-white/5 border border-white/10">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-lg" style={{ background: `${themeColor}20` }}>
+                                    <Code2 className="w-4 h-4" style={{ color: themeColor }} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-bold text-white">v{deleteConfirmVersion.version}</span>
+                                        {deleteConfirmVersion.source === 'ai-suggestion' && (
+                                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400">AI</span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-white/40 truncate">
+                                        {formatDate(deleteConfirmVersion.createdAt)}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="p-4 flex gap-3 border-t border-white/10">
+                            <button
+                                onClick={() => setDeleteConfirmVersion(null)}
+                                className="flex-1 py-3 rounded-xl font-bold text-white/70 bg-white/10 hover:bg-white/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmDelete}
+                                className="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                                Delete
+                            </button>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
         </>
     );
 }

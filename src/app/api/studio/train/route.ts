@@ -82,13 +82,12 @@ function validateScriptPreFlight(script: string): { valid: boolean; errors: stri
     const placeholderPaths = [
         /['"]path_to/i,
         /['"]your_file/i,
-        /['"]dataset\.csv['"]/i,  // Without /tmp/
-        /['"]data\.csv['"]/i,     // Without /tmp/
-        /load_data\(['"](?!\/tmp\/)/i,  // load_data with non-/tmp/ path
+        /['"]your_dataset/i,
+        /['"]placeholder/i,
     ];
     for (const pattern of placeholderPaths) {
         if (pattern.test(script)) {
-            errors.push(`Script contains placeholder path. Use '/tmp/dataset.csv' instead.`);
+            errors.push(`Script contains placeholder path like 'path_to', 'your_file', etc. Please use actual file paths.`);
             break;
         }
     }
@@ -217,27 +216,56 @@ export async function POST(req: Request) {
         // 4. Create cleaning metadata for job tracking
         const cleaningMetadata = createCleaningMetadata(cleaningConfig);
 
-        // 5. Create versioned script snapshot
+        // 5. Create versioned script snapshot (with duplicate check)
         const scriptsRef = adminDb.collection('projects').doc(projectId).collection('scripts');
-        const scriptsSnapshot = await scriptsRef.count().get();
-        const versionNumber = scriptsSnapshot.data().count + 1;
 
-        const scriptVersionRef = await scriptsRef.add({
-            content: script,
-            options: {
-                ...config,
-                taskType,
-                cleaningConfig
-            },
-            config,
-            cleaningConfig,
-            createdAt: FieldValue.serverTimestamp(),
-            version: versionNumber,
-            generatedBy: 'user'
-        });
+        // Check if a recent version with same content exists (within last 10 seconds)
+        const recentScriptsQuery = await scriptsRef
+            .orderBy('createdAt', 'desc')
+            .limit(1)
+            .get();
 
-        const scriptVersionId = scriptVersionRef.id;
-        console.log(`[Train API] Created script version: ${scriptVersionId} (v${versionNumber})`);
+        let scriptVersionId: string = '';
+        let versionNumber: number = 0;
+        let isDuplicate = false;
+
+        if (!recentScriptsQuery.empty) {
+            const lastVersion = recentScriptsQuery.docs[0];
+            const lastVersionData = lastVersion.data();
+            const timeDiff = Date.now() - (lastVersionData.createdAt?.toMillis() || 0);
+
+            // If last version has same content and was created within 10 seconds, reuse it
+            if (lastVersionData.content === script && timeDiff < 10000) {
+                scriptVersionId = lastVersion.id;
+                versionNumber = lastVersionData.version;
+                isDuplicate = true;
+                console.log(`[Train API] Reusing recent script version: ${scriptVersionId} (v${versionNumber}) - duplicate detected`);
+            }
+        }
+
+        if (!isDuplicate) {
+            // Create new version
+            const scriptsSnapshot = await scriptsRef.count().get();
+            versionNumber = scriptsSnapshot.data().count + 1;
+
+            const scriptVersionRef = await scriptsRef.add({
+                content: script,
+                options: {
+                    ...config,
+                    taskType,
+                    cleaningConfig
+                },
+                config,
+                cleaningConfig,
+                createdAt: FieldValue.serverTimestamp(),
+                version: versionNumber,
+                generatedBy: 'user'
+            });
+
+            scriptVersionId = scriptVersionRef.id;
+            console.log(`[Train API] Created script version: ${scriptVersionId} (v${versionNumber})`);
+        }
+
 
         // 6. Get dataset GCS path from project
         const projectDoc = await adminDb.collection('projects').doc(projectId).get();

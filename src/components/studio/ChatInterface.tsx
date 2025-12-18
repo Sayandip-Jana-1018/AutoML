@@ -181,7 +181,7 @@ export const ChatInterface = ({ projectId, currentScript, currentScriptVersion, 
                             className="bg-[#1a1a1a] text-purple-400"
                             disabled={!modelAccess.claude}
                         >
-                            {modelAccess.claude ? 'Claude 3.5 Sonnet (Gold)' : '🔒 Claude 3.5 (Gold)'}
+                            {modelAccess.claude ? 'Claude 3.5 Opus (Gold)' : '🔒 Claude 3.5 (Gold)'}
                         </option>
                     </select>
                 </div>
@@ -226,8 +226,8 @@ export const ChatInterface = ({ projectId, currentScript, currentScriptVersion, 
                     <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                         <div
                             className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm backdrop-blur-sm ${msg.role === 'user'
-                                    ? 'text-white'
-                                    : 'bg-white/5 text-white/90 border border-white/10'
+                                ? 'text-white'
+                                : 'bg-white/5 text-white/90 border border-white/10'
                                 }`}
                             style={msg.role === 'user' ? {
                                 background: `linear-gradient(135deg, ${themeColor}50 0%, ${themeColor}30 100%)`,

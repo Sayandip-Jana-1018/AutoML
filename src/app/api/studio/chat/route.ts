@@ -6,7 +6,7 @@ import { generateText } from 'ai';
 import { RESOURCE_POLICIES, type SubscriptionTier } from '@/lib/resource-policy';
 import { detectCommand, generateCodeModification, formatDiffForDisplay, type ChatCommand } from '@/lib/chat-commands';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
     try {
@@ -27,9 +27,9 @@ export async function POST(req: Request) {
             selectedModel = openai('gpt-4o');
         } else if (model === 'claude') {
             if (!process.env.ANTHROPIC_API_KEY) throw new Error("Missing Anthropic API Key");
-            selectedModel = anthropic('claude-3-5-sonnet-20240620');
+            selectedModel = anthropic('claude-3-opus-20240229');
         } else {
-            selectedModel = google('gemini-2.5-pro');
+            selectedModel = google('gemini-2.5-flash');
         }
 
         // Get resource limits for the user's tier (with validation)
@@ -142,13 +142,33 @@ IMPORTANT:
             prompt: systemPrompt,
         });
 
-        const cleanJson = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+        // Better JSON extraction: find the JSON object, ignoring text before/after
+        let cleanJson = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+
+        // Extract only the JSON object (from first { to last })
+        const firstBrace = cleanJson.indexOf('{');
+        const lastBrace = cleanJson.lastIndexOf('}');
+
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            cleanJson = cleanJson.substring(firstBrace, lastBrace + 1);
+        }
+
+        // Normalize special characters that break JSON parsing
+        // Replace curly quotes with straight quotes, en/em dashes with regular dashes
+        cleanJson = cleanJson
+            .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')  // Curly double quotes → straight
+            .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'")  // Curly single quotes → straight
+            .replace(/[\u2013\u2014]/g, '-')  // En/em dash → hyphen
+            .replace(/\u2026/g, '...')  // Ellipsis → three dots
+
         let aiResponse;
 
         try {
             aiResponse = JSON.parse(cleanJson);
         } catch (e) {
             console.error("AI JSON Parse Error", e);
+            console.error("Raw Response:", rawResponse);
+            console.error("Cleaned JSON:", cleanJson);
             return NextResponse.json({
                 responseMessage: "I had trouble parsing that request. Could you rephrase?",
                 updatedScript: null
@@ -173,10 +193,43 @@ IMPORTANT:
             });
         }
 
+        // Generate AI summary of changes
+        let summary = null;
+        if (aiResponse.updatedScript && currentScript) {
+            try {
+                const summaryPrompt = `Compare these scripts and return JSON summary:
+
+OLD: ${currentScript.substring(0, 1000)}
+NEW: ${aiResponse.updatedScript.substring(0, 1000)}
+
+Return: {"changes": [{"type": "algorithm", "title": "...", "description": "...", "severity": "high"}], "notImplemented": ["..."]}`;
+
+                const { text: summaryResponse } = await generateText({ model: selectedModel, prompt: summaryPrompt });
+                let summaryJson = summaryResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+                const firstBrace = summaryJson.indexOf('{');
+                const lastBrace = summaryJson.lastIndexOf('}');
+                if (firstBrace !== -1 && lastBrace !== -1) {
+                    summaryJson = summaryJson.substring(firstBrace, lastBrace + 1);
+                }
+                // Sanitize JSON: fix escaped characters and control chars that break parsing
+                summaryJson = summaryJson
+                    .replace(/[\x00-\x1F\x7F]/g, ' ') // Remove control characters
+                    .replace(/\\\\/g, '\\\\\\\\') // Fix double backslashes
+                    .replace(/\\'/g, "'") // Fix escaped single quotes
+                    .replace(/\\n/g, ' ') // Replace newlines in strings with space
+                    .replace(/\\t/g, ' ') // Replace tabs with space
+                    .replace(/\\r/g, ' '); // Replace carriage returns
+                summary = JSON.parse(summaryJson);
+            } catch (e) {
+                console.error('[Summary] Failed:', e);
+            }
+        }
+
         return NextResponse.json({
             updatedScript: aiResponse.updatedScript,
             responseMessage: aiResponse.responseMessage || "Code updated successfully.",
-            detectedCommand: aiResponse.detectedCommand
+            detectedCommand: aiResponse.detectedCommand,
+            summary: summary
         });
 
     } catch (error: any) {
