@@ -88,7 +88,7 @@ export const StudioHeader = ({
             <div className="hidden lg:grid grid-cols-[auto_1fr_auto] items-center gap-6">
                 {/* LEFT: Back + Project Name */}
                 <div className="flex items-center gap-4">
-                    <Link href="/profile" className="text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors">
+                    <Link href="/studio" className="text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors">
                         <ArrowLeft className="w-5 h-5" />
                     </Link>
                     <div>
@@ -321,7 +321,7 @@ export const StudioHeader = ({
             <div className="lg:hidden flex items-center justify-between gap-3">
                 {/* Left: Back + Name (inline editable) */}
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <Link href="/profile" className="text-white/40 hover:text-white transition-colors flex-shrink-0">
+                    <Link href="/studio" className="text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors flex-shrink-0">
                         <ArrowLeft className="w-5 h-5" />
                     </Link>
                     {isEditingName ? (

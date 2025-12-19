@@ -42,11 +42,11 @@ export function MacBook({ children, ...props }: any) {
     // Store reference to the Screen mesh
     const screenRef = useRef<THREE.Object3D | null>(null)
 
-    // Apply video texture and set initial OPEN state
+    // Apply video texture and set initial OPEN state - Optimized
     useEffect(() => {
         if (!clone || !videoTexture || !videoElement) return
 
-        // Find Screen mesh
+        // Optimized traverse
         clone.traverse((child) => {
             if (child instanceof THREE.Mesh && child.name === 'Screen') {
                 child.material = new THREE.MeshBasicMaterial({
@@ -56,11 +56,14 @@ export function MacBook({ children, ...props }: any) {
                 })
                 child.material.needsUpdate = true
                 screenRef.current = child
-
                 // Set initial OPEN state
                 child.rotation.x = Math.PI * 0.65
             }
         })
+        // Force initial render frame to avoid pop
+        if (screenRef.current) screenRef.current.rotation.x = Math.PI * 0.65
+
+        // ... (video play logic stays same)
 
         // Start video playback
         const playVideo = async () => {
@@ -127,10 +130,10 @@ export function MacBook({ children, ...props }: any) {
 }
 
 // Component for dual MacBooks (initial hero view) with video
-export function DualMacBook({ children, ...props }: any) {
+export function DualMacBook({ opacity = 1, ...props }: any) {
+    const group = useRef<THREE.Group>(null)
     const { scene } = useGLTF('/2macbook.glb')
     const clone = useMemo(() => scene.clone(), [scene])
-    const group = useRef<THREE.Group>(null)
 
     // Create video element
     const [videoElement] = useState(() => {
@@ -165,7 +168,8 @@ export function DualMacBook({ children, ...props }: any) {
             if (child instanceof THREE.Mesh && child.name.includes('Screen')) {
                 child.material = new THREE.MeshBasicMaterial({
                     map: videoTexture,
-                    toneMapped: false
+                    toneMapped: false,
+                    transparent: true
                 })
             }
         })
@@ -189,6 +193,24 @@ export function DualMacBook({ children, ...props }: any) {
             videoElement.pause()
         }
     }, [videoTexture, videoElement])
+
+    // Apply opacity to all materials
+    useEffect(() => {
+        if (!group.current) return
+        group.current.traverse((child) => {
+            if (child instanceof THREE.Mesh && child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach(mat => {
+                        mat.transparent = true
+                        mat.opacity = opacity
+                    })
+                } else {
+                    child.material.transparent = true
+                    child.material.opacity = opacity
+                }
+            }
+        })
+    }, [opacity])
 
     return (
         <group ref={group} {...props} dispose={null}>

@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import { Database, Cpu, Rocket, Users, RefreshCw } from "lucide-react"
 import { useThemeColor } from "@/context/theme-context"
+import { NavButton } from "@/components/NavButton"
 
 export function HowItWorksSection() {
     const { themeColor } = useThemeColor()
@@ -66,7 +67,7 @@ export function HowItWorksSection() {
                             whileInView={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: i * 0.1 }}
                             viewport={{ once: true }}
-                            className="relative p-6 rounded-2xl backdrop-blur-2xl bg-black/60 border-2 border-white/30 hover:bg-black/70 hover:border-white/50 transition-all group shadow-2xl"
+                            className="relative p-6 rounded-2xl backdrop-blur-2xl bg-black/60 dark:bg-black/60 light:bg-white/80 border-2 border-white/30 dark:border-white/30 light:border-black/10 hover:bg-black/70 dark:hover:bg-black/70 light:hover:bg-white/90 hover:border-white/50 transition-all group shadow-2xl"
                             style={{
                                 boxShadow: `0 20px 60px rgba(0,0,0,0.8), 0 0 40px ${themeColor}40, inset 0 1px 0 rgba(255,255,255,0.2)`
                             }}
@@ -89,8 +90,8 @@ export function HowItWorksSection() {
                                 >
                                     <item.icon className="w-8 h-8" style={{ color: themeColor, filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.8))' }} />
                                 </div>
-                                <h3 className="text-xl font-bold text-white drop-shadow-lg">{item.title}</h3>
-                                <p className="text-white/80 text-sm drop-shadow-md leading-relaxed">{item.description}</p>
+                                <h3 className="text-xl font-bold text-foreground drop-shadow-lg">{item.title}</h3>
+                                <p className="text-foreground/80 text-sm drop-shadow-md leading-relaxed">{item.description}</p>
                                 <div
                                     className="text-5xl font-black mt-2 drop-shadow-2xl"
                                     style={{
@@ -104,8 +105,20 @@ export function HowItWorksSection() {
                         </motion.div>
                     ))}
                 </div>
+
+                {/* CTA Button */}
+                <motion.div
+                    initial={{ opacity: 0, y: 30 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.6, delay: 0.5 }}
+                    className="flex justify-center mt-12"
+                >
+                    <NavButton href="/studio" variant="primary" size="lg" icon="arrow">
+                        Try Demo
+                    </NavButton>
+                </motion.div>
             </div>
         </section>
     )
 }
-

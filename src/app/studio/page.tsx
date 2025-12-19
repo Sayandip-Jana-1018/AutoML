@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { useThemeColor } from '@/context/theme-context';
+import { useTheme } from 'next-themes';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
 import { Loader2, Plus, FolderOpen, ArrowRight, Sparkles, X } from 'lucide-react';
@@ -25,6 +26,7 @@ export default function StudioEntryPage() {
     const searchParams = useSearchParams();
     const { user } = useAuth();
     const { themeColor } = useThemeColor();
+    const { resolvedTheme } = useTheme();
     const [loading, setLoading] = useState(true);
     const [creating, setCreating] = useState(false);
     const [recentProjects, setRecentProjects] = useState<Project[]>([]);
@@ -138,12 +140,19 @@ export default function StudioEntryPage() {
 
     // Project Picker UI
     return (
-        <div className="min-h-screen bg-[#020202] text-white relative overflow-hidden">
+        <div className={`min-h-screen ${resolvedTheme === 'light' ? 'bg-gray-50' : 'bg-[#020202]'} text-black dark:text-white relative overflow-hidden`}>
             {/* Navbar */}
             <Navbar />
 
-            {/* Theme Toggle */}
-            <ThemeToggle />
+            {/* Theme Toggle - Hidden on mobile, shown in corner on desktop */}
+            <div className="hidden lg:block">
+                <ThemeToggle />
+            </div>
+
+            {/* Mobile Theme Toggle Bar - Centered under navbar */}
+            <div className="lg:hidden flex items-center justify-center pt-20 pb-3">
+                <ThemeToggle inline />
+            </div>
 
             {/* Project Name Modal */}
             <AnimatePresence>
@@ -213,17 +222,17 @@ export default function StudioEntryPage() {
             />
 
             {/* Centered Content Container */}
-            <div className="flex items-center justify-center min-h-screen pt-16">
+            <div className="flex items-center justify-center min-h-[calc(100vh-180px)] lg:min-h-screen lg:pt-16 py-4">
                 {/* Project Picker Card */}
                 <motion.div
                     initial={{ opacity: 0, scale: 0.9, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     transition={{ duration: 0.5, ease: "easeOut" }}
-                    className="relative z-10 backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl mx-4"
-                    style={{ boxShadow: `0 0 60px ${themeColor}20` }}
+                    className={`relative z-10 backdrop-blur-2xl ${resolvedTheme === 'light' ? 'bg-white/40 border-black/5' : 'bg-white/5 border-white/10'} border rounded-3xl p-4 md:p-6 w-full max-w-lg shadow-2xl mx-4`}
+                    style={{ boxShadow: `0 0 80px ${themeColor}15` }}
                 >
                     {/* Header */}
-                    <div className="text-center mb-8">
+                    <div className="text-center mb-6 md:mb-8">
                         <motion.div
                             animate={{
                                 scale: [1, 1.05, 1],
@@ -234,13 +243,13 @@ export default function StudioEntryPage() {
                                 ]
                             }}
                             transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                            className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center"
+                            className="w-14 h-14 md:w-16 md:h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center"
                             style={{ background: `linear-gradient(135deg, ${themeColor}30, ${themeColor}10)` }}
                         >
-                            <Sparkles className="w-8 h-8" style={{ color: themeColor }} />
+                            <Sparkles className="w-7 h-7 md:w-8 md:h-8" style={{ color: themeColor }} />
                         </motion.div>
-                        <h1 className="text-2xl font-bold text-white mb-2">Welcome to Studio</h1>
-                        <p className="text-white/50 text-sm">Create a new project or continue working</p>
+                        <h1 className="text-xl md:text-2xl font-bold text-black dark:text-white mb-2">Welcome to Studio</h1>
+                        <p className="text-black/50 dark:text-white/50 text-sm">Create a new project or continue working</p>
                     </div>
 
                     {/* Create New Project Button */}
@@ -263,60 +272,49 @@ export default function StudioEntryPage() {
                         <span>{creating ? 'Creating...' : 'Create New Project'}</span>
                     </motion.button>
 
-                    {/* Recent Projects */}
+                    {/* Recent Projects - Grid Layout */}
                     {recentProjects.length > 0 && (
-                        <div className="mt-6">
-                            <div className="flex items-center gap-2 mb-3 text-white/40 text-xs uppercase tracking-wider">
+                        <div className="mt-4">
+                            <div className="flex items-center justify-center gap-2 mb-3 text-black/40 dark:text-white/40 text-xs uppercase tracking-wider">
                                 <FolderOpen className="w-4 h-4" />
                                 <span>Recent Projects</span>
                             </div>
-                            <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2 max-h-[200px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-black/10 dark:scrollbar-thumb-white/10">
                                 <AnimatePresence>
                                     {recentProjects.map((project, index) => (
                                         <motion.button
                                             key={project.id}
-                                            initial={{ opacity: 0, x: -10 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            whileHover={{ scale: 1.01, x: 4 }}
-                                            whileTap={{ scale: 0.99 }}
-                                            transition={{ delay: index * 0.1 }}
+                                            initial={{ opacity: 0, scale: 0.9 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            whileHover={{ scale: 1.02, y: -2 }}
+                                            whileTap={{ scale: 0.98 }}
+                                            transition={{ delay: index * 0.05 }}
                                             onClick={() => selectProject(project.id)}
-                                            className="w-full py-3 px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 flex items-center justify-between group transition-all duration-300"
+                                            className="p-3 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 border border-black/5 dark:border-white/5 hover:border-black/15 dark:hover:border-white/15 flex flex-col items-center gap-2 group transition-all duration-200"
                                             style={{
-                                                boxShadow: 'none',
-                                            }}
-                                            onMouseEnter={(e) => {
-                                                e.currentTarget.style.boxShadow = `0 0 20px ${themeColor}20, inset 0 0 20px ${themeColor}05`;
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                e.currentTarget.style.boxShadow = 'none';
+                                                boxShadow: project.datasetUploaded ? `0 0 15px ${themeColor}20` : 'none'
                                             }}
                                         >
-                                            <div className="flex items-center gap-3">
-                                                <div
-                                                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/5 group-hover:bg-white/10 transition-all"
-                                                    style={{
-                                                        boxShadow: project.datasetUploaded ? `0 0 10px ${themeColor}30` : 'none'
-                                                    }}
-                                                >
-                                                    <FolderOpen className="w-4 h-4 text-white/50 group-hover:text-white/70" style={{ color: project.datasetUploaded ? themeColor : undefined }} />
+                                            <div
+                                                className="w-10 h-10 rounded-xl flex items-center justify-center bg-black/5 dark:bg-white/5 group-hover:bg-black/10 dark:group-hover:bg-white/10 transition-all"
+                                                style={{
+                                                    background: project.datasetUploaded ? `linear-gradient(135deg, ${themeColor}30, ${themeColor}10)` : undefined
+                                                }}
+                                            >
+                                                <FolderOpen className="w-5 h-5 text-black/50 dark:text-white/50" style={{ color: project.datasetUploaded ? themeColor : undefined }} />
+                                            </div>
+                                            <div className="text-center w-full">
+                                                <div className="text-black dark:text-white font-medium text-xs truncate">
+                                                    {project.name}
                                                 </div>
-                                                <div className="text-left">
-                                                    <div className="text-white font-medium truncate max-w-[180px]">
-                                                        {project.name}
-                                                    </div>
-                                                    <div className="text-white/40 text-xs flex items-center gap-2">
-                                                        <span className="capitalize">{project.status}</span>
-                                                        {project.datasetUploaded && (
-                                                            <span style={{ color: `${themeColor}90` }}>• Dataset ready</span>
-                                                        )}
-                                                    </div>
+                                                <div className="text-black/40 dark:text-white/40 text-[10px] capitalize">
+                                                    {project.datasetUploaded ? (
+                                                        <span style={{ color: themeColor }}>Ready</span>
+                                                    ) : (
+                                                        project.status
+                                                    )}
                                                 </div>
                                             </div>
-                                            <ArrowRight
-                                                className="w-4 h-4 text-white/30 group-hover:translate-x-1 transition-all duration-300"
-                                                style={{ color: project.datasetUploaded ? themeColor : undefined }}
-                                            />
                                         </motion.button>
                                     ))}
                                 </AnimatePresence>

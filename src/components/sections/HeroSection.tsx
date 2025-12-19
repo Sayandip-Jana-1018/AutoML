@@ -2,6 +2,8 @@
 
 import { motion } from "framer-motion"
 import { ArrowRight, Sparkles, Zap, Code2, Rocket } from "lucide-react"
+import { NavButton } from "@/components/NavButton"
+import TextReveal from "@/components/ui/TextReveal"
 
 interface HeroSectionProps {
     themeColor: string
@@ -32,14 +34,15 @@ export function HeroSection({ themeColor }: HeroSectionProps) {
                         </h1>
                     </motion.div>
 
-                    <motion.p
-                        initial={{ opacity: 0, y: 30 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.8, delay: 0.1 }}
-                        className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground/80 max-w-3xl mx-auto"
-                    >
-                        Build Zero Code<span style={{ color: themeColor }}> AI Models</span>
-                    </motion.p>
+                    <div className="flex justify-center mb-6">
+                        <TextReveal
+                            text="Build Zero Code AI Models"
+                            className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground/80 justify-center gap-2"
+                            delay={0.2}
+                        />
+                    </div>
+
+
                 </div>
 
                 {/* Two Column Layout: Cards Left, Laptop Right */}
@@ -132,27 +135,29 @@ export function HeroSection({ themeColor }: HeroSectionProps) {
                             ))}
                         </div>
 
-                        {/* CTA Buttons - Glassmorphic & Center Aligned */}
+                        {/* CTA Buttons - NavButton with magnetic effect */}
                         <motion.div
                             initial={{ opacity: 0, y: 30 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.8, delay: 0.7 }}
-                            className="flex justify-center items-center gap-3 pt-2"
+                            className="flex flex-col sm:flex-row justify-center items-center gap-3 pt-2"
                         >
-                            <button
-                                className="group px-8 py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-2xl transition-all hover:scale-105 overflow-hidden backdrop-blur-xl border border-white/20"
-                                style={{
-                                    background: `linear-gradient(135deg, ${themeColor}90, ${themeColor}70)`,
-                                    boxShadow: `0 10px 40px ${themeColor}40`
-                                }}
+                            <NavButton
+                                href="/studio"
+                                variant="primary"
+                                size="lg"
+                                icon="arrow"
                             >
-                                <span className="relative flex items-center justify-center gap-2 text-white">
-                                    Start Building <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                                </span>
-                            </button>
-                            <button className="px-8 py-4 rounded-xl backdrop-blur-xl bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/40 font-bold text-lg transition-all hover:scale-105 text-white shadow-lg">
+                                Start Building
+                            </NavButton>
+                            <NavButton
+                                href="/chat"
+                                variant="ghost"
+                                size="lg"
+                                icon="none"
+                            >
                                 View Docs
-                            </button>
+                            </NavButton>
                         </motion.div>
                     </motion.div>
 

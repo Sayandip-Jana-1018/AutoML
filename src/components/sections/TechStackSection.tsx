@@ -2,6 +2,9 @@
 
 import { motion } from "framer-motion"
 import { useThemeColor } from "@/context/theme-context"
+import { NavButton } from "@/components/NavButton"
+import SpotlightCard from "@/components/ui/SpotlightCard"
+import TextReveal from "@/components/ui/TextReveal"
 
 const technologies = [
     { name: "HTML", icon: "/tech/html.png" },
@@ -35,51 +38,44 @@ export function TechStackSection() {
                     transition={{ duration: 0.8, delay: 0.3 }}
                     className="space-y-12"
                 >
-                    <h2 className="text-5xl w-[50%] ml-[455px] md:text-6xl lg:text-7xl font-black mb-6 text-center">
-                        <span
-                            className="bg-clip-text text-transparent"
-                            style={{
-                                backgroundImage: `linear-gradient(135deg, ${themeColor}, #fff)`
-                            }}
-                        >
-                            Tech Stack
-                        </span>
-                    </h2>
+                    <div className="w-full flex justify-center lg:justify-end lg:pr-12">
+                        <TextReveal
+                            text="Tech Stack"
+                            className="text-5xl md:text-6xl lg:text-7xl font-black mb-6 text-center"
+                            delay={0.3}
+                        />
+                    </div>
 
                     <div className="flex justify-end pr-0 lg:pr-8">
                         <div className="grid grid-cols-4 gap-6 lg:gap-8 max-w-lg">
                             {technologies.map((technology, index) => (
                                 <motion.div
                                     key={technology.name}
-                                    initial={{ opacity: 0, scale: 0 }}
-                                    whileInView={{ opacity: 1, scale: 1 }}
-                                    viewport={{ once: true }}
+                                    initial={{ opacity: 0, y: 20, scale: 0.8 }}
+                                    whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                                    viewport={{ once: true, margin: "-50px" }}
                                     transition={{
                                         duration: 0.5,
-                                        delay: 0.6 + index * 0.04,
+                                        delay: index * 0.05, // One by one stagger
                                         type: "spring",
-                                        stiffness: 120
+                                        stiffness: 100,
+                                        damping: 15
                                     }}
-                                    className="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 relative group"
+                                    className="relative group"
                                 >
-                                    <div
-                                        className="absolute inset-0 rounded-full blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                                        style={{
-                                            background: `radial-gradient(circle, ${themeColor}30, transparent 70%)`
-                                        }}
-                                    />
-                                    {/* CSS-based 3D icon */}
-                                    <div className="w-full h-full rounded-full bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-sm border border-white/20 flex items-center justify-center p-3 transition-transform duration-300 hover:scale-110"
-                                        style={{
-                                            boxShadow: `0 8px 32px ${themeColor}20, inset 0 0 20px rgba(255,255,255,0.1)`
-                                        }}
+                                    <SpotlightCard
+                                        className="w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center bg-black/40 border-white/10"
+                                        spotlightColor={`${themeColor}60`}
                                     >
-                                        <img
-                                            src={technology.icon}
-                                            alt={technology.name}
-                                            className="w-full h-full object-contain filter drop-shadow-lg"
-                                        />
-                                    </div>
+                                        <div className="w-full h-full p-4 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                                            <img
+                                                src={technology.icon}
+                                                alt={technology.name}
+                                                className="w-full h-full object-contain filter drop-shadow-xl"
+                                            />
+                                        </div>
+                                    </SpotlightCard>
+
                                     <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap z-50 pointer-events-none">
                                         <span className="text-[10px] font-medium text-foreground/90 bg-background/95 backdrop-blur-md px-2 py-1 rounded-md border border-foreground/20 shadow-xl">
                                             {technology.name}
@@ -89,6 +85,19 @@ export function TechStackSection() {
                             ))}
                         </div>
                     </div>
+
+                    {/* CTA Button */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 30 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.6, delay: 0.8 }}
+                        className="flex justify-end pr-0 lg:pr-8"
+                    >
+                        <NavButton href="/marketplace" variant="ghost" size="md" icon="arrow">
+                            Explore Marketplace
+                        </NavButton>
+                    </motion.div>
                 </motion.div>
             </div>
         </section>

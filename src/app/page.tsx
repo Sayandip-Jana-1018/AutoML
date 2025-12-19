@@ -1,18 +1,31 @@
 "use client"
 
-import { useEffect } from "react"
+import { useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import dynamic from "next/dynamic"
 import { Navbar } from "@/components/navbar"
 import Silk from "@/components/react-bits/Silk"
 import { useThemeColor } from "@/context/theme-context"
 import { ThemeToggle } from "@/components/theme-toggle"
+
 import TerminalDemo from "@/components/terminal-demo"
+import { ScrollProgress } from "@/components/ScrollProgress"
+import { GradientOrbs } from "@/components/GradientOrbs"
 import { HeroSection } from "@/components/sections/HeroSection"
 import { HowItWorksSection } from "@/components/sections/HowItWorksSection"
 import { TechStackSection } from "@/components/sections/TechStackSection"
 import { FeaturesSection } from "@/components/sections/FeaturesSection"
 import { PricingSection } from "@/components/sections/PricingSection"
-import { CTASection } from "@/components/sections/CTASection"
+import { VisualizeSection } from "@/components/sections/VisualizeSection"
+import { CTAFooterSection } from "@/components/sections/CTAFooterSection"
+import { TestimonialsSection } from "@/components/sections/TestimonialsSection"
+import { ComparisonSection } from "@/components/sections/ComparisonSection"
+import { NoiseOverlay } from "@/components/NoiseOverlay"
+import { SectionDivider } from "@/components/SectionDivider"
+import { DemoSection } from "@/components/sections/DemoSection"
+import { EasterEgg } from "@/components/EasterEgg"
+import { SmoothScroll } from "@/components/SmoothScroll"
+import { ThemeColorPicker } from "@/components/ThemeColorPicker"
 import { useAuth } from "@/context/auth-context"
 import { Loader2 } from "lucide-react"
 
@@ -59,19 +72,34 @@ export default function Home() {
                     rotation={silkConfig.rotation}
                 />
             </div>
+            <GradientOrbs count={4} />
+            <NoiseOverlay />
             <TerminalDemo />
             <Navbar />
+            <ScrollProgress />
             {/* Page Sections */}
             <HeroSection themeColor={themeColor} />
             <HowItWorksSection />
+            <SectionDivider />
             <TechStackSection />
+            <SectionDivider />
             <FeaturesSection />
             <PricingSection themeColor={themeColor} />
-            <CTASection themeColor={themeColor} />
+            <SectionDivider />
+            <ComparisonSection />
+            <VisualizeSection />
+            <SectionDivider />
+            <DemoSection />
+            <SectionDivider />
+            <TestimonialsSection />
+            <CTAFooterSection />
             <ThemeToggle />
-
-            {/* Bottom Spacing */}
-            <div className="h-20" />
+            <ThemeColorPicker
+                orientation="vertical"
+                className="fixed right-6 top-[35%] -translate-y-1/2 z-[100] hidden lg:flex"
+            />
+            <EasterEgg />
+            <SmoothScroll />
         </main>
     )
 }

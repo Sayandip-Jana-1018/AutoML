@@ -57,7 +57,17 @@ function hexToHSL(hex: string): { h: number, s: number, l: number } {
 }
 
 export function ThemeColorProvider({ children }: { children: React.ReactNode }) {
-  const [themeColor, _setThemeColor] = React.useState<ThemeColor>("#D4AF37") // Default Gold
+  const [themeColor, _setThemeColor] = React.useState<ThemeColor>("#0cb322") // Default Emerald
+  const [isHydrated, setIsHydrated] = React.useState(false)
+
+  // Load from localStorage on mount
+  React.useEffect(() => {
+    const savedColor = localStorage.getItem('autoforge-theme-color')
+    if (savedColor && savedColor.startsWith('#')) {
+      _setThemeColor(savedColor as ThemeColor)
+    }
+    setIsHydrated(true)
+  }, [])
 
   const setThemeColor = React.useCallback((color: ThemeColor) => {
     // Strip alpha channel if present (e.g. #RRGGBBAA -> #RRGGBB)
@@ -65,6 +75,10 @@ export function ThemeColorProvider({ children }: { children: React.ReactNode }) 
       color = color.substring(0, 7)
     }
     _setThemeColor(color)
+    // Persist to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('autoforge-theme-color', color)
+    }
   }, [])
 
   const [silkConfig, setSilkConfig] = React.useState<SilkConfig>({

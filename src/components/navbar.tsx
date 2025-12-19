@@ -8,6 +8,7 @@ import Link from "next/link"
 import { useThemeColor } from "@/context/theme-context"
 import { cn } from "@/lib/utils"
 import { usePathname } from "next/navigation"
+import Magnetic from "@/components/ui/Magnetic"
 
 // Default colors for each page
 const PAGE_COLORS: Record<string, string> = {
@@ -45,7 +46,7 @@ export function Navbar() {
       className="fixed top-6 left-0 right-0 z-50 flex justify-center px-4"
     >
       {/* Glass Pill Container */}
-      <nav className="relative flex items-center gap-1 p-1.5 rounded-full bg-white/60 dark:bg-black/40 backdrop-blur-2xl border border-black/10 dark:border-white/10 shadow-2xl dark:shadow-[0_0_30px_-10px_rgba(0,0,0,0.5)] shadow-black/5 overflow-hidden">
+      <nav className="relative flex items-center gap-1 p-1.5 rounded-full bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/20 shadow-2xl dark:shadow-[0_0_30px_-10px_rgba(0,0,0,0.5)] shadow-black/5 overflow-hidden ring-1 ring-white/10">
 
         {navItems.map((item, index) => {
           const isActive = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href))
@@ -53,49 +54,50 @@ export function Navbar() {
           const itemColor = item.defaultColor
 
           return (
-            <Link
-              key={item.name}
-              href={item.href}
-              onMouseEnter={() => setHoveredIndex(index)}
-              onMouseLeave={() => setHoveredIndex(null)}
-              className={cn(
-                "relative px-2.5 md:px-4 py-2 rounded-full flex items-center gap-2 transition-all duration-300 group z-10",
-                isActive ? "text-foreground font-semibold" : "text-black/60 dark:text-white/60"
-              )}
-              style={{
-                color: (isHovered || isActive) ? itemColor : undefined,
-                transform: isHovered ? 'scale(1.05)' : 'scale(1)',
-                transition: 'all 0.3s ease'
-              }}
-            >
-              {/* Active Item Hard Background for Contrast */}
-              {isActive && (
-                <motion.div
-                  layoutId="navbar-active-bg"
-                  className="absolute inset-0 rounded-full shadow-[0_0_20px_-10px_rgba(255,255,255,0.3)]"
-                  style={{ backgroundColor: `${itemColor}15` }}
-                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                />
-              )}
-
-              {/* Icon - Always colored with page default */}
-              <item.icon
-                className="w-4 h-4 transition-all duration-300 relative z-10"
+            <Magnetic key={item.name}>
+              <Link
+                href={item.href}
+                onMouseEnter={() => setHoveredIndex(index)}
+                onMouseLeave={() => setHoveredIndex(null)}
+                className={cn(
+                  "relative px-2.5 md:px-4 py-2 rounded-full flex items-center gap-2 transition-all duration-300 group z-10",
+                  isActive ? "text-foreground font-semibold" : "text-black/60 dark:text-white/60"
+                )}
                 style={{
-                  color: itemColor,
-                  transform: isHovered ? 'scale(1.15)' : 'scale(1)',
-                  filter: isHovered ? `drop-shadow(0 0 6px ${itemColor}80)` : 'none',
+                  color: (isHovered || isActive) ? itemColor : undefined,
+                  transform: isHovered ? 'scale(1.05)' : 'scale(1)',
                   transition: 'all 0.3s ease'
                 }}
-              />
+              >
+                {/* Active Item Hard Background for Contrast */}
+                {isActive && (
+                  <motion.div
+                    layoutId="navbar-active-bg"
+                    className="absolute inset-0 rounded-full shadow-[0_0_20px_-10px_rgba(255,255,255,0.3)]"
+                    style={{ backgroundColor: `${itemColor}15` }}
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
 
-              <span
-                className="text-sm relative z-10 transition-all duration-300 hidden md:inline"
-                style={{
-                  color: (isHovered || isActive) ? itemColor : undefined
-                }}
-              >{item.name}</span>
-            </Link>
+                {/* Icon - Always colored with page default */}
+                <item.icon
+                  className="w-4 h-4 transition-all duration-300 relative z-10"
+                  style={{
+                    color: itemColor,
+                    transform: isHovered ? 'scale(1.15)' : 'scale(1)',
+                    filter: isHovered ? `drop-shadow(0 0 6px ${itemColor}80)` : 'none',
+                    transition: 'all 0.3s ease'
+                  }}
+                />
+
+                <span
+                  className="text-sm relative z-10 transition-all duration-300 hidden md:inline"
+                  style={{
+                    color: (isHovered || isActive) ? itemColor : undefined
+                  }}
+                >{item.name}</span>
+              </Link>
+            </Magnetic>
           )
         })}
 

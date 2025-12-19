@@ -96,7 +96,7 @@ export function ThemeToggle({ inline = false }: { inline?: boolean } = {}) {
                           if (mode === 'light') {
                             setThemeColor('#ffffff')
                           } else if (mode === 'dark') {
-                            setThemeColor('#D4AF37')
+                            setThemeColor('#0cb322')
                           }
                         }}
                         className={cn(

@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import { Star, Cpu, CreditCard, Check } from "lucide-react"
 import Link from "next/link"
+import { NavButton } from "@/components/NavButton"
 
 interface PricingSectionProps {
     themeColor: string
@@ -125,6 +126,12 @@ export function PricingSection({ themeColor }: PricingSectionProps) {
                             </div>
                         </motion.div>
                     ))}
+                </div>
+
+                <div className="mt-12 flex justify-center">
+                    <NavButton href="/pricing" variant="ghost" size="lg" icon="arrow" className="backdrop-blur-md bg-white/5">
+                        View Full Pricing Details
+                    </NavButton>
                 </div>
             </div>
         </section>

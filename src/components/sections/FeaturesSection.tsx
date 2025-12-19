@@ -1,8 +1,60 @@
 "use client"
 
-import { motion } from "framer-motion"
+import { motion, useMotionValue, useSpring, useTransform } from "framer-motion"
 import { Code2, Shield, BarChart3, Users, Cpu, Zap, GitBranch, MessageSquare } from "lucide-react"
 import { useThemeColor } from "@/context/theme-context"
+import { NavButton } from "@/components/NavButton"
+import TextReveal from "@/components/ui/TextReveal"
+import React, { useRef } from "react"
+
+function TiltCard({ children, className, style }: { children: React.ReactNode, className?: string, style?: any }) {
+    const ref = useRef<HTMLDivElement>(null)
+    const x = useMotionValue(0)
+    const y = useMotionValue(0)
+
+    const mouseX = useSpring(x, { stiffness: 500, damping: 100 })
+    const mouseY = useSpring(y, { stiffness: 500, damping: 100 })
+
+    const rotateX = useTransform(mouseY, [-0.5, 0.5], ["-7deg", "7deg"])
+    const rotateY = useTransform(mouseX, [-0.5, 0.5], ["-7deg", "7deg"])
+
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!ref.current) return
+        const rect = ref.current.getBoundingClientRect()
+        const width = rect.width
+        const height = rect.height
+        const mouseXFromCenter = e.clientX - rect.left - width / 2
+        const mouseYFromCenter = e.clientY - rect.top - height / 2
+        x.set(mouseXFromCenter / width)
+        y.set(mouseYFromCenter / height)
+    }
+
+    const handleMouseLeave = () => {
+        x.set(0)
+        y.set(0)
+    }
+
+    return (
+        <div style={{ perspective: "1000px" }} className={className}>
+            <motion.div
+                ref={ref}
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+                style={{
+                    rotateX,
+                    rotateY,
+                    transformStyle: "preserve-3d",
+                    ...style
+                }}
+                className="w-full h-full" // Ensure it fills the perspective container
+            >
+                <div style={{ transform: "translateZ(20px)" }} className="h-full">
+                    {children}
+                </div>
+            </motion.div>
+        </div>
+    )
+}
 
 export function FeaturesSection() {
     const { themeColor } = useThemeColor()
@@ -60,53 +112,54 @@ export function FeaturesSection() {
                                 <span className="text-foreground">Features</span>
                             </h2>
 
-                            <p className="text-lg md:text-xl text-foreground/70 max-w-2xl font-medium leading-relaxed">
-                                Everything you need to build, train, and deploy production ML models.
-                                From AutoML to GPU training, we've got you covered.
-                            </p>
+                            <TextReveal
+                                text="Everything you need to build, train, and deploy production ML models. From AutoML to GPU training, we've got you covered."
+                                className="text-lg md:text-xl text-foreground/70 max-w-2xl font-medium leading-relaxed"
+                                delay={0.2}
+                            />
                         </motion.div>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-4xl">
                         {features.map((f, i) => (
-                            <motion.div
+                            <TiltCard
                                 key={i}
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                whileInView={{ opacity: 1, scale: 1 }}
-                                viewport={{ once: true }}
-                                transition={{ duration: 0.5, delay: 0.3 + i * 0.08 }}
-                                className="relative p-5 rounded-xl bg-gradient-to-br from-foreground/10 to-foreground/5 backdrop-blur-sm border border-foreground/20 hover:border-foreground/40 transition-all group overflow-hidden"
+                                className="relative rounded-xl bg-gradient-to-br from-foreground/10 to-foreground/5 dark:from-black/60 dark:to-black/30 backdrop-blur-xl border border-foreground/20 dark:border-white/20 group overflow-hidden"
                                 style={{
                                     boxShadow: `0 8px 32px ${themeColor}15, inset 0 0 20px rgba(255,255,255,0.05)`
                                 }}
                             >
-                                {/* Gradient overlay */}
-                                <div
-                                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                                    style={{
-                                        background: `radial-gradient(circle at center, ${f.color}15, transparent 70%)`
-                                    }}
-                                />
-
-                                <div className="relative z-10 h-full flex flex-col">
+                                <div className="p-5 h-full relative group">
+                                    {/* Gradient overlay */}
                                     <div
-                                        className="w-12 h-12 rounded-lg flex items-center justify-center mb-4 transition-transform group-hover:scale-110"
+                                        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                                         style={{
-                                            backgroundColor: `${f.color}20`,
-                                            boxShadow: `0 4px 20px ${f.color}30`
+                                            background: `radial-gradient(circle at center, ${f.color}15, transparent 70%)`
                                         }}
-                                    >
-                                        <f.icon className="w-6 h-6" style={{ color: f.color }} />
+                                    />
+
+                                    {/* Content */}
+                                    <div className="relative z-10 h-full flex flex-col">
+                                        <div
+                                            className="w-12 h-12 rounded-lg flex items-center justify-center mb-4 transition-transform group-hover:scale-110"
+                                            style={{
+                                                backgroundColor: `${f.color}20`,
+                                                boxShadow: `0 4px 20px ${f.color}30`
+                                            }}
+                                        >
+                                            <f.icon className="w-6 h-6" style={{ color: f.color }} />
+                                        </div>
+                                        <h3 className="text-base font-black mb-2 text-foreground">{f.title}</h3>
+                                        <p className="text-sm text-foreground/60 leading-relaxed">{f.desc}</p>
                                     </div>
-                                    <h3 className="text-base font-black mb-2 text-foreground">{f.title}</h3>
-                                    <p className="text-sm text-foreground/60 leading-relaxed">{f.desc}</p>
                                 </div>
-                            </motion.div>
+                            </TiltCard>
                         ))}
                     </div>
+
+
                 </motion.div>
             </div>
         </section>
     )
 }
-
