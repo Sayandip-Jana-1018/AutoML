@@ -5,7 +5,7 @@ import { motion, useScroll, useTransform } from "framer-motion"
 import { Play, Pause, Volume2, VolumeX, Maximize, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { useThemeColor } from "@/context/theme-context"
-import { RevealSection } from "@/components/animations/RevealAnimations"
+import MagicReveal from "@/components/ui/MagicReveal"
 
 export function DemoSection() {
     const { themeColor } = useThemeColor()
@@ -34,39 +34,34 @@ export function DemoSection() {
 
     return (
         <section className="py-32 px-6 md:px-12 lg:px-20 relative z-10 overflow-hidden" ref={containerRef}>
-            {/* Background Glow - Restored Section Wide */}
-            <div
-                className="absolute inset-0 z-0 bg-black/60 backdrop-blur-2xl"
-            />
-
+            {/* Background Glow */}
+            <div className="absolute inset-0 z-0 bg-black/60 backdrop-blur-2xl" />
             <div
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150%] h-[150%] opacity-20 pointer-events-none blur-[120px] z-0"
-                style={{
-                    background: `radial-gradient(circle, ${themeColor}, transparent 70%)`
-                }}
+                style={{ background: `radial-gradient(circle, ${themeColor}, transparent 70%)` }}
             />
 
-            <div className="max-w-6xl mx-auto text-center mb-16">
-                <RevealSection>
-                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-black mb-6">
-                        See It In <span style={{ color: themeColor }}>Action</span>
-                    </h2>
+            <div className="max-w-6xl mx-auto text-center mb-16 relative z-10">
+                <MagicReveal
+                    title="See It In Action"
+                    titleClassName="text-4xl md:text-5xl lg:text-6xl font-black mb-6"
+                    contentDelay={0.7}
+                    particleCount={70}
+                >
                     <p className="text-xl text-white/60 max-w-2xl mx-auto">
                         Watch how AutoForge transforms hours of manual coding into seconds of automated productivity.
                     </p>
-                </RevealSection>
+                </MagicReveal>
             </div>
 
-            {/* Video Container - Removed Wrapper Styling */}
+            {/* Video Container */}
             <motion.div
                 style={{ y, scale }}
-                className="relative max-w-5xl mx-auto aspect-video rounded-3xl overflow-hidden shadow-2xl group border border-white/10"
+                className="relative max-w-5xl mx-auto aspect-video rounded-3xl overflow-hidden shadow-2xl group border border-white/10 z-10"
             >
-                {/* Inner Video Div */}
                 <div className="relative aspect-video rounded-2xl overflow-hidden bg-black shadow-inner group">
                     <div className="absolute inset-0 bg-black/10 z-10" />
 
-                    {/* Actual Video Tag (Placeholder source) */}
                     <video
                         ref={videoRef}
                         className="w-full h-full object-cover"
@@ -80,7 +75,6 @@ export function DemoSection() {
 
                     {/* Overlay Controls */}
                     <div className="absolute inset-0 z-20 flex flex-col justify-between p-8 transition-opacity duration-300">
-
                         {/* Top Bar */}
                         <div className="flex justify-between items-start opacity-0 group-hover:opacity-100 transition-opacity">
                             <div className="bg-black/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-mono border border-white/10">
@@ -91,7 +85,7 @@ export function DemoSection() {
                             </button>
                         </div>
 
-                        {/* Center Play Button (Only when paused) */}
+                        {/* Center Play Button */}
                         {!isPlaying && (
                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
                                 <button
@@ -113,12 +107,8 @@ export function DemoSection() {
                                 {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current" />}
                             </button>
 
-                            {/* Progress Bar */}
                             <div className="flex-1 h-1 bg-white/20 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full w-1/3"
-                                    style={{ background: themeColor }}
-                                />
+                                <div className="h-full w-1/3" style={{ background: themeColor }} />
                             </div>
 
                             <button onClick={() => setIsMuted(!isMuted)} className="hover:text-white text-white/80 transition-colors">
@@ -129,7 +119,7 @@ export function DemoSection() {
                 </div>
             </motion.div>
 
-            <div className="mt-12 text-center">
+            <div className="mt-12 text-center relative z-10">
                 <Link
                     href="/studio"
                     className="inline-flex items-center gap-2 px-8 py-4 rounded-full text-lg font-bold transition-transform hover:scale-105 active:scale-95 text-black"

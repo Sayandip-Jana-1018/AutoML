@@ -77,8 +77,12 @@ export default function Home() {
             <TerminalDemo />
             <Navbar />
             <ScrollProgress />
-            {/* Page Sections */}
-            <HeroSection themeColor={themeColor} />
+            {/* Hero Section with Parallax Container - MacBook scrolls first */}
+            <div className="relative" style={{ height: '150vh' }}>
+                <div className="sticky top-0 h-screen">
+                    <HeroSection themeColor={themeColor} />
+                </div>
+            </div>
             <HowItWorksSection />
             <SectionDivider />
             <TechStackSection />

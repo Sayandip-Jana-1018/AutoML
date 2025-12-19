@@ -4,7 +4,7 @@ import { motion } from "framer-motion"
 import { useThemeColor } from "@/context/theme-context"
 import { NavButton } from "@/components/NavButton"
 import SpotlightCard from "@/components/ui/SpotlightCard"
-import TextReveal from "@/components/ui/TextReveal"
+import MagicReveal from "@/components/ui/MagicReveal"
 
 const technologies = [
     { name: "HTML", icon: "/tech/html.png" },
@@ -31,21 +31,13 @@ export function TechStackSection() {
     return (
         <section className="relative z-20 min-h-screen flex items-center px-6 md:px-12 lg:px-16 xl:px-20">
             <div className="max-w-5xl w-full ml-auto pr-0 lg:pr-12">
-                <motion.div
-                    initial={{ opacity: 0, x: 50 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true, margin: "-100px" }}
-                    transition={{ duration: 0.8, delay: 0.3 }}
-                    className="space-y-12"
+                <MagicReveal
+                    title="Tech Stack"
+                    titleClassName="text-5xl md:text-6xl lg:text-7xl font-black mb-6"
+                    titleAlign="right"
+                    contentDelay={0.6}
+                    particleCount={45}
                 >
-                    <div className="w-full flex justify-center lg:justify-end lg:pr-12">
-                        <TextReveal
-                            text="Tech Stack"
-                            className="text-5xl md:text-6xl lg:text-7xl font-black mb-6 text-center"
-                            delay={0.3}
-                        />
-                    </div>
-
                     <div className="flex justify-end pr-0 lg:pr-8">
                         <div className="grid grid-cols-4 gap-6 lg:gap-8 max-w-lg">
                             {technologies.map((technology, index) => (
@@ -56,7 +48,7 @@ export function TechStackSection() {
                                     viewport={{ once: true, margin: "-50px" }}
                                     transition={{
                                         duration: 0.5,
-                                        delay: index * 0.05, // One by one stagger
+                                        delay: index * 0.05,
                                         type: "spring",
                                         stiffness: 100,
                                         damping: 15
@@ -92,13 +84,13 @@ export function TechStackSection() {
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.6, delay: 0.8 }}
-                        className="flex justify-end pr-0 lg:pr-8"
+                        className="flex justify-end pr-0 lg:pr-8 mt-12"
                     >
                         <NavButton href="/marketplace" variant="ghost" size="md" icon="arrow">
                             Explore Marketplace
                         </NavButton>
                     </motion.div>
-                </motion.div>
+                </MagicReveal>
             </div>
         </section>
     )

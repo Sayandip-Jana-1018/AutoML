@@ -1,9 +1,9 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { ArrowRight, Sparkles, Zap, Code2, Rocket } from "lucide-react"
+import { ArrowRight, Sparkles, Zap, Code2, Rocket, Database, Cpu, Brain, Cloud, Terminal } from "lucide-react"
 import { NavButton } from "@/components/NavButton"
-import TextReveal from "@/components/ui/TextReveal"
+import MagicReveal from "@/components/ui/MagicReveal"
 
 interface HeroSectionProps {
     themeColor: string
@@ -11,166 +11,210 @@ interface HeroSectionProps {
 
 export function HeroSection({ themeColor }: HeroSectionProps) {
     return (
-        <section className="relative z-20 min-h-screen flex items-center justify-center px-6 md:px-12 lg:px-16 xl:px-20 py-20">
-            <div className="max-w-7xl w-full">
-                {/* Centered Title & Subtitle */}
-                <div className="text-center mb-12">
+        <section className="relative z-20 min-h-screen flex items-center justify-center px-6 md:px-12 lg:px-16 xl:px-20 pt-32 pb-20">
+            <MagicReveal
+                title="AutoForge ~ ML"
+                titleClassName="text-6xl md:text-7xl lg:text-8xl font-black tracking-tighter mb-6 pb-2 overflow-visible"
+                contentDelay={0.7}
+                particleCount={60}
+            >
+                <div className="max-w-7xl w-full mx-auto">
+                    {/* Subtitle */}
                     <motion.div
-                        initial={{ opacity: 0, y: 30 }}
+                        initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.8 }}
+                        transition={{ delay: 0.5, duration: 0.6 }}
+                        className="text-center mb-12"
                     >
-                        <h1
-                            className="text-6xl py-4 mt-4 md:text-7xl lg:text-8xl font-black tracking-tighter leading-[0.85] mb-6"
-                            style={{
-                                backgroundImage: `linear-gradient(135deg, ${themeColor === '#ffffff' ? '#fff' : themeColor}, ${themeColor === '#ffffff' ? '#999' : '#fff'})`,
-                                WebkitBackgroundClip: 'text',
-                                WebkitTextFillColor: 'transparent',
-                                backgroundClip: 'text',
-                                textShadow: `0 0 80px ${themeColor}30`
-                            }}
-                        >
-                            AutoForge ~ ML
-                        </h1>
+                        <p className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground/80">
+                            Build Zero Code <span style={{ color: themeColor }}>AI Models</span>
+                        </p>
                     </motion.div>
 
-                    <div className="flex justify-center mb-6">
-                        <TextReveal
-                            text="Build Zero Code AI Models"
-                            className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground/80 justify-center gap-2"
-                            delay={0.2}
-                        />
-                    </div>
-
-
-                </div>
-
-                {/* Two Column Layout: Cards Left, Laptop Right */}
-                <div className="grid lg:grid-cols-2 gap-12 items-start">
-                    {/* LEFT: Premium Glassy Feature Cards - 2x2 Grid + Buttons */}
-                    <motion.div
-                        initial={{ opacity: 0, x: -50 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.8, delay: 0.2 }}
-                        className="space-y-6 pt-16"
-                    >
-                        {/* 2x2 Grid - Premium Glassy Square Cards */}
-                        <div className="grid grid-cols-2 gap-3 max-w-md mx-auto">
-                            {[
-                                {
-                                    icon: Zap,
-                                    title: "Instant Setup",
-                                    desc: "Get started in seconds"
-                                },
-                                {
-                                    icon: Code2,
-                                    title: "Auto Code",
-                                    desc: "AI-generated code"
-                                },
-                                {
-                                    icon: Sparkles,
-                                    title: "Smart Training",
-                                    desc: "Optimized algorithms"
-                                },
-                                {
-                                    icon: Rocket,
-                                    title: "One-Click Deploy",
-                                    desc: "Instant production"
-                                }
-                            ].map((feature, i) => (
-                                <motion.div
-                                    key={i}
-                                    initial={{ opacity: 0, y: 30 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.6, delay: 0.3 + i * 0.1 }}
-                                    whileHover={{ scale: 1.05, y: -8 }}
-                                    className="group relative p-4 rounded-2xl backdrop-blur-xl border border-white/20 hover:border-white/40 transition-all duration-500 text-center overflow-hidden"
-                                    style={{
-                                        background: `linear-gradient(135deg, ${themeColor}15, ${themeColor}08)`,
-                                        boxShadow: `0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px ${themeColor}30, inset 0 1px 0 rgba(255,255,255,0.1)`
-                                    }}
-                                >
-                                    {/* Shimmer Effect */}
-                                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                                        <div
-                                            className="absolute inset-0 opacity-20"
-                                            style={{
-                                                background: `radial-gradient(circle at 50% 50%, ${themeColor}40, transparent 70%)`
-                                            }}
-                                        />
-                                    </div>
-
-                                    {/* Icon */}
-                                    <div className="relative flex justify-center mb-2.5">
-                                        <div
-                                            className="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-500"
-                                            style={{
-                                                background: `linear-gradient(135deg, ${themeColor}40, ${themeColor}20)`,
-                                                boxShadow: `0 8px 24px ${themeColor}50, inset 0 1px 0 rgba(255,255,255,0.2)`
-                                            }}
-                                        >
-                                            <feature.icon className="w-6 h-6" style={{ color: themeColor, filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.3))' }} />
-                                        </div>
-                                    </div>
-
-                                    {/* Content */}
-                                    <h3
-                                        className="text-sm font-bold mb-1 text-white group-hover:scale-105 transition-transform duration-300"
-                                        style={{ textShadow: `0 2px 10px ${themeColor}60` }}
-                                    >
-                                        {feature.title}
-                                    </h3>
-                                    <p className="text-xs text-foreground/80 group-hover:text-white/90 leading-relaxed transition-colors duration-300">
-                                        {feature.desc}
-                                    </p>
-
-                                    {/* Bottom Glow */}
-                                    <div
-                                        className="absolute bottom-0 left-0 right-0 h-1 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                    {/* Two Column Layout: Cards Left, Laptop Right */}
+                    <div className="grid lg:grid-cols-2 gap-12 items-start">
+                        {/* LEFT: Premium Glassy Feature Cards - 2x2 Grid + Buttons */}
+                        <motion.div
+                            initial={{ opacity: 0, x: -50 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.8, delay: 0.6 }}
+                            className="space-y-6 pt-16"
+                        >
+                            {/* 2x2 Grid - Premium Glassy Square Cards */}
+                            <div className="grid grid-cols-2 gap-3 max-w-md mx-auto">
+                                {[
+                                    { icon: Zap, title: "Instant Setup", desc: "Get started in seconds" },
+                                    { icon: Code2, title: "Auto Code", desc: "AI-generated code" },
+                                    { icon: Sparkles, title: "Smart Training", desc: "Optimized algorithms" },
+                                    { icon: Rocket, title: "One-Click Deploy", desc: "Instant production" }
+                                ].map((feature, i) => (
+                                    <motion.div
+                                        key={i}
+                                        initial={{ opacity: 0, y: 30 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.6, delay: 0.7 + i * 0.1 }}
+                                        whileHover={{ scale: 1.05, y: -8 }}
+                                        className="group relative p-4 rounded-2xl backdrop-blur-xl border border-white/20 hover:border-white/40 transition-all duration-500 text-center overflow-hidden"
                                         style={{
-                                            background: `linear-gradient(90deg, transparent, ${themeColor}, transparent)`
+                                            background: `linear-gradient(135deg, ${themeColor}15, ${themeColor}08)`,
+                                            boxShadow: `0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px ${themeColor}30, inset 0 1px 0 rgba(255,255,255,0.1)`
                                         }}
+                                    >
+                                        {/* Shimmer Effect */}
+                                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                                            <div
+                                                className="absolute inset-0 opacity-20"
+                                                style={{ background: `radial-gradient(circle at 50% 50%, ${themeColor}40, transparent 70%)` }}
+                                            />
+                                        </div>
+
+                                        {/* Icon */}
+                                        <div className="relative flex justify-center mb-2.5">
+                                            <div
+                                                className="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-500"
+                                                style={{
+                                                    background: `linear-gradient(135deg, ${themeColor}40, ${themeColor}20)`,
+                                                    boxShadow: `0 8px 24px ${themeColor}50, inset 0 1px 0 rgba(255,255,255,0.2)`
+                                                }}
+                                            >
+                                                <feature.icon className="w-6 h-6" style={{ color: themeColor, filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.3))' }} />
+                                            </div>
+                                        </div>
+
+                                        {/* Content */}
+                                        <h3
+                                            className="text-sm font-bold mb-1 text-white group-hover:scale-105 transition-transform duration-300"
+                                            style={{ textShadow: `0 2px 10px ${themeColor}60` }}
+                                        >
+                                            {feature.title}
+                                        </h3>
+                                        <p className="text-xs text-foreground/80 group-hover:text-white/90 leading-relaxed transition-colors duration-300">
+                                            {feature.desc}
+                                        </p>
+
+                                        {/* Bottom Glow */}
+                                        <div
+                                            className="absolute bottom-0 left-0 right-0 h-1 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                                            style={{ background: `linear-gradient(90deg, transparent, ${themeColor}, transparent)` }}
+                                        />
+                                    </motion.div>
+                                ))}
+                            </div>
+
+                            {/* CTA Buttons - NavButton with magnetic effect */}
+                            <motion.div
+                                initial={{ opacity: 0, y: 30 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.8, delay: 1.1 }}
+                                className="flex flex-col sm:flex-row justify-center items-center gap-3 pt-2"
+                            >
+                                <NavButton href="/studio" variant="primary" size="lg" icon="arrow">
+                                    Start Building
+                                </NavButton>
+                                <NavButton href="/chat" variant="ghost" size="lg" icon="none">
+                                    View Docs
+                                </NavButton>
+                            </motion.div>
+                        </motion.div>
+
+                        {/* RIGHT: 3D Rotating Cube - Revealed when MacBook scrolls up */}
+                        <motion.div
+                            initial={{ opacity: 0, x: 50 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.8, delay: 0.8 }}
+                            className="relative h-[500px] lg:h-[600px] flex items-center justify-end z-10 pb-48 pr-0"
+                        >
+                            {/* Rotating Cube Container - No float animation */}
+                            <div className="relative">
+                                {/* 3D Rotating Cube - Theme Colored */}
+                                <div className="relative w-32 h-32" style={{ perspective: '800px' }}>
+                                    <motion.div
+                                        animate={{ rotateX: 360, rotateY: 360 }}
+                                        transition={{
+                                            duration: 15,
+                                            repeat: Infinity,
+                                            ease: 'linear'
+                                        }}
+                                        className="w-full h-full relative"
+                                        style={{ transformStyle: 'preserve-3d' }}
+                                    >
+                                        {/* 6 Cube Faces with different tech icons - translateZ = half of width (88px) */}
+                                        {[
+                                            { transform: 'translateZ(88px)', Icon: Database },
+                                            { transform: 'rotateY(180deg) translateZ(88px)', Icon: Cpu },
+                                            { transform: 'rotateY(90deg) translateZ(88px)', Icon: Brain },
+                                            { transform: 'rotateY(-90deg) translateZ(88px)', Icon: Rocket },
+                                            { transform: 'rotateX(90deg) translateZ(88px)', Icon: Cloud },
+                                            { transform: 'rotateX(-90deg) translateZ(88px)', Icon: Terminal },
+                                        ].map((face, i) => (
+                                            <motion.div
+                                                key={i}
+                                                className="absolute w-44 h-44 rounded-2xl border-2 backdrop-blur-xl flex items-center justify-center"
+                                                style={{
+                                                    transform: face.transform,
+                                                    background: `linear-gradient(135deg, ${themeColor}50, ${themeColor}20, rgba(0,0,0,0.3))`,
+                                                    borderColor: themeColor,
+                                                    backfaceVisibility: 'hidden',
+                                                }}
+                                                animate={{
+                                                    boxShadow: [
+                                                        `0 0 25px ${themeColor}30, inset 0 0 20px ${themeColor}10`,
+                                                        `0 0 50px ${themeColor}50, inset 0 0 35px ${themeColor}25`,
+                                                        `0 0 25px ${themeColor}30, inset 0 0 20px ${themeColor}10`
+                                                    ]
+                                                }}
+                                                transition={{
+                                                    duration: 2.5,
+                                                    repeat: Infinity,
+                                                    ease: "easeInOut",
+                                                    delay: i * 0.3
+                                                }}
+                                            >
+                                                <motion.div
+                                                    animate={{ scale: [1, 1.15, 1], opacity: [0.7, 1, 0.7] }}
+                                                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: i * 0.2 }}
+                                                >
+                                                    <face.Icon
+                                                        className="w-14 h-14"
+                                                        style={{
+                                                            color: themeColor,
+                                                            filter: `drop-shadow(0 0 15px ${themeColor}) drop-shadow(0 0 30px ${themeColor}80)`
+                                                        }}
+                                                    />
+                                                </motion.div>
+                                            </motion.div>
+                                        ))}
+                                    </motion.div>
+                                </div>
+
+                                {/* Pulsating Glow Effect Under Cube */}
+                                <motion.div
+                                    className="absolute -bottom-12 left-1/2 -translate-x-1/2 w-36 h-20 blur-3xl rounded-full"
+                                    style={{ background: `radial-gradient(ellipse, ${themeColor}, transparent 60%)` }}
+                                    animate={{ opacity: [0.5, 0.9, 0.5], scale: [0.85, 1.15, 0.85] }}
+                                    transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                                />
+
+                                {/* Orbiting particles */}
+                                <motion.div
+                                    className="absolute inset-0 -m-10"
+                                    animate={{ rotate: 360 }}
+                                    transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                                >
+                                    <div
+                                        className="absolute top-1/2 left-0 w-3 h-3 rounded-full -translate-y-1/2"
+                                        style={{ background: themeColor, boxShadow: `0 0 15px ${themeColor}` }}
+                                    />
+                                    <div
+                                        className="absolute top-1/2 right-0 w-2 h-2 rounded-full -translate-y-1/2"
+                                        style={{ background: themeColor, boxShadow: `0 0 10px ${themeColor}` }}
                                     />
                                 </motion.div>
-                            ))}
-                        </div>
-
-                        {/* CTA Buttons - NavButton with magnetic effect */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 30 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.8, delay: 0.7 }}
-                            className="flex flex-col sm:flex-row justify-center items-center gap-3 pt-2"
-                        >
-                            <NavButton
-                                href="/studio"
-                                variant="primary"
-                                size="lg"
-                                icon="arrow"
-                            >
-                                Start Building
-                            </NavButton>
-                            <NavButton
-                                href="/chat"
-                                variant="ghost"
-                                size="lg"
-                                icon="none"
-                            >
-                                View Docs
-                            </NavButton>
+                            </div>
                         </motion.div>
-                    </motion.div>
-
-                    {/* RIGHT: Laptop Space */}
-                    <motion.div
-                        initial={{ opacity: 0, x: 50 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.8, delay: 0.4 }}
-                        className="relative h-[600px] lg:h-[700px] flex items-end justify-center"
-                    >
-                    </motion.div>
+                    </div>
                 </div>
-            </div>
+            </MagicReveal>
         </section>
     )
 }

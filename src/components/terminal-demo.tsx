@@ -83,18 +83,18 @@ function Scene({ themeColor }: { themeColor: string }) {
     useFrame(() => {
         const vh = typeof window !== 'undefined' ? window.innerHeight : 800
 
-        // DUAL MACBOOK - Scrolls with the page (like it's part of Hero section)
+        // DUAL MACBOOK - Scrolls FASTER than page to cross hero text first
         if (dualGroup.current) {
             // Convert scroll pixels to 3D world units
-            // Positive Y offset moves it UP as user scrolls down
-            const scrollOffset = scrollY * 0.025
+            // Higher multiplier = MacBook moves up faster than page scrolls
+            const scrollOffset = scrollY * 0.045  // Faster scroll (was 0.025)
             const baseY = -1.2
             dualGroup.current.position.y = baseY + scrollOffset
         }
 
-        // SINGLE MACBOOK ANIMATION (5% scroll onwards) - VERY EARLY ENTRY
-        if (singleGroup.current && scrollY >= vh * 0.05) {
-            const adjustedScroll = scrollY - vh * 0.05
+        // SINGLE MACBOOK ANIMATION (2% scroll onwards) - VERY EARLY ENTRY
+        if (singleGroup.current && scrollY >= vh * 0.02) {
+            const adjustedScroll = scrollY - vh * 0.02
 
             // CINEMATIC LID MOVEMENT - Adjusted per section
             singleGroup.current.traverse((child) => {
@@ -147,12 +147,12 @@ function Scene({ themeColor }: { themeColor: string }) {
                 const targetRotX = THREE.MathUtils.lerp(0.08, 0.25, eased)
                 const targetScale = THREE.MathUtils.lerp(0.16, 0.28, eased)
 
-                singleGroup.current.position.x = THREE.MathUtils.lerp(singleGroup.current.position.x, targetX, 0.15)
-                singleGroup.current.position.y = THREE.MathUtils.lerp(singleGroup.current.position.y, targetY, 0.15)
-                singleGroup.current.position.z = THREE.MathUtils.lerp(singleGroup.current.position.z, targetZ, 0.15)
-                singleGroup.current.rotation.x = THREE.MathUtils.lerp(singleGroup.current.rotation.x, targetRotX, 0.15)
-                singleGroup.current.rotation.y = THREE.MathUtils.lerp(singleGroup.current.rotation.y, targetRotY, 0.15)
-                singleGroup.current.scale.setScalar(THREE.MathUtils.lerp(singleGroup.current.scale.x, targetScale, 0.15))
+                singleGroup.current.position.x = THREE.MathUtils.lerp(singleGroup.current.position.x, targetX, 0.25)
+                singleGroup.current.position.y = THREE.MathUtils.lerp(singleGroup.current.position.y, targetY, 0.25)
+                singleGroup.current.position.z = THREE.MathUtils.lerp(singleGroup.current.position.z, targetZ, 0.25)
+                singleGroup.current.rotation.x = THREE.MathUtils.lerp(singleGroup.current.rotation.x, targetRotX, 0.25)
+                singleGroup.current.rotation.y = THREE.MathUtils.lerp(singleGroup.current.rotation.y, targetRotY, 0.25)
+                singleGroup.current.scale.setScalar(THREE.MathUtils.lerp(singleGroup.current.scale.x, targetScale, 0.25))
 
             } else if (adjustedScroll < vh * 3.2) {
                 const progress = (adjustedScroll - vh * 2.0) / (vh * 1.2)

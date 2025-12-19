@@ -1,11 +1,12 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Github, Twitter, Linkedin, Mail, Heart, ArrowRight, Sparkles } from "lucide-react"
+import { Github, Twitter, Linkedin, Mail, Heart, Sparkles } from "lucide-react"
 import { useThemeColor } from "@/context/theme-context"
 import { NavButton } from "@/components/NavButton"
 import { useState } from "react"
 import Magnetic from "@/components/ui/Magnetic"
+import MagicReveal from "@/components/ui/MagicReveal"
 
 const footerLinks = {
     Product: [
@@ -56,47 +57,44 @@ export function CTAFooterSection() {
                 {/* Background gradient */}
                 <div
                     className="absolute inset-0 opacity-30"
-                    style={{
-                        background: `radial-gradient(ellipse at center top, ${themeColor}40, transparent 60%)`
-                    }}
+                    style={{ background: `radial-gradient(ellipse at center top, ${themeColor}40, transparent 60%)` }}
                 />
 
-                <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    className="max-w-4xl mx-auto text-center relative z-10"
-                >
-                    <div className="flex justify-center mb-6">
-                        <div
-                            className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                            style={{
-                                background: `linear-gradient(135deg, ${themeColor}30, ${themeColor}10)`,
-                                boxShadow: `0 0 40px ${themeColor}30`
-                            }}
-                        >
-                            <Sparkles className="w-8 h-8" style={{ color: themeColor }} />
+                <div className="max-w-4xl mx-auto text-center relative z-10">
+                    <MagicReveal
+                        title="Ready to Build?"
+                        titleClassName="text-4xl md:text-5xl lg:text-6xl font-black mb-4"
+                        contentDelay={0.7}
+                        particleCount={50}
+                    >
+                        <div className="flex justify-center mb-6">
+                            <div
+                                className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                                style={{
+                                    background: `linear-gradient(135deg, ${themeColor}30, ${themeColor}10)`,
+                                    boxShadow: `0 0 40px ${themeColor}30`
+                                }}
+                            >
+                                <Sparkles className="w-8 h-8" style={{ color: themeColor }} />
+                            </div>
                         </div>
-                    </div>
 
-                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-black mb-4">
-                        Ready to <span style={{ color: themeColor }}>Build</span>?
-                    </h2>
-                    <p className="text-foreground/60 text-lg mb-8 max-w-xl mx-auto">
-                        Join thousands of ML engineers shipping production models faster with AutoForge ML.
-                    </p>
+                        <p className="text-foreground/60 text-lg mb-8 max-w-xl mx-auto">
+                            Join thousands of ML engineers shipping production models faster with AutoForge ML.
+                        </p>
 
-                    <div className="flex flex-col sm:flex-row justify-center gap-4">
-                        <NavButton href="/studio" variant="primary" size="lg" icon="arrow">
-                            Start Building Free
-                        </NavButton>
-                        <NavButton href="/chat" variant="secondary" size="lg">
-                            Talk to Us
-                        </NavButton>
-                    </div>
-                </motion.div>
+                        <div className="flex flex-col sm:flex-row justify-center gap-4">
+                            <NavButton href="/studio" variant="primary" size="lg" icon="arrow">
+                                Start Building Free
+                            </NavButton>
+                            <NavButton href="/chat" variant="secondary" size="lg">
+                                Talk to Us
+                            </NavButton>
+                        </div>
+                    </MagicReveal>
+                </div>
 
-                {/* Footer content - same container, no separation */}
+                {/* Footer content */}
                 <div className="max-w-4xl mx-auto mt-16">
                     {/* Brand - Centered at top */}
                     <motion.div
@@ -105,10 +103,7 @@ export function CTAFooterSection() {
                         viewport={{ once: true }}
                         className="text-center mb-8"
                     >
-                        <h3
-                            className="text-2xl font-black mb-1"
-                            style={{ color: themeColor }}
-                        >
+                        <h3 className="text-2xl font-black mb-1" style={{ color: themeColor }}>
                             AutoForge~ML
                         </h3>
                         <p className="text-white/40 text-xs">
@@ -116,7 +111,7 @@ export function CTAFooterSection() {
                         </p>
                     </motion.div>
 
-                    {/* 3 Equal Columns - 4 rows each */}
+                    {/* 3 Equal Columns */}
                     <div className="grid grid-cols-3 gap-8 mb-8">
                         {Object.entries(footerLinks).map(([category, links], colIndex) => (
                             <motion.div
@@ -133,10 +128,7 @@ export function CTAFooterSection() {
                                 <ul className="space-y-2">
                                     {links.map((link) => (
                                         <li key={link.name}>
-                                            <a
-                                                href={link.href}
-                                                className="text-xs text-white/50 hover:text-white transition-colors"
-                                            >
+                                            <a href={link.href} className="text-xs text-white/50 hover:text-white transition-colors">
                                                 {link.name}
                                             </a>
                                         </li>
@@ -146,14 +138,14 @@ export function CTAFooterSection() {
                         ))}
                     </div>
 
-                    {/* Colorful Animating Social Icons */}
+                    {/* Social Icons */}
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
                         className="flex justify-center gap-4 mb-6"
                     >
-                        {socialLinks.map((social, i) => (
+                        {socialLinks.map((social) => (
                             <Magnetic key={social.name}>
                                 <motion.a
                                     href={social.href}
@@ -172,10 +164,7 @@ export function CTAFooterSection() {
                                     whileTap={{ scale: 0.95 }}
                                     aria-label={social.name}
                                 >
-                                    <social.icon
-                                        className="w-5 h-5 transition-colors"
-                                        style={{ color: social.color }}
-                                    />
+                                    <social.icon className="w-5 h-5 transition-colors" style={{ color: social.color }} />
                                 </motion.a>
                             </Magnetic>
                         ))}
@@ -194,4 +183,3 @@ export function CTAFooterSection() {
         </section>
     )
 }
-

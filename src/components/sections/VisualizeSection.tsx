@@ -1,9 +1,10 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { BarChart3, LineChart, PieChart, TrendingUp, Activity, AreaChart } from "lucide-react"
+import { BarChart3, LineChart, PieChart, TrendingUp, Activity } from "lucide-react"
 import { useThemeColor } from "@/context/theme-context"
 import { NavButton } from "@/components/NavButton"
+import MagicReveal from "@/components/ui/MagicReveal"
 
 // Simple SVG Charts for visual effect
 const MiniLineChart = ({ color }: { color: string }) => (
@@ -128,152 +129,106 @@ export function VisualizeSection() {
     return (
         <section className="relative z-20 min-h-screen flex items-center px-6 md:px-12 lg:px-16 xl:px-20 py-20">
             <div className="max-w-7xl w-full mx-auto">
-                {/* Content aligned to RIGHT side - laptop space on left */}
                 <div className="flex justify-end">
-                    {/* RIGHT: Header + Charts + Stats - takes half width on lg screens */}
-                    <motion.div
-                        initial={{ opacity: 0, x: 50 }}
-                        whileInView={{ opacity: 1, x: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.6 }}
-                        className="space-y-8 w-full lg:w-1/2 text-right"
-                    >
-                        {/* Header */}
-                        <div className="space-y-4">
-                            {/* Decorative Line */}
-                            <div className="flex items-center gap-4 mb-4 justify-end">
-                                <div
-                                    className="h-1 w-12 rounded-full"
-                                    style={{ background: `linear-gradient(90deg, ${themeColor}, transparent)` }}
-                                />
-                                <LineChart className="w-5 h-5" style={{ color: themeColor }} />
-                            </div>
-
-                            <h2 className="text-4xl md:text-5xl lg:text-6xl font-black">
-                                <span
-                                    className="bg-clip-text text-transparent"
-                                    style={{
-                                        backgroundImage: `linear-gradient(135deg, ${themeColor}, #fff, ${themeColor})`
-                                    }}
-                                >
-                                    Visualize
-                                </span>
-                                <span className="text-foreground"> Your Data</span>
-                            </h2>
-                            <p className="text-base md:text-lg text-foreground/60 max-w-md ml-auto">
+                    <div className="space-y-8 w-full lg:w-1/2 text-right">
+                        <MagicReveal
+                            title="Visualize Your Data"
+                            titleClassName="text-4xl md:text-5xl lg:text-6xl font-black"
+                            titleAlign="right"
+                            contentDelay={0.6}
+                            particleCount={70}
+                        >
+                            <p className="text-base md:text-lg text-foreground/60 max-w-md ml-auto mb-8">
                                 Real-time analytics and beautiful charts powered by AI.
                             </p>
-                        </div>
 
-                        {/* 2x2 Chart Grid */}
-                        <div className="grid grid-cols-2 gap-3 max-w-md ml-auto">
-                            {charts.map((item, i) => (
-                                <motion.div
-                                    key={i}
-                                    initial={{ opacity: 0, y: 30 }}
-                                    whileInView={{ opacity: 1, y: 0 }}
-                                    viewport={{ once: true }}
-                                    transition={{ duration: 0.5, delay: 0.1 * i }}
-                                    whileHover={{ scale: 1.05, y: -5 }}
-                                    className="group relative p-4 rounded-xl backdrop-blur-xl border border-white/20 hover:border-white/40 transition-all duration-500 overflow-hidden"
-                                    style={{
-                                        background: 'linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.05))',
-                                        boxShadow: `0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px ${themeColor}20, inset 0 1px 0 rgba(255,255,255,0.15)`
-                                    }}
-                                >
-                                    {/* Glass shine effect */}
-                                    <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-transparent opacity-60" />
-
-                                    {/* Hover glow */}
-                                    <div
-                                        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                            {/* 2x2 Chart Grid */}
+                            <div className="grid grid-cols-2 gap-3 max-w-md ml-auto">
+                                {charts.map((item, i) => (
+                                    <motion.div
+                                        key={i}
+                                        initial={{ opacity: 0, y: 30 }}
+                                        whileInView={{ opacity: 1, y: 0 }}
+                                        viewport={{ once: true }}
+                                        transition={{ duration: 0.5, delay: 0.1 * i }}
+                                        whileHover={{ scale: 1.05, y: -5 }}
+                                        className="group relative p-4 rounded-xl backdrop-blur-xl border border-white/20 hover:border-white/40 transition-all duration-500 overflow-hidden"
                                         style={{
-                                            background: `radial-gradient(circle at center, ${themeColor}30, transparent 70%)`
+                                            background: 'linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.05))',
+                                            boxShadow: `0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px ${themeColor}20, inset 0 1px 0 rgba(255,255,255,0.15)`
                                         }}
-                                    />
-
-                                    <div className="relative z-10">
-                                        {/* Icon */}
-                                        <div
-                                            className="w-8 h-8 rounded-lg flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-300"
-                                            style={{
-                                                background: `linear-gradient(135deg, ${themeColor}40, ${themeColor}15)`,
-                                                boxShadow: `0 4px 15px ${themeColor}30`
-                                            }}
-                                        >
-                                            <item.icon className="w-4 h-4" style={{ color: themeColor }} />
-                                        </div>
-
-                                        {/* Title */}
-                                        <h3 className="text-xs font-bold text-white mb-2">{item.title}</h3>
-
-                                        {/* Chart */}
-                                        <div className="relative">
-                                            <item.chart color={themeColor} />
-                                        </div>
-                                    </div>
-
-                                    {/* Bottom Glow Line */}
-                                    <div
-                                        className="absolute bottom-0 left-0 right-0 h-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                                        style={{
-                                            background: `linear-gradient(90deg, transparent, ${themeColor}, transparent)`
-                                        }}
-                                    />
-                                </motion.div>
-                            ))}
-                        </div>
-
-                        {/* Stats Row */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true }}
-                            transition={{ duration: 0.5, delay: 0.5 }}
-                            className="flex gap-4 max-w-md ml-auto"
-                        >
-                            {[
-                                { value: "99.9%", label: "Accuracy" },
-                                { value: "50ms", label: "Latency" },
-                                { value: "10M+", label: "Predictions" }
-                            ].map((stat, i) => (
-                                <div
-                                    key={i}
-                                    className="flex-1 text-center p-3 rounded-lg backdrop-blur-sm border border-white/10"
-                                    style={{
-                                        background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02))'
-                                    }}
-                                >
-                                    <div
-                                        className="text-lg md:text-xl font-black mb-0.5"
-                                        style={{ color: themeColor }}
                                     >
-                                        {stat.value}
-                                    </div>
-                                    <div className="text-[10px] text-foreground/50 uppercase tracking-wider">
-                                        {stat.label}
-                                    </div>
-                                </div>
-                            ))}
-                        </motion.div>
+                                        <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-transparent opacity-60" />
+                                        <div
+                                            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                                            style={{ background: `radial-gradient(circle at center, ${themeColor}30, transparent 70%)` }}
+                                        />
 
-                        {/* CTA Button */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true }}
-                            transition={{ duration: 0.5, delay: 0.6 }}
-                            className="flex justify-end"
-                        >
-                            <NavButton href="/visualize" variant="ghost" size="md" icon="arrow">
-                                See Analytics
-                            </NavButton>
-                        </motion.div>
-                    </motion.div>
+                                        <div className="relative z-10">
+                                            <div
+                                                className="w-8 h-8 rounded-lg flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-300"
+                                                style={{
+                                                    background: `linear-gradient(135deg, ${themeColor}40, ${themeColor}15)`,
+                                                    boxShadow: `0 4px 15px ${themeColor}30`
+                                                }}
+                                            >
+                                                <item.icon className="w-4 h-4" style={{ color: themeColor }} />
+                                            </div>
+                                            <h3 className="text-xs font-bold text-white mb-2">{item.title}</h3>
+                                            <div className="relative">
+                                                <item.chart color={themeColor} />
+                                            </div>
+                                        </div>
 
-                    {/* RIGHT: Space for MacBook (rendered via terminal-demo.tsx) */}
-                    <div className="hidden lg:block relative h-[500px]">
-                        {/* MacBook will be positioned here via 3D scroll animation */}
+                                        <div
+                                            className="absolute bottom-0 left-0 right-0 h-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                                            style={{ background: `linear-gradient(90deg, transparent, ${themeColor}, transparent)` }}
+                                        />
+                                    </motion.div>
+                                ))}
+                            </div>
+
+                            {/* Stats Row */}
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ duration: 0.5, delay: 0.5 }}
+                                className="flex gap-4 max-w-md ml-auto mt-8"
+                            >
+                                {[
+                                    { value: "99.9%", label: "Accuracy" },
+                                    { value: "50ms", label: "Latency" },
+                                    { value: "10M+", label: "Predictions" }
+                                ].map((stat, i) => (
+                                    <div
+                                        key={i}
+                                        className="flex-1 text-center p-3 rounded-lg backdrop-blur-sm border border-white/10"
+                                        style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02))' }}
+                                    >
+                                        <div className="text-lg md:text-xl font-black mb-0.5" style={{ color: themeColor }}>
+                                            {stat.value}
+                                        </div>
+                                        <div className="text-[10px] text-foreground/50 uppercase tracking-wider">
+                                            {stat.label}
+                                        </div>
+                                    </div>
+                                ))}
+                            </motion.div>
+
+                            {/* CTA Button */}
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ duration: 0.5, delay: 0.6 }}
+                                className="flex justify-end mt-8"
+                            >
+                                <NavButton href="/visualize" variant="ghost" size="md" icon="arrow">
+                                    See Analytics
+                                </NavButton>
+                            </motion.div>
+                        </MagicReveal>
                     </div>
                 </div>
             </div>

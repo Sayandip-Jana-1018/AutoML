@@ -1,10 +1,10 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Check, X, Sparkles, Zap, Shield } from "lucide-react"
+import { Check, X, Sparkles } from "lucide-react"
 import { useThemeColor } from "@/context/theme-context"
 import SpotlightCard from "@/components/ui/SpotlightCard"
-import { NavButton } from "@/components/NavButton"
+import MagicReveal from "@/components/ui/MagicReveal"
 
 const comparisonData = {
     features: [
@@ -18,21 +18,9 @@ const comparisonData = {
         "Custom Integrations"
     ],
     platforms: [
-        {
-            name: "AutoForge ML",
-            highlight: true,
-            features: [true, true, true, true, true, true, true, true]
-        },
-        {
-            name: "Traditional ML",
-            highlight: false,
-            features: [false, false, false, true, true, false, true, true]
-        },
-        {
-            name: "Other No-Code",
-            highlight: false,
-            features: [true, true, false, false, false, false, false, false]
-        }
+        { name: "AutoForge ML", highlight: true, features: [true, true, true, true, true, true, true, true] },
+        { name: "Traditional ML", highlight: false, features: [false, false, false, true, true, false, true, true] },
+        { name: "Other No-Code", highlight: false, features: [true, true, false, false, false, false, false, false] }
     ]
 }
 
@@ -42,12 +30,7 @@ function AnimatedCheck({ delay, isIncluded, themeColor }: { delay: number; isInc
             initial={{ scale: 0, rotate: -180 }}
             whileInView={{ scale: 1, rotate: 0 }}
             viewport={{ once: true }}
-            transition={{
-                delay,
-                duration: 0.4,
-                type: "spring",
-                stiffness: 200
-            }}
+            transition={{ delay, duration: 0.4, type: "spring", stiffness: 200 }}
             className="flex items-center justify-center"
         >
             {isIncluded ? (
@@ -77,19 +60,17 @@ export function ComparisonSection() {
             {/* Background glow */}
             <div
                 className="absolute inset-0 opacity-20"
-                style={{
-                    background: `radial-gradient(ellipse at bottom, ${themeColor}30, transparent 70%)`
-                }}
+                style={{ background: `radial-gradient(ellipse at bottom, ${themeColor}30, transparent 70%)` }}
             />
 
             <div className="max-w-5xl mx-auto relative">
-                {/* Header */}
-                <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    className="text-center mb-16"
+                <MagicReveal
+                    title="Why AutoForge?"
+                    titleClassName="text-4xl md:text-5xl font-black mb-4"
+                    contentDelay={0.7}
+                    particleCount={70}
                 >
+                    {/* Sparkles Icon */}
                     <div className="flex justify-center mb-4">
                         <div
                             className="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -101,22 +82,12 @@ export function ComparisonSection() {
                             <Sparkles className="w-6 h-6" style={{ color: themeColor }} />
                         </div>
                     </div>
-                    <h2 className="text-4xl md:text-5xl font-black mb-4">
-                        <span className="text-foreground">Why </span>
-                        <span style={{ color: themeColor }}>AutoForge</span>
-                        <span className="text-foreground">?</span>
-                    </h2>
-                    <p className="text-foreground/60 max-w-xl mx-auto">
+
+                    <p className="text-foreground/60 max-w-xl mx-auto text-center mb-16">
                         See how we stack up against traditional ML workflows and other platforms
                     </p>
-                </motion.div>
 
-                {/* Comparison Table */}
-                <motion.div
-                    initial={{ opacity: 0, y: 40 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                >
+                    {/* Comparison Table */}
                     <SpotlightCard
                         className="backdrop-blur-xl rounded-3xl border-white/10"
                         spotlightColor={`${themeColor}80`}
@@ -132,9 +103,7 @@ export function ComparisonSection() {
                                 >
                                     {platform.name}
                                     {platform.highlight && (
-                                        <div
-                                            className="text-[10px] font-normal mt-1 text-white/50 uppercase tracking-wider"
-                                        >
+                                        <div className="text-[10px] font-normal mt-1 text-white/50 uppercase tracking-wider">
                                             Recommended
                                         </div>
                                     )}
@@ -169,7 +138,7 @@ export function ComparisonSection() {
                             ))}
                         </div>
                     </SpotlightCard>
-                </motion.div>
+                </MagicReveal>
             </div>
         </section>
     )

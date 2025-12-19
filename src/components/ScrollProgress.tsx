@@ -44,6 +44,11 @@ export function ScrollProgress() {
         } else {
             setScrollDirection("up")
         }
+
+        // Force down-headed at the very top (start)
+        if (latest < 0.005) {
+            setScrollDirection("down")
+        }
     })
 
     return (
