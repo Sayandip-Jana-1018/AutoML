@@ -40,5 +40,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-public/sample-data/skin-images
+/public/sample-data/skin-images
 
