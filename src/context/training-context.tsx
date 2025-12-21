@@ -13,6 +13,8 @@ export interface ActiveJob {
     createdAt?: Date
     logs?: string[]
     error?: string
+    startTime?: number
+    estimatedMinutes?: number
 }
 
 interface TrainingContextType {
@@ -32,6 +34,12 @@ interface TrainingContextType {
     currentStep: string
     setCurrentStep: (step: string) => void
 
+    // Time tracking (for timer persistence)
+    startTime: number | undefined
+    setStartTime: (time: number | undefined) => void
+    estimatedMinutes: number
+    setEstimatedMinutes: (minutes: number) => void
+
     // Utility methods
     startTraining: (job: ActiveJob) => void
     completeTraining: () => void
@@ -47,6 +55,8 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
     const [showOverlay, setShowOverlay] = React.useState(false)
     const [isCollapsed, setIsCollapsed] = React.useState(false)
     const [currentStep, setCurrentStep] = React.useState<string>('preparing')
+    const [startTime, setStartTime] = React.useState<number | undefined>(undefined)
+    const [estimatedMinutes, setEstimatedMinutes] = React.useState<number>(0)
 
     // Load from sessionStorage on mount
     React.useEffect(() => {
@@ -59,6 +69,8 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
                     setShowOverlay(true)
                     setIsCollapsed(data.isCollapsed ?? false)
                     setCurrentStep(data.currentStep ?? 'preparing')
+                    setStartTime(data.startTime)
+                    setEstimatedMinutes(data.estimatedMinutes ?? 0)
                 }
             }
         } catch (e) {
@@ -73,7 +85,9 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
                 sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
                     activeJob,
                     isCollapsed,
-                    currentStep
+                    currentStep,
+                    startTime,
+                    estimatedMinutes
                 }))
             } catch (e) {
                 console.error('[TrainingContext] Failed to save to storage:', e)
@@ -81,7 +95,7 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
         } else {
             sessionStorage.removeItem(STORAGE_KEY)
         }
-    }, [activeJob, isCollapsed, currentStep])
+    }, [activeJob, isCollapsed, currentStep, startTime, estimatedMinutes])
 
     // Set active job
     const setActiveJob = React.useCallback((job: ActiveJob | null) => {
@@ -122,12 +136,16 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
         setIsCollapsed,
         currentStep,
         setCurrentStep,
+        startTime,
+        setStartTime,
+        estimatedMinutes,
+        setEstimatedMinutes,
         startTraining,
         completeTraining,
         failTraining
     }), [
         activeJob, setActiveJob, showOverlay, isCollapsed, currentStep,
-        startTraining, completeTraining, failTraining
+        startTime, estimatedMinutes, startTraining, completeTraining, failTraining
     ])
 
     return (

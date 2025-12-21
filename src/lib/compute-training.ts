@@ -81,8 +81,14 @@ export function createStartupScript(params: {
     scriptGcsPath: string;
     bucket: string;
     zone: string;
+    trainingConfig?: {  // User's training config from overlay
+        epochs?: number;
+        batchSize?: number;
+        learningRate?: number;
+        trees?: number;
+    };
 }): string {
-    const { projectId, jobId, datasetGcsPath, scriptGcsPath, bucket, zone } = params;
+    const { projectId, jobId, datasetGcsPath, scriptGcsPath, bucket, zone, trainingConfig } = params;
 
     return `#!/bin/bash
 # MLForge Training VM Startup Script
@@ -199,6 +205,15 @@ export PROJECT_ID="${projectId}"
 export JOB_ID="${jobId}"
 export TRAINING_BUCKET="${bucket}"
 
+# Inject training config as environment variables (user's overlay settings)
+${trainingConfig?.epochs ? `export MLFORGE_EPOCHS=${trainingConfig.epochs}` : '# MLFORGE_EPOCHS: using AI default'}
+${trainingConfig?.batchSize ? `export MLFORGE_BATCH_SIZE=${trainingConfig.batchSize}` : '# MLFORGE_BATCH_SIZE: using AI default'}
+${trainingConfig?.learningRate ? `export MLFORGE_LEARNING_RATE=${trainingConfig.learningRate}` : '# MLFORGE_LEARNING_RATE: using AI default'}
+${trainingConfig?.trees ? `export MLFORGE_MAX_TREES=${trainingConfig.trees}` : '# MLFORGE_MAX_TREES: using AI default'}
+
+echo "Training Config Overrides:"
+env | grep MLFORGE || echo "  (none - using AI defaults)"
+
 # Run training and capture output
 echo "[4/6] Starting training..."
 write_status "running" "training" ""
@@ -277,6 +292,12 @@ export async function submitComputeEngineJob(params: {
     scriptGcsPath: string;
     datasetGcsPath: string;
     tier: SubscriptionTier;
+    trainingConfig?: {  // User's training config from overlay
+        epochs?: number;
+        batchSize?: number;
+        learningRate?: number;
+        trees?: number;
+    };
 }): Promise<{
     vmName: string;
     zone: string;
@@ -285,7 +306,7 @@ export async function submitComputeEngineJob(params: {
     maxDurationHours: number;
     consoleUrl: string;
 }> {
-    const { projectId, jobId, scriptGcsPath, datasetGcsPath, tier } = params;
+    const { projectId, jobId, scriptGcsPath, datasetGcsPath, tier, trainingConfig } = params;
     const config = COMPUTE_ENGINE_CONFIGS[tier];
 
     // GCP VM names must be lowercase, match regex [a-z]([-a-z0-9]{0,61}[a-z0-9])?
@@ -298,7 +319,8 @@ export async function submitComputeEngineJob(params: {
         datasetGcsPath,
         scriptGcsPath,
         bucket: TRAINING_BUCKET,
-        zone: GCP_ZONE
+        zone: GCP_ZONE,
+        trainingConfig  // Pass user's training config for env var injection
     });
 
     console.log(`[Compute Engine] Creating VM: ${vmName} (${config.machineType})`);

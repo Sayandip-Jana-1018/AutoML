@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Link, Zap, Database, Loader2, ExternalLink } from 'lucide-react';
+import { Link, Zap, Database, Loader2, ExternalLink, X } from 'lucide-react';
 
 interface ImportModalProps {
     themeColor: string;
@@ -73,9 +73,20 @@ export function ImportModal({
         <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-2xl p-6 space-y-5"
+            className="rounded-2xl p-6 space-y-5 relative"
             style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}
         >
+            {/* Header with Close Button */}
+            <div className="flex items-center justify-between mb-1">
+                <h3 className="text-lg font-semibold text-white">Import Dataset</h3>
+                <button
+                    onClick={() => setShowUrlImport(false)}
+                    className="p-2 -mr-2 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+                >
+                    <X className="w-5 h-5" />
+                </button>
+            </div>
+
             {/* Mode Tabs */}
             <div className="flex justify-center gap-2 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)' }}>
                 {MODE_TABS.map(tab => (
@@ -217,11 +228,6 @@ export function ImportModal({
                     </p>
                 </div>
             )}
-
-            {/* Cancel */}
-            <button onClick={() => setShowUrlImport(false)} className="w-full text-center py-2 text-sm text-white/50 hover:text-white/80 transition-colors">
-                Cancel
-            </button>
         </motion.div>
     );
 }

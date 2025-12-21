@@ -14,7 +14,7 @@ export interface DatasetInfo {
     filename: string;
     uploadedAt: any;
     columns: string[];
-    columnTypes: Record<string, 'numeric' | 'categorical' | 'datetime'>;
+    columnTypes: Record<string, 'numeric' | 'categorical' | 'datetime' | 'image'>;
     rowCount: number;
     fileSize: number;
     storageUrl: string;

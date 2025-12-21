@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { adminAuth } from '@/lib/firebase-admin';
+import { adminDb, adminAuth } from '@/lib/firebase-admin';
 
 export async function POST(request: NextRequest) {
     try {
@@ -9,9 +9,59 @@ export async function POST(request: NextRequest) {
         const authHeader = request.headers.get('Authorization');
         if (!authHeader?.startsWith('Bearer ')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         const token = authHeader.split('Bearer ')[1];
-        await adminAuth.verifyIdToken(token);
+        const decodedToken = await adminAuth.verifyIdToken(token);
+        const uid = decodedToken.uid;
 
-        const { code, error, datasetPath } = await request.json();
+        const { code, error, datasetPath, projectId } = await request.json();
+
+        // Fetch schema if projectId is provided
+        let schemaContext = '';
+        if (projectId) {
+            try {
+                // Try to get dataset schema from project or its datasets subcollection
+                const projectDoc = await adminDb.collection('projects').doc(projectId).get();
+                const projectData = projectDoc.data();
+                let datasetSchema: { columns: string[], columnTypes: Record<string, string>, rowCount: number, datasetType: string } | null = null;
+
+                if (projectData) {
+                    const datasetsSnap = await adminDb.collection('projects').doc(projectId)
+                        .collection('datasets').orderBy('createdAt', 'desc').limit(1).get();
+
+                    if (!datasetsSnap.empty) {
+                        const dsData = datasetsSnap.docs[0].data();
+                        datasetSchema = {
+                            columns: dsData.columns || dsData.schema?.columns || [],
+                            columnTypes: dsData.columnTypes || dsData.schema?.columnTypes || {},
+                            rowCount: dsData.rowCount || dsData.schema?.rowCount || 0,
+                            datasetType: dsData.type || projectData.dataset?.type || 'tabular'
+                        };
+                    } else if (projectData.dataset) {
+                        datasetSchema = {
+                            columns: projectData.dataset.columns || [],
+                            columnTypes: projectData.dataset.columnTypes || {},
+                            rowCount: projectData.dataset.rowCount || 0,
+                            datasetType: projectData.dataset.type || 'tabular'
+                        };
+                    }
+                }
+
+                if (datasetSchema && datasetSchema.columns.length > 0) {
+                    const columnsInfo = datasetSchema.columns.map(col => {
+                        const type = datasetSchema.columnTypes[col] || 'unknown';
+                        return `  - ${col} (${type})`;
+                    }).join('\n');
+                    schemaContext = `
+Dataset Infomation:
+- Total rows: ${datasetSchema.rowCount}
+- Dataset type: ${datasetSchema.datasetType}
+- Columns:
+${columnsInfo}
+`;
+                }
+            } catch (schemaErr) {
+                console.warn('Failed to fetch schema for repair:', schemaErr);
+            }
+        }
 
         const systemPrompt = `You are a Python expert debugging Pyodide/Plotly code. 
 Fix the following code based on the error.
@@ -25,7 +75,8 @@ Rules:
 - Drop NaN values in target columns if causing errors.
 - Keep the light theme.`;
 
-        const userPrompt = `Code:
+        const userPrompt = `${schemaContext}
+Code:
 ${code}
 
 Error:

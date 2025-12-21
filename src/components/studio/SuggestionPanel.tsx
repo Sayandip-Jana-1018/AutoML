@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Rocket, Code2, GitCompare, ShieldAlert, ShieldCheck, AlertCircle, Sparkles, Zap, Copy, Check, FileCode, Save, TrendingUp, Settings, Database } from "lucide-react";
+import { X, Rocket, Code2, GitCompare, ShieldAlert, ShieldCheck, AlertCircle, Sparkles, Zap, Copy, Check, FileCode, Save, TrendingUp, Settings, Database, AlertTriangle } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useThemeColor } from "@/context/theme-context";
 import DiffViewer from "./DiffViewer";
+import { validateScript, type ValidationResult, type ValidationIssue } from "@/lib/script-validator";
 
 interface SecurityWarning {
     pattern: string;
@@ -41,6 +42,7 @@ interface SuggestionPanelProps {
     currentScriptVersion?: number;
     onApply: (mergedCode: string) => void;
     onRetrain: (mergedCode: string) => void;
+    onRequestFix?: (code: string, errors: ValidationIssue[]) => void;
     loading?: boolean;
 }
 
@@ -52,6 +54,7 @@ export function SuggestionPanel({
     currentScriptVersion,
     onApply,
     onRetrain,
+    onRequestFix,
     loading = false
 }: SuggestionPanelProps) {
     const { themeColor } = useThemeColor();
@@ -81,6 +84,11 @@ export function SuggestionPanel({
     };
 
     const cleanCode = getCleanCode();
+
+    // Validate the suggested code for training readiness
+    const scriptValidation = cleanCode ? validateScript(cleanCode) : null;
+    const hasValidationErrors = scriptValidation && !scriptValidation.valid;
+    const hasValidationWarnings = scriptValidation && scriptValidation.warnings.length > 0;
 
     const copyCode = async () => {
         if (cleanCode) {
@@ -335,6 +343,120 @@ export function SuggestionPanel({
                                                 <ShieldCheck className="w-3.5 h-3.5 text-green-400" />
                                             </div>
                                             <span className="text-xs text-green-300 font-medium">Code verified and safe to apply</span>
+                                        </motion.div>
+                                    )}
+
+                                    {/* Script Validation Errors */}
+                                    {hasValidationErrors && scriptValidation && (
+                                        <motion.div
+                                            initial={{ opacity: 0, x: -20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            className="rounded-xl p-4 border backdrop-blur-xl"
+                                            style={{
+                                                background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.08))',
+                                                borderColor: 'rgba(239, 68, 68, 0.4)',
+                                                boxShadow: '0 6px 25px rgba(239, 68, 68, 0.1)'
+                                            }}
+                                        >
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <div className="p-1.5 rounded-lg bg-red-500/20">
+                                                    <AlertCircle className="w-4 h-4 text-red-400" />
+                                                </div>
+                                                <span className="text-xs font-bold text-red-300">Script Validation Errors</span>
+                                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-300">
+                                                    Fix before training
+                                                </span>
+                                            </div>
+                                            {scriptValidation.errors.slice(0, 3).map((error, i) => (
+                                                <div key={i} className="flex items-start gap-2 text-xs text-red-200/80 mb-2 ml-8">
+                                                    <span className="text-red-400 font-bold">✗</span>
+                                                    <div>
+                                                        <span>{error.message}</span>
+                                                        {error.suggestion && (
+                                                            <div className="text-red-200/60 mt-0.5">→ {error.suggestion}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {scriptValidation.errors.length > 3 && (
+                                                <div className="text-xs text-red-200/60 ml-8 mb-3">
+                                                    +{scriptValidation.errors.length - 3} more error(s)
+                                                </div>
+                                            )}
+
+                                            {/* Fix with AI Button */}
+                                            {onRequestFix && (
+                                                <motion.button
+                                                    whileHover={{ scale: 1.02 }}
+                                                    whileTap={{ scale: 0.98 }}
+                                                    onClick={() => onRequestFix(cleanCode, scriptValidation.errors)}
+                                                    className="w-full mt-3 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-red-500/20 to-orange-500/20 hover:from-red-500/30 hover:to-orange-500/30 border border-red-500/30 text-red-200"
+                                                >
+                                                    <Sparkles className="w-4 h-4" />
+                                                    Fix with AI
+                                                </motion.button>
+                                            )}
+                                        </motion.div>
+                                    )}
+
+                                    {/* Script Validation Warnings (only show if no errors) */}
+                                    {!hasValidationErrors && hasValidationWarnings && scriptValidation && (
+                                        <motion.div
+                                            initial={{ opacity: 0, x: -20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            className="rounded-xl p-4 border backdrop-blur-xl"
+                                            style={{
+                                                background: 'linear-gradient(135deg, rgba(251, 146, 60, 0.15), rgba(251, 146, 60, 0.08))',
+                                                borderColor: 'rgba(251, 146, 60, 0.4)',
+                                                boxShadow: '0 6px 25px rgba(251, 146, 60, 0.1)'
+                                            }}
+                                        >
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <div className="p-1.5 rounded-lg bg-orange-500/20">
+                                                    <AlertTriangle className="w-4 h-4 text-orange-400" />
+                                                </div>
+                                                <span className="text-xs font-bold text-orange-300">Script Warnings</span>
+                                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300">
+                                                    Review recommended
+                                                </span>
+                                            </div>
+                                            {scriptValidation.warnings.slice(0, 2).map((warning, i) => (
+                                                <div key={i} className="flex items-start gap-2 text-xs text-orange-200/80 mb-2 ml-8">
+                                                    <span className="text-orange-400 font-bold">⚠</span>
+                                                    <div>
+                                                        <span>{warning.message}</span>
+                                                        {warning.suggestion && (
+                                                            <div className="text-orange-200/60 mt-0.5">→ {warning.suggestion}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {scriptValidation.warnings.length > 2 && (
+                                                <div className="text-xs text-orange-200/60 ml-8">
+                                                    +{scriptValidation.warnings.length - 2} more warning(s)
+                                                </div>
+                                            )}
+                                        </motion.div>
+                                    )}
+
+                                    {/* Show validation success if no errors/warnings */}
+                                    {scriptValidation && !hasValidationErrors && !hasValidationWarnings && (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.95 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            className="rounded-xl p-3 border backdrop-blur-xl flex items-center justify-center gap-2"
+                                            style={{
+                                                background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.08))',
+                                                borderColor: 'rgba(34, 197, 94, 0.4)',
+                                                boxShadow: '0 6px 25px rgba(34, 197, 94, 0.1)'
+                                            }}
+                                        >
+                                            <div className="p-1.5 rounded-lg bg-green-500/20">
+                                                <Check className="w-3.5 h-3.5 text-green-400" />
+                                            </div>
+                                            <span className="text-xs text-green-300 font-medium">
+                                                Script validated • {scriptValidation.scriptType} script ready for training
+                                            </span>
                                         </motion.div>
                                     )}
 

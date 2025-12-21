@@ -7,7 +7,7 @@ import { useThemeColor } from '@/context/theme-context';
 import { useTheme } from 'next-themes';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
-import { Loader2, Plus, FolderOpen, ArrowRight, Sparkles, X } from 'lucide-react';
+import { Loader2, Plus, FolderOpen, ArrowRight, Sparkles, X, ChevronDown, Trash2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LightPillar from '@/components/react-bits/LightPillar';
 import { Navbar } from '@/components/navbar';
@@ -32,6 +32,11 @@ export default function StudioEntryPage() {
     const [recentProjects, setRecentProjects] = useState<Project[]>([]);
     const [showNameModal, setShowNameModal] = useState(false);
     const [projectName, setProjectName] = useState('');
+    const [expandedProjects, setExpandedProjects] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+    const [deleteConfirmName, setDeleteConfirmName] = useState('');
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         const checkDefaultProject = async () => {
@@ -117,6 +122,43 @@ export default function StudioEntryPage() {
         }, { merge: true });
 
         router.push(`/studio/${projectId}`);
+    };
+
+    const deleteProject = async () => {
+        if (!projectToDelete || !user?.email) return;
+        if (deleteConfirmName !== projectToDelete.name) return;
+
+        setDeleting(true);
+        try {
+            const response = await fetch(`/api/studio/projects/${projectToDelete.id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userEmail: user.email })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to delete project');
+            }
+
+            // Remove from local state
+            setRecentProjects(prev => prev.filter(p => p.id !== projectToDelete.id));
+            setShowDeleteModal(false);
+            setProjectToDelete(null);
+            setDeleteConfirmName('');
+        } catch (error: any) {
+            console.error('Delete error:', error);
+            alert(error.message || 'Failed to delete project');
+        } finally {
+            setDeleting(false);
+        }
+    };
+
+    const openDeleteModal = (e: React.MouseEvent, project: Project) => {
+        e.stopPropagation();
+        setProjectToDelete(project);
+        setDeleteConfirmName('');
+        setShowDeleteModal(true);
     };
 
     // Loading state
@@ -210,6 +252,90 @@ export default function StudioEntryPage() {
                 )}
             </AnimatePresence>
 
+            {/* Delete Confirmation Modal */}
+            <AnimatePresence>
+                {showDeleteModal && projectToDelete && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                        onClick={() => { setShowDeleteModal(false); setProjectToDelete(null); }}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white/10 backdrop-blur-xl border border-red-500/30 rounded-2xl p-6 w-full max-w-md mx-4"
+                        >
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+                                    <AlertTriangle className="w-5 h-5 text-red-400" />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold text-white">Delete Project</h2>
+                                    <p className="text-white/50 text-sm">This action cannot be undone</p>
+                                </div>
+                            </div>
+
+                            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-4">
+                                <p className="text-white/80 text-sm">
+                                    This will permanently delete <strong className="text-white">{projectToDelete.name}</strong> and all associated:
+                                </p>
+                                <ul className="mt-2 text-white/60 text-sm list-disc list-inside">
+                                    <li>Datasets & uploaded files</li>
+                                    <li>Training jobs & logs</li>
+                                    <li>Models & scripts</li>
+                                    <li>All GCS storage files</li>
+                                </ul>
+                            </div>
+
+                            <p className="text-white/60 text-sm mb-2">
+                                Type <strong className="text-white">{projectToDelete.name}</strong> to confirm:
+                            </p>
+                            <input
+                                type="text"
+                                placeholder="Project name"
+                                value={deleteConfirmName}
+                                onChange={(e) => setDeleteConfirmName(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && deleteConfirmName === projectToDelete.name && deleteProject()}
+                                autoFocus
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/40 focus:outline-none focus:border-red-500/50 mb-4"
+                            />
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => { setShowDeleteModal(false); setProjectToDelete(null); }}
+                                    className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={deleteProject}
+                                    disabled={deleteConfirmName !== projectToDelete.name || deleting}
+                                    className={`flex-1 py-3 rounded-xl font-medium text-white transition-all flex items-center justify-center gap-2 ${deleteConfirmName === projectToDelete.name && !deleting
+                                        ? 'bg-red-500 hover:bg-red-600'
+                                        : 'bg-red-500/30 cursor-not-allowed'
+                                        }`}
+                                >
+                                    {deleting ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Deleting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Trash2 className="w-4 h-4" />
+                                            Delete
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* LightPillar Background */}
             <div className="fixed inset-0 z-0 opacity-80">
                 <LightPillar topColor={themeColor} bottomColor={themeColor} intensity={1.5} pillarWidth={25} glowAmount={0.002} />
@@ -252,73 +378,108 @@ export default function StudioEntryPage() {
                         <p className="text-black/50 dark:text-white/50 text-sm">Create a new project or continue working</p>
                     </div>
 
-                    {/* Create New Project Button */}
-                    <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => { setProjectName(''); setShowNameModal(true); }}
-                        disabled={creating}
-                        className="w-full py-4 px-6 rounded-xl mb-4 flex items-center justify-center gap-3 font-medium transition-all"
-                        style={{
-                            background: `linear-gradient(135deg, ${themeColor}, ${themeColor}90)`,
-                            boxShadow: `0 4px 20px ${themeColor}40`
-                        }}
-                    >
-                        {creating ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                        ) : (
-                            <Plus className="w-5 h-5" />
-                        )}
-                        <span>{creating ? 'Creating...' : 'Create New Project'}</span>
-                    </motion.button>
+                    {/* Create New Project Button - Centered & Width Constrained */}
+                    <div className="flex justify-center mb-6">
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => { setProjectName(''); setShowNameModal(true); }}
+                            disabled={creating}
+                            className="px-8 py-3 rounded-xl flex items-center gap-3 font-semibold transition-all relative group overflow-hidden"
+                            style={{
+                                background: `linear-gradient(135deg, ${themeColor}, ${themeColor}90)`,
+                                boxShadow: `0 4px 20px ${themeColor}40`
+                            }}
+                        >
+                            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                            {creating ? (
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : (
+                                <Plus className="w-5 h-5" />
+                            )}
+                            <span className="relative z-10">{creating ? 'Creating...' : 'Create New Project'}</span>
+                        </motion.button>
+                    </div>
 
-                    {/* Recent Projects - Grid Layout */}
+                    {/* Recent Projects - Dynamic Grid Layout */}
                     {recentProjects.length > 0 && (
-                        <div className="mt-4">
-                            <div className="flex items-center justify-center gap-2 mb-3 text-black/40 dark:text-white/40 text-xs uppercase tracking-wider">
-                                <FolderOpen className="w-4 h-4" />
+                        <div className="mt-2 flex flex-col items-center">
+                            <div className="flex items-center gap-2 mb-4 text-black/40 dark:text-white/40 text-[10px] uppercase tracking-[0.2em] font-medium">
+                                <FolderOpen className="w-3 h-3" />
                                 <span>Recent Projects</span>
                             </div>
-                            <div className="grid grid-cols-2 gap-2 max-h-[200px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-black/10 dark:scrollbar-thumb-white/10">
+
+                            {/* Grid Container */}
+                            <motion.div
+                                layout
+                                className={`grid gap-3 w-full transition-all duration-500 ease-spring ${expandedProjects ? 'grid-cols-3 sm:grid-cols-4' : 'grid-cols-2'}`}
+                            >
                                 <AnimatePresence>
-                                    {recentProjects.map((project, index) => (
-                                        <motion.button
+                                    {(expandedProjects ? recentProjects : recentProjects.slice(0, 4)).map((project, index) => (
+                                        <motion.div
+                                            layout
                                             key={project.id}
-                                            initial={{ opacity: 0, scale: 0.9 }}
+                                            initial={{ opacity: 0, scale: 0.8 }}
                                             animate={{ opacity: 1, scale: 1 }}
-                                            whileHover={{ scale: 1.02, y: -2 }}
-                                            whileTap={{ scale: 0.98 }}
-                                            transition={{ delay: index * 0.05 }}
+                                            exit={{ opacity: 0, scale: 0.8 }}
+                                            whileHover={{ scale: 1.05, y: -2 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            transition={{ type: "spring", stiffness: 300, damping: 25 }}
                                             onClick={() => selectProject(project.id)}
-                                            className="p-3 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 border border-black/5 dark:border-white/5 hover:border-black/15 dark:hover:border-white/15 flex flex-col items-center gap-2 group transition-all duration-200"
+                                            className="relative rounded-xl p-2.5 flex flex-col items-center justify-center gap-1.5 group transition-all cursor-pointer"
                                             style={{
-                                                boxShadow: project.datasetUploaded ? `0 0 15px ${themeColor}20` : 'none'
+                                                background: resolvedTheme === 'light' ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.03)',
+                                                border: `1px solid ${resolvedTheme === 'light' ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)'}`
                                             }}
                                         >
                                             <div
-                                                className="w-10 h-10 rounded-xl flex items-center justify-center bg-black/5 dark:bg-white/5 group-hover:bg-black/10 dark:group-hover:bg-white/10 transition-all"
+                                                className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                                                style={{ background: `linear-gradient(135deg, ${themeColor}10, transparent)` }}
+                                            />
+
+                                            <div
+                                                className="w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-sm group-hover:shadow-md group-hover:scale-110 duration-300"
                                                 style={{
-                                                    background: project.datasetUploaded ? `linear-gradient(135deg, ${themeColor}30, ${themeColor}10)` : undefined
+                                                    background: project.datasetUploaded
+                                                        ? `linear-gradient(135deg, ${themeColor}20, ${themeColor}05)`
+                                                        : (resolvedTheme === 'light' ? '#fff' : 'rgba(255,255,255,0.05)')
                                                 }}
                                             >
-                                                <FolderOpen className="w-5 h-5 text-black/50 dark:text-white/50" style={{ color: project.datasetUploaded ? themeColor : undefined }} />
+                                                <FolderOpen className="w-4 h-4 transition-colors" style={{ color: project.datasetUploaded ? themeColor : (resolvedTheme === 'light' ? '#999' : '#666') }} />
                                             </div>
-                                            <div className="text-center w-full">
-                                                <div className="text-black dark:text-white font-medium text-xs truncate">
+
+                                            <div className="text-center w-full z-10">
+                                                <div className="text-black/80 dark:text-white/90 font-medium text-[10px] truncate w-full px-1">
                                                     {project.name}
                                                 </div>
-                                                <div className="text-black/40 dark:text-white/40 text-[10px] capitalize">
-                                                    {project.datasetUploaded ? (
-                                                        <span style={{ color: themeColor }}>Ready</span>
-                                                    ) : (
-                                                        project.status
-                                                    )}
+                                                <div className="text-[8px] mt-0.5 font-medium tracking-wide uppercase opacity-50" style={{ color: project.datasetUploaded ? themeColor : undefined }}>
+                                                    {project.datasetUploaded ? 'Ready' : project.status}
                                                 </div>
                                             </div>
-                                        </motion.button>
+
+                                            {/* Delete Button - appears on hover */}
+                                            <button
+                                                onClick={(e) => openDeleteModal(e, project)}
+                                                className="absolute top-1 right-1 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-white/30 hover:text-red-400 transition-all z-20"
+                                                title="Delete project"
+                                            >
+                                                <Trash2 className="w-3 h-3" />
+                                            </button>
+                                        </motion.div>
                                     ))}
                                 </AnimatePresence>
-                            </div>
+                            </motion.div>
+
+                            {/* Expand Button */}
+                            {recentProjects.length > 4 && (
+                                <motion.button
+                                    onClick={() => setExpandedProjects(!expandedProjects)}
+                                    className="mt-4 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 text-black/30 dark:text-white/30 hover:text-black/60 dark:hover:text-white/60 transition-colors"
+                                    animate={{ rotate: expandedProjects ? 180 : 0 }}
+                                >
+                                    <ChevronDown className="w-5 h-5" />
+                                </motion.button>
+                            )}
                         </div>
                     )}
                 </motion.div>

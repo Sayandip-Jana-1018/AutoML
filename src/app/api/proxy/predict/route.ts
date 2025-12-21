@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Fetch model details from Firestore
+        // 1. Fetch model details from Firestore
         const modelDoc = await adminDb.collection('models').doc(model_id).get();
 
         if (!modelDoc.exists) {
@@ -39,69 +39,66 @@ export async function POST(request: NextRequest) {
         }
 
         const modelData = modelDoc.data();
+        // Support both old and new schema
         const gcsPath = modelData?.gcsPath || modelData?.model_path;
-        const algorithm = modelData?.algorithm || 'unknown';
-        const taskType = modelData?.taskType || 'classification';
-        const featureColumns = modelData?.feature_columns || [];
 
-        // For now, since we don't have a real inference service running,
-        // we'll use a smart fallback that simulates realistic predictions
-        // based on the model's training metrics
-
-        // Extract input values
-        const inputValues = Object.values(data).map((v: any) => {
-            const num = parseFloat(v);
-            return isNaN(num) ? 0 : num;
-        });
-
-        // Calculate a deterministic but varied prediction based on input
-        const inputSum = inputValues.reduce((a: number, b: number) => a + b, 0);
-        const inputAvg = inputSum / Math.max(inputValues.length, 1);
-
-        let prediction: any;
-        let probability: number | undefined;
-
-        if (taskType === 'classification') {
-            // Use model's accuracy to determine confidence range
-            const baseAccuracy = modelData?.bestMetricValue || 0.75;
-
-            // Generate consistent prediction based on input hash
-            const inputHash = inputValues.reduce((acc: number, val: number, idx: number) =>
-                acc + (val * (idx + 1)), 0);
-
-            // Prediction based on input pattern
-            prediction = Math.abs(Math.floor(inputHash)) % 2;
-
-            // Confidence based on model accuracy + input variance
-            const variance = inputValues.reduce((acc: number, val: number) =>
-                acc + Math.pow(val - inputAvg, 2), 0) / Math.max(inputValues.length, 1);
-            const normalizedVariance = Math.min(variance / 100, 0.3);
-
-            probability = Math.min(0.99, Math.max(0.5,
-                baseAccuracy - 0.1 + (Math.random() * 0.15) - normalizedVariance
-            ));
-        } else {
-            // Regression - generate numeric prediction
-            const scale = modelData?.bestMetricValue ? (1 - modelData.bestMetricValue) * 10 : 5;
-            prediction = (inputAvg * 1.2 + scale * (Math.random() - 0.5)).toFixed(2);
+        if (!gcsPath) {
+            return NextResponse.json(
+                { error: 'Model file path not found in registry' },
+                { status: 404 }
+            );
         }
 
-        // Log for debugging
-        console.log('[Proxy Predict]', {
-            model_id,
-            algorithm,
-            taskType,
-            inputValues: inputValues.slice(0, 3),
-            prediction,
-            probability
-        });
+        console.log(`[Predict] Preparing inference for ${model_id} from ${gcsPath}`);
+
+        // 2. Download model from GCS to local temp
+        // Parse bucket and path from gs://bucket/path
+        const match = gcsPath.match(/^gs:\/\/([^/]+)\/(.+)$/);
+        if (!match) {
+            throw new Error(`Invalid GCS path: ${gcsPath}`);
+        }
+        const [, bucketName, filePath] = match;
+
+        // Use a persistent temp dir for caching models (simple cache)
+        const fs = require('fs');
+        const path = require('path');
+        const tempDir = path.join(process.cwd(), '.tmp', 'models');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        const fileName = path.basename(filePath);
+        const localModelPath = path.join(tempDir, `${model_id}_${fileName}`);
+
+        // Only download if not already cached (or check size/timestamp in real prod)
+        if (!fs.existsSync(localModelPath)) {
+            console.log(`[Predict] Downloading model to ${localModelPath}...`);
+            const bucket = storage.bucket(bucketName);
+            const file = bucket.file(filePath);
+            await file.download({ destination: localModelPath });
+        } else {
+            console.log(`[Predict] Using cached model at ${localModelPath}`);
+        }
+
+        // 3. Run Inference
+        const { runPythonInference } = await import('@/lib/inference-utils');
+
+        // Pass data directly (can be { feature1: val } or { image: base64 })
+        console.log('[Predict] Executing inference script...');
+        const result = await runPythonInference(localModelPath, data);
+
+        console.log('[Predict] Result:', result);
+
+        if (result.error) {
+            return NextResponse.json(
+                { error: result.error, details: result.details },
+                { status: 500 }
+            );
+        }
 
         return NextResponse.json({
-            prediction,
-            probability,
+            ...result,
             model_id,
-            algorithm,
-            taskType,
             timestamp: Date.now()
         });
 

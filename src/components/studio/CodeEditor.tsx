@@ -58,8 +58,8 @@ const PYTHON_BUILTINS = [
 const PYTHON_CONSTANTS = ['True', 'False', 'None'];
 
 // Syntax highlighter function
-function highlightLine(line: string, colors: typeof SYNTAX_COLORS): React.ReactNode[] {
-    if (!line) return [<span key={0} style={{ color: colors.default }}>{line ?? ''}</span>];
+function highlightLine(line: string, colors: typeof SYNTAX_COLORS, lineIndex: number = 0): React.ReactNode[] {
+    if (!line) return [<span key={`${lineIndex}-0`} style={{ color: colors.default }}>{line ?? ''}</span>];
 
     const tokens: React.ReactNode[] = [];
     let remaining = line;
@@ -70,14 +70,14 @@ function highlightLine(line: string, colors: typeof SYNTAX_COLORS): React.ReactN
 
         // Comments
         if (remaining.startsWith('#')) {
-            tokens.push(<span key={key++} style={{ color: colors.comment }}>{remaining}</span>);
+            tokens.push(<span key={`${lineIndex}-${key++}`} style={{ color: colors.comment }}>{remaining}</span>);
             break;
         }
 
         // Decorators
         const decoratorMatch = remaining.match(/^@\w+/);
         if (decoratorMatch) {
-            tokens.push(<span key={key++} style={{ color: colors.decorator }}>{decoratorMatch[0]}</span>);
+            tokens.push(<span key={`${lineIndex}-${key++}`} style={{ color: colors.decorator }}>{decoratorMatch[0]}</span>);
             remaining = remaining.slice(decoratorMatch[0].length);
             matched = true;
             continue;
@@ -86,7 +86,7 @@ function highlightLine(line: string, colors: typeof SYNTAX_COLORS): React.ReactN
         // Strings (single and double quotes)
         const stringMatch = remaining.match(/^(['"])(.*?)\1/) || remaining.match(/^(['"]).*$/);
         if (stringMatch) {
-            tokens.push(<span key={key++} style={{ color: colors.string }}>{stringMatch[0]}</span>);
+            tokens.push(<span key={`${lineIndex}-${key++}`} style={{ color: colors.string }}>{stringMatch[0]}</span>);
             remaining = remaining.slice(stringMatch[0].length);
             matched = true;
             continue;
@@ -95,7 +95,7 @@ function highlightLine(line: string, colors: typeof SYNTAX_COLORS): React.ReactN
         // Triple quotes
         const tripleMatch = remaining.match(/^('''|""")[\s\S]*?\1/) || remaining.match(/^('''|""").*$/);
         if (tripleMatch) {
-            tokens.push(<span key={key++} style={{ color: colors.string }}>{tripleMatch[0]}</span>);
+            tokens.push(<span key={`${lineIndex}-${key++}`} style={{ color: colors.string }}>{tripleMatch[0]}</span>);
             remaining = remaining.slice(tripleMatch[0].length);
             matched = true;
             continue;
@@ -104,7 +104,7 @@ function highlightLine(line: string, colors: typeof SYNTAX_COLORS): React.ReactN
         // Numbers
         const numberMatch = remaining.match(/^\d+\.?\d*/);
         if (numberMatch) {
-            tokens.push(<span key={key++} style={{ color: colors.number }}>{numberMatch[0]}</span>);
+            tokens.push(<span key={`${lineIndex}-${key++}`} style={{ color: colors.number }}>{numberMatch[0]}</span>);
             remaining = remaining.slice(numberMatch[0].length);
             matched = true;
             continue;
@@ -127,7 +127,7 @@ function highlightLine(line: string, colors: typeof SYNTAX_COLORS): React.ReactN
                 color = colors.function;
             }
 
-            tokens.push(<span key={key++} style={{ color }}>{word}</span>);
+            tokens.push(<span key={`${lineIndex}-${key++}`} style={{ color }}>{word}</span>);
             remaining = remaining.slice(word.length);
             matched = true;
             continue;
@@ -135,7 +135,7 @@ function highlightLine(line: string, colors: typeof SYNTAX_COLORS): React.ReactN
 
         // Single character (operators, punctuation, whitespace)
         if (!matched) {
-            tokens.push(<span key={key++} style={{ color: colors.default }}>{remaining[0]}</span>);
+            tokens.push(<span key={`${lineIndex}-${key++}`} style={{ color: colors.default }}>{remaining[0]}</span>);
             remaining = remaining.slice(1);
         }
     }
@@ -379,7 +379,7 @@ export const CodeEditor = ({ code, onChange, onSave, onRun, onSyncVSCode, saving
                             >
                                 {displayedLines.map((line, i) => (
                                     <div key={i} style={{ minHeight: `${fontSize * 1.6}px` }}>
-                                        {highlightLine(line, currentColors)}
+                                        {highlightLine(line, currentColors, i)}
                                     </div>
                                 ))}
                             </pre>

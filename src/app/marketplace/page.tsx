@@ -16,7 +16,9 @@ import {
     Play,
     GitFork,
     BadgeCheck,
-    AlertCircle
+    AlertCircle,
+    Upload,
+    Image as ImageIcon
 } from "lucide-react";
 import { Navbar } from "@/components/navbar";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -430,20 +432,39 @@ function TryModelModal({ isOpen, onClose, model, themeColor }: {
     const [loading, setLoading] = useState(false);
     const [featureColumns, setFeatureColumns] = useState<string[]>([]);
 
+    // Image prediction state
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    // Use an ID for the file input since ref might be tricky across renders if not carefully managed, 
+    // but ref is fine in functional component.
+    // However, I need to import useRef if I use it. 
+    // Wait, useRef is NOT imported in the file line 3.
+    // I need to add useRef to imports as well.
+    // Actually, I can just use a hidden id input.
+
+    const isImageModel = model.taskType === 'image_classification' ||
+        model.taskType === 'image_segmentation' ||
+        model.taskType === 'object_detection';
+
     useEffect(() => {
         if (isOpen && model) {
-            // Use feature_columns if available, otherwise generate sample columns
-            if (model.feature_columns && model.feature_columns.length > 0) {
-                setFeatureColumns(model.feature_columns);
-                initializeFormData(model.feature_columns);
-            } else {
-                // Generate sample columns based on model type
-                const sampleCols = model.taskType === 'classification'
-                    ? ['feature_1', 'feature_2', 'feature_3']
-                    : ['input_1', 'input_2', 'input_3'];
-                setFeatureColumns(sampleCols);
-                initializeFormData(sampleCols);
+            if (!isImageModel) {
+                // Use feature_columns if available, otherwise generate sample columns
+                if (model.feature_columns && model.feature_columns.length > 0) {
+                    setFeatureColumns(model.feature_columns);
+                    initializeFormData(model.feature_columns);
+                } else {
+                    // Generate sample columns based on model type
+                    const sampleCols = model.taskType === 'classification'
+                        ? ['feature_1', 'feature_2', 'feature_3']
+                        : ['input_1', 'input_2', 'input_3'];
+                    setFeatureColumns(sampleCols);
+                    initializeFormData(sampleCols);
+                }
             }
+            setResult(null);
+            setImagePreview(null);
+            setFormData({});
         }
     }, [isOpen, model]);
 
@@ -462,20 +483,48 @@ function TryModelModal({ isOpen, onClose, model, themeColor }: {
         setFormData(sample);
     };
 
+    const handleImageUpload = (file: File) => {
+        if (!file) return;
+        if (!file.type.startsWith('image/')) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const result = e.target?.result as string;
+            setImagePreview(result);
+            setFormData({ image: result });
+            setResult(null);
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const onDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleImageUpload(e.dataTransfer.files[0]);
+        }
+    };
+
     const handlePredict = async () => {
         setLoading(true);
         setResult(null);
 
         try {
-            // Convert form data to numbers
-            const data: Record<string, any> = {};
-            Object.entries(formData).forEach(([key, value]) => {
-                const numValue = parseFloat(value);
-                data[key] = isNaN(numValue) ? value : numValue;
-            });
+            let data: Record<string, any> = {};
 
-            // Call prediction API (marketplace models may have different endpoint)
-            const res = await fetch('/api/registry/predict', {
+            if (isImageModel) {
+                data = { image: formData.image };
+            } else {
+                // Convert form data to numbers
+                Object.entries(formData).forEach(([key, value]) => {
+                    const numValue = parseFloat(value);
+                    data[key] = isNaN(numValue) ? value : numValue;
+                });
+            }
+
+            // Call prediction API
+            // Note: Usage proxy/predict for real inference now
+            const res = await fetch('/api/proxy/predict', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -496,6 +545,12 @@ function TryModelModal({ isOpen, onClose, model, themeColor }: {
         } finally {
             setLoading(false);
         }
+    };
+
+    // Helper to trigger file input
+    const triggerFileInput = () => {
+        const el = document.getElementById('try-model-file-input');
+        if (el) el.click();
     };
 
     return (
@@ -566,36 +621,85 @@ function TryModelModal({ isOpen, onClose, model, themeColor }: {
                                     </div>
                                 )}
 
-                                {/* Input Form - Compact */}
+                                {/* Input Form or Image Upload */}
                                 <div className="mb-4">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <label className="text-xs font-medium text-white/60">
-                                            Features ({featureColumns.length})
-                                        </label>
-                                        <button
-                                            onClick={fillSampleData}
-                                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all hover:scale-105 bg-white/5 border border-white/10 hover:bg-white/10"
-                                            style={{ color: themeColor }}
-                                        >
-                                            <Sparkles className="w-3 h-3" />
-                                            Fill
-                                        </button>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                                        {featureColumns.map((col, idx) => (
-                                            <div key={col}>
-                                                <label className="text-xs text-white/40 mb-1.5 block font-medium truncate" title={col}>{col}</label>
-                                                <input
-                                                    type="text"
-                                                    value={formData[col] || ''}
-                                                    onChange={e => setFormData({ ...formData, [col]: e.target.value })}
-                                                    className={`w-full rounded-xl px-3 py-2.5 text-sm text-white outline-none transition-all bg-white/5 border ${formData[col] ? 'border-white/30' : 'border-white/10'} focus:border-white/30 placeholder-white/20`}
-                                                    placeholder={`Enter value`}
-                                                />
+                                    {isImageModel ? (
+                                        <div className="space-y-4">
+                                            {!imagePreview ? (
+                                                <div
+                                                    className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer ${isDragging
+                                                        ? 'border-white bg-white/10'
+                                                        : 'border-white/10 hover:border-white/30 hover:bg-white/5'
+                                                        }`}
+                                                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                                                    onDragLeave={() => setIsDragging(false)}
+                                                    onDrop={onDrop}
+                                                    onClick={triggerFileInput}
+                                                    style={isDragging ? { borderColor: themeColor } : {}}
+                                                >
+                                                    <input
+                                                        id="try-model-file-input"
+                                                        type="file"
+                                                        className="hidden"
+                                                        accept="image/*"
+                                                        onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0])}
+                                                    />
+                                                    <div className="w-12 h-12 rounded-full bg-white/5 mx-auto mb-3 flex items-center justify-center">
+                                                        <ImageIcon className="w-6 h-6 text-white/40" />
+                                                    </div>
+                                                    <h3 className="text-sm font-bold text-white mb-1">Upload Image</h3>
+                                                    <p className="text-xs text-white/40">Drag & drop or click</p>
+                                                </div>
+                                            ) : (
+                                                <div className="relative rounded-2xl overflow-hidden bg-black/40 border border-white/10">
+                                                    <button
+                                                        onClick={() => setImagePreview(null)}
+                                                        className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 border border-white/10 text-white hover:bg-white/20 z-10"
+                                                    >
+                                                        <X className="w-3 h-3" />
+                                                    </button>
+                                                    <div className="aspect-video relative flex items-center justify-center bg-black/20">
+                                                        <img
+                                                            src={imagePreview}
+                                                            alt="Preview"
+                                                            className="max-h-60 rounded-lg object-contain"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <label className="text-xs font-medium text-white/60">
+                                                    Features ({featureColumns.length})
+                                                </label>
+                                                <button
+                                                    onClick={fillSampleData}
+                                                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all hover:scale-105 bg-white/5 border border-white/10 hover:bg-white/10"
+                                                    style={{ color: themeColor }}
+                                                >
+                                                    <Sparkles className="w-3 h-3" />
+                                                    Fill
+                                                </button>
                                             </div>
-                                        ))}
-                                    </div>
+
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                                                {featureColumns.map((col, idx) => (
+                                                    <div key={col}>
+                                                        <label className="text-xs text-white/40 mb-1.5 block font-medium truncate" title={col}>{col}</label>
+                                                        <input
+                                                            type="text"
+                                                            value={formData[col] || ''}
+                                                            onChange={e => setFormData({ ...formData, [col]: e.target.value })}
+                                                            className={`w-full rounded-xl px-3 py-2.5 text-sm text-white outline-none transition-all bg-white/5 border ${formData[col] ? 'border-white/30' : 'border-white/10'} focus:border-white/30 placeholder-white/20`}
+                                                            placeholder={`Enter value`}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
                                 {/* Result - Compact */}
@@ -638,7 +742,7 @@ function TryModelModal({ isOpen, onClose, model, themeColor }: {
                                 {/* Predict Button - Compact */}
                                 <button
                                     onClick={handlePredict}
-                                    disabled={loading || Object.values(formData).some(v => !v)}
+                                    disabled={loading || (!isImageModel && Object.values(formData).some(v => !v)) || (isImageModel && !imagePreview)}
                                     className="w-full py-3 rounded-xl font-bold text-sm disabled:opacity-50 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 bg-white/10 border border-white/20 hover:bg-white/15 hover:border-white/30 mt-4"
                                     style={{ color: themeColor }}
                                 >

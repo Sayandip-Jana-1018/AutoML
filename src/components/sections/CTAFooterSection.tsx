@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Github, Twitter, Linkedin, Mail, Heart, Sparkles } from "lucide-react"
+import { Github, Twitter, Linkedin, Mail, Heart, Sparkles, Instagram } from "lucide-react"
 import { useThemeColor } from "@/context/theme-context"
 import { NavButton } from "@/components/NavButton"
 import { useState } from "react"
@@ -30,10 +30,11 @@ const footerLinks = {
 }
 
 const socialLinks = [
-    { name: "GitHub", icon: Github, href: "https://github.com", color: "#6e5494" },
-    { name: "Twitter", icon: Twitter, href: "https://twitter.com", color: "#1DA1F2" },
-    { name: "LinkedIn", icon: Linkedin, href: "https://linkedin.com", color: "#0077B5" },
-    { name: "Email", icon: Mail, href: "mailto:hello@autoforgeml.com", color: "#EA4335" },
+    { name: "Email", icon: Mail, href: "mailto:sayandip.jana24@gmail.com", color: "#EA4335" },
+    { name: "LinkedIn", icon: Linkedin, href: "https://www.linkedin.com/in/jsayandip2003/", color: "#0077B5" },
+    { name: "GitHub", icon: Github, href: "https://github.com/Sayandip-Jana-1018", color: "#6e5494" },
+    { name: "Twitter", icon: Twitter, href: "https://x.com/51Sayandip", color: "#1DA1F2" },
+    { name: "Instagram", icon: Instagram, href: "https://www.instagram.com/sj_sayandip/", color: "#E4405F" },
 ]
 
 export function CTAFooterSection() {
@@ -52,8 +53,20 @@ export function CTAFooterSection() {
 
     return (
         <section className="relative z-50">
-            {/* CTA Area - Glassmorphic */}
+            {/* CTA Area - Glassmorphic with Animated Border */}
             <div className="relative px-6 md:px-12 lg:px-16 xl:px-20 py-20 overflow-hidden backdrop-blur-md bg-white/5 dark:bg-white/[0.02]">
+                {/* Animated Top Border Line */}
+                <div
+                    className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden"
+                >
+                    <div
+                        className="h-full w-[200%] animate-[shimmer_3s_linear_infinite]"
+                        style={{
+                            background: `linear-gradient(90deg, transparent, ${themeColor}, transparent, ${themeColor}, transparent)`,
+                        }}
+                    />
+                </div>
+
                 {/* Background gradient */}
                 <div
                     className="absolute inset-0 opacity-30"
@@ -84,10 +97,10 @@ export function CTAFooterSection() {
                         </p>
 
                         <div className="flex flex-col sm:flex-row justify-center gap-4">
-                            <NavButton href="/studio" variant="primary" size="lg" icon="arrow">
+                            <NavButton href="/studio" variant="primary" size="lg" icon="arrow" requiresAuth>
                                 Start Building Free
                             </NavButton>
-                            <NavButton href="/chat" variant="secondary" size="lg">
+                            <NavButton href="mailto:sayandip.jana24@gmail.com" variant="secondary" size="lg" external>
                                 Talk to Us
                             </NavButton>
                         </div>
@@ -158,8 +171,7 @@ export function CTAFooterSection() {
                                     }}
                                     whileHover={{
                                         scale: 1.15,
-                                        boxShadow: `0 0 20px ${social.color}60`,
-                                        background: social.color
+                                        boxShadow: `0 0 20px ${social.color}60`
                                     }}
                                     whileTap={{ scale: 0.95 }}
                                     aria-label={social.name}
@@ -172,7 +184,7 @@ export function CTAFooterSection() {
 
                     {/* Copyright */}
                     <div className="text-center pt-4 border-t border-white/5">
-                        <p className="text-[10px] text-white/40 flex items-center justify-center gap-1">
+                        <p className="text-[10px] text-black flex items-center justify-center gap-1">
                             © {new Date().getFullYear()} AutoForge~ML • Built with
                             <Heart className="w-2.5 h-2.5" style={{ color: themeColor }} />
                             by Sayandip

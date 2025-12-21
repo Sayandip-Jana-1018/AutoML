@@ -1,12 +1,11 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Play, Loader2, Sparkles } from 'lucide-react';
+import { X, Play, Loader2, Sparkles, Upload, Image as ImageIcon, FileUp, AlertCircle } from 'lucide-react';
 
 interface PredictionModalProps {
     isOpen: boolean;
     onClose: () => void;
-    model: any; // Type 'Model' can be imported or defined more strictly if shared
+    model: any;
     themeColor: string;
 }
 
@@ -19,9 +18,27 @@ export const PredictionModal = ({ isOpen, onClose, model, themeColor }: Predicti
     const [aiSuggestions, setAiSuggestions] = useState<string>("")
     const [loadingSuggestions, setLoadingSuggestions] = useState(false)
 
+    // Image prediction state
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const isImageModel = model?.taskType === 'image_classification' ||
+        model?.algorithm?.toLowerCase().includes('cnn') ||
+        model?.algorithm?.toLowerCase().includes('resnet') ||
+        model?.algorithm?.toLowerCase().includes('efficientnet') ||
+        model?.algorithm?.toLowerCase().includes('mobilenet');
+
     useEffect(() => {
         if (isOpen && model) {
-            fetchDatasetColumns()
+            if (!isImageModel) {
+                fetchDatasetColumns()
+            } else {
+                setLoadingColumns(false); // No columns needed for image
+            }
+            setResult(null);
+            setImagePreview(null);
+            setFormData({});
         }
     }, [isOpen, model])
 
@@ -42,16 +59,13 @@ export const PredictionModal = ({ isOpen, onClose, model, themeColor }: Predicti
                 const datasets = data.datasets || []
 
                 // Try to find the dataset that matches this model's training data
-                // For now, we'll use the most recent dataset or first available
                 if (datasets.length > 0) {
-                    // Sort by created_at to get most recent
                     const sortedDatasets = [...datasets].sort((a: any, b: any) =>
                         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
                     )
 
                     const dataset = sortedDatasets[0]
                     if (dataset.columns) {
-                        // Filter out the target column
                         const cols = dataset.columns.filter((col: string) => col !== model.target_column)
                         setFeatureColumns(cols)
                         initializeFormData(cols)
@@ -73,7 +87,6 @@ export const PredictionModal = ({ isOpen, onClose, model, themeColor }: Predicti
 
     const fillSampleData = () => {
         if (!featureColumns || featureColumns.length === 0) return
-
         const sample: Record<string, string> = {}
         featureColumns.forEach((col: string) => {
             sample[col] = String(Math.floor(Math.random() * 100) + 1)
@@ -81,100 +94,82 @@ export const PredictionModal = ({ isOpen, onClose, model, themeColor }: Predicti
         setFormData(sample)
     }
 
-    const getAiSuggestions = async () => {
-        setLoadingSuggestions(true)
-        setAiSuggestions("") // Clear previous suggestions
-        try {
-            const accuracy = model.metrics?.accuracy || 0
-            console.log('=== AI Suggestions Request ===')
-            console.log('Model:', model.algorithm, 'Target:', model.target_column, 'Accuracy:', accuracy)
-            console.log('Features:', featureColumns)
+    const handleImageUpload = (file: File) => {
+        if (!file) return;
 
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    messages: [{
-                        role: 'user',
-                        content: `I have a ${model.algorithm} model predicting ${model.target_column} with ${(accuracy * 100).toFixed(1)}% accuracy. The features are: ${featureColumns.join(', ')}. Why is the accuracy low and how can I improve it? Give me 3-5 specific, actionable suggestions.`
-                    }],
-                    modelId: 2
-                })
-            })
-
-            console.log('AI Suggestions Response Status:', response.status)
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-            }
-
-            if (response.ok) {
-                const reader = response.body?.getReader()
-                const decoder = new TextDecoder()
-                let suggestions = ""
-                while (true) {
-                    const { done, value } = await reader!.read()
-                    if (done) break
-                    suggestions += decoder.decode(value)
-                    setAiSuggestions(suggestions)
-                }
-                console.log('AI Suggestions Complete:', suggestions.length, 'characters')
-            }
-        } catch (error: any) {
-            console.error('AI Suggestions Error:', error)
-            setAiSuggestions(`Failed to get suggestions: ${error.message}. Please try again.`)
-        } finally {
-            setLoadingSuggestions(false)
+        if (!file.type.startsWith('image/')) {
+            alert('Please upload an image file');
+            return;
         }
-    }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const result = e.target?.result as string;
+            setImagePreview(result);
+            setFormData({ image: result }); // Store base64 in formData
+            setResult(null);
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const onDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleImageUpload(e.dataTransfer.files[0]);
+        }
+    };
 
     const handlePredict = async () => {
         try {
             setLoading(true)
-            setResult(null) // Clear previous result
+            setResult(null)
 
-            const data: Record<string, any> = {}
-            Object.entries(formData).forEach(([key, value]) => {
-                const numValue = parseFloat(value)
-                data[key] = isNaN(numValue) ? value : numValue
-            })
+            let payloadData: any = {};
+
+            if (isImageModel) {
+                // Send base64 image
+                payloadData = { image: formData.image };
+            } else {
+                // Send tabular data with numeric conversion
+                Object.entries(formData).forEach(([key, value]) => {
+                    const numValue = parseFloat(value)
+                    payloadData[key] = isNaN(numValue) ? value : numValue
+                })
+            }
 
             const timestamp = Date.now()
-            console.log('=== Prediction Request ===')
-            console.log('Timestamp:', timestamp)
-            console.log('Model ID:', model.model_id)
-            console.log('Input Data:', JSON.stringify(data, null, 2))
 
             const res = await fetch('/api/proxy/predict', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Request-ID': timestamp.toString() // Add unique request ID
+                    'X-Request-ID': timestamp.toString()
                 },
                 body: JSON.stringify({
                     model_id: model.model_id,
-                    data,
-                    timestamp // Add timestamp to payload
+                    data: payloadData,
+                    timestamp
                 })
             })
 
             const json = await res.json()
-            console.log('=== Prediction Response ===')
-            console.log('Status:', res.status)
-            console.log('Response:', JSON.stringify(json, null, 2))
-            console.log('Prediction:', json.prediction)
-            console.log('Confidence:', json.probability)
+
+            if (!res.ok) {
+                throw new Error(json.error || 'Prediction failed');
+            }
 
             setResult(json)
         } catch (e: any) {
             console.error('Prediction error:', e)
-            setResult({ error: `Request Failed: ${e.message}` })
+            setResult({ error: e.message || 'Request Failed' })
         } finally {
             setLoading(false)
         }
     }
 
-    const isModelReady = model.status === 'deployed' || model.status === 'ready' || featureColumns.length > 0;
+    const isModelReady = model.status === 'deployed' || model.status === 'ready' || featureColumns.length > 0 || isImageModel;
+    const canPredict = isImageModel ? !!imagePreview : (featureColumns.length > 0 && !Object.values(formData).some(v => !v));
 
     return (
         <AnimatePresence>
@@ -222,15 +217,11 @@ export const PredictionModal = ({ isOpen, onClose, model, themeColor }: Predicti
                                 <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-white/5 border border-white/10 text-white/60">
                                     {model.algorithm || 'Unknown Algorithm'}
                                 </span>
-                                <span className="px-3 py-1 rounded-full text-[10px] font-bold border" style={{ background: `${themeColor}20`, borderColor: `${themeColor}40`, color: themeColor }}>
-                                    {model.metrics?.accuracy
-                                        ? `${(model.metrics.accuracy * 100).toFixed(1)}%`
-                                        : model.metrics?.silhouette
-                                            ? `${(Math.abs(model.metrics.silhouette) * 100).toFixed(1)}%`
-                                            : model.metrics?.r2
-                                                ? `${(model.metrics.r2 * 100).toFixed(1)}%`
-                                                : 'N/A'}
-                                </span>
+                                {model.metrics?.accuracy && (
+                                    <span className="px-3 py-1 rounded-full text-[10px] font-bold border" style={{ background: `${themeColor}20`, borderColor: `${themeColor}40`, color: themeColor }}>
+                                        Accuracy: {(model.metrics.accuracy * 100).toFixed(1)}%
+                                    </span>
+                                )}
                                 <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${model.status === 'deployed'
                                     ? 'bg-green-500/20 border-green-500/30 text-green-400'
                                     : 'bg-white/5 border-white/10 text-white/50'
@@ -241,20 +232,84 @@ export const PredictionModal = ({ isOpen, onClose, model, themeColor }: Predicti
                         </div>
 
                         {/* Content */}
-                        <div className="p-6 pt-0 max-h-[60vh] overflow-y-auto">
+                        <div className="p-6 pt-0 max-h-[60vh] overflow-y-auto custom-scrollbar">
                             {!isModelReady ? (
                                 <div className="text-center py-8 px-4 bg-white/5 rounded-2xl border border-white/5 mb-4">
                                     <div className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: `${themeColor}20` }}>
                                         <Loader2 className="w-6 h-6 animate-pulse" style={{ color: themeColor }} />
                                     </div>
-                                    <p className="text-white/60 font-medium mb-1">Model Not Yet Deployed</p>
-                                    <p className="text-xs text-white/40">Deploy this model first to run predictions</p>
+                                    <p className="text-white/60 font-medium mb-1">Model Not Yet Ready</p>
+                                    <p className="text-xs text-white/40">Please wait for successful deployment</p>
                                 </div>
                             ) : loadingColumns ? (
-                                <div className="flex justify-center py-8">
-                                    <Loader2 className="w-6 h-6 animate-spin" style={{ color: themeColor }} />
+                                <div className="flex justify-center py-12">
+                                    <Loader2 className="w-8 h-8 animate-spin" style={{ color: themeColor }} />
                                 </div>
-                            ) : featureColumns.length > 0 ? (
+                            ) : isImageModel ? (
+                                /* === IMAGE UPLOADER UI === */
+                                <div className="space-y-6">
+                                    {!imagePreview ? (
+                                        <div
+                                            className={`relative border-2 border-dashed rounded-3xl p-10 text-center transition-all cursor-pointer group ${isDragging
+                                                ? 'border-white bg-white/10 scale-[1.02]'
+                                                : 'border-white/10 hover:border-white/30 hover:bg-white/5'
+                                                }`}
+                                            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                                            onDragLeave={() => setIsDragging(false)}
+                                            onDrop={onDrop}
+                                            onClick={() => fileInputRef.current?.click()}
+                                            style={isDragging ? { borderColor: themeColor } : {}}
+                                        >
+                                            <input
+                                                type="file"
+                                                ref={fileInputRef}
+                                                className="hidden"
+                                                accept="image/*"
+                                                onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0])}
+                                            />
+                                            <div className="w-20 h-20 rounded-full bg-white/5 mx-auto mb-4 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                                                <ImageIcon className="w-10 h-10 text-white/40 group-hover:text-white" />
+                                            </div>
+                                            <h3 className="text-lg font-medium text-white mb-2">Upload Image to Predict</h3>
+                                            <p className="text-sm text-white/40 mb-6">Drag & drop or click to browse</p>
+
+                                            <div className="flex justify-center gap-4">
+                                                <span className="px-3 py-1 rounded-full bg-white/5 text-[10px] text-white/40">supports .jpg</span>
+                                                <span className="px-3 py-1 rounded-full bg-white/5 text-[10px] text-white/40">supports .png</span>
+                                                <span className="px-3 py-1 rounded-full bg-white/5 text-[10px] text-white/40">auto-resizing</span>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="relative rounded-3xl overflow-hidden bg-black/40 border border-white/10 group">
+                                            <div className="absolute top-4 right-4 z-20">
+                                                <button
+                                                    onClick={() => setImagePreview(null)}
+                                                    className="p-2 rounded-full bg-black/50 backdrop-blur-md border border-white/10 text-white hover:bg-white/20 transition-all"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                            <div className="aspect-video relative flex items-center justify-center bg-black/20">
+                                                <img
+                                                    src={imagePreview}
+                                                    alt="Preview"
+                                                    className="max-h-full max-w-full object-contain"
+                                                />
+                                            </div>
+                                            <div className="p-4 bg-white/5 border-t border-white/5 flex justify-between items-center">
+                                                <span className="text-xs text-white/60 font-medium">Ready for inference</span>
+                                                <button
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    className="text-xs text-white/40 hover:text-white transition-colors flex items-center gap-1"
+                                                >
+                                                    <Upload className="w-3 h-3" /> Change Image
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                /* === TABULAR INPUT UI === */
                                 <>
                                     <div className="flex items-center justify-between mb-3">
                                         <span className="text-xs text-white/40 uppercase tracking-wider">Input Features ({featureColumns.length})</span>
@@ -289,42 +344,45 @@ export const PredictionModal = ({ isOpen, onClose, model, themeColor }: Predicti
                                         ))}
                                     </div>
                                 </>
-                            ) : (
-                                <div className="text-center py-8 px-4 bg-white/5 rounded-2xl border border-white/5 mb-4">
-                                    <p className="text-white/50 mb-1">No feature columns available</p>
-                                    <p className="text-xs text-white/30">Retrain the model to populate features</p>
-                                </div>
                             )}
 
-                            {aiSuggestions && (
-                                <div className="mb-4 p-4 rounded-2xl border" style={{ background: `${themeColor}10`, borderColor: `${themeColor}30` }}>
-                                    <h3 className="text-sm font-bold mb-2 flex items-center gap-2" style={{ color: themeColor }}>
-                                        <Sparkles className="w-4 h-4" /> AI Suggestions
-                                    </h3>
-                                    <div className="text-xs text-white/70 whitespace-pre-wrap">{aiSuggestions}</div>
-                                </div>
-                            )}
-
+                            {/* Result Display */}
                             {result && (
-                                <div className="p-4 rounded-2xl border" style={{ background: result.error ? 'rgba(239,68,68,0.1)' : `${themeColor}15`, borderColor: result.error ? 'rgba(239,68,68,0.3)' : `${themeColor}30` }}>
+                                <div className="mt-6 p-6 rounded-2xl border relative overflow-hidden"
+                                    style={{
+                                        background: result.error ? 'rgba(239,68,68,0.1)' : `${themeColor}15`,
+                                        borderColor: result.error ? 'rgba(239,68,68,0.3)' : `${themeColor}30`
+                                    }}>
+
                                     {result.error ? (
-                                        <p className="text-red-400 text-sm text-center">{result.error}</p>
+                                        <div className="flex items-start gap-3">
+                                            <div className="p-2 rounded-full bg-red-500/20 text-red-400">
+                                                <AlertCircle className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-sm font-bold text-red-400 mb-1">Prediction Failed</h4>
+                                                <p className="text-xs text-white/60">{result.error}</p>
+                                                {result.details && <pre className="mt-2 p-2 bg-black/30 rounded-lg text-[10px] font-mono text-white/50 overflow-x-auto">{result.details}</pre>}
+                                            </div>
+                                        </div>
                                     ) : (
-                                        <div className="text-center">
-                                            <p className="text-xs text-white/40 mb-1 uppercase tracking-wider">
+                                        <div className="text-center relative z-10">
+                                            <p className="text-xs text-white/40 mb-2 uppercase tracking-wider">
                                                 {model.target_column ? `Predicted ${model.target_column}` : 'Prediction Result'}
                                             </p>
-                                            <div className="flex items-center justify-center gap-2">
-                                                <p className="text-4xl font-black mb-1" style={{ color: themeColor }}>
+
+                                            <div className="flex items-center justify-center gap-2 mb-3">
+                                                <p className="text-5xl font-black tracking-tight" style={{ color: themeColor }}>
                                                     {typeof result.prediction === 'number'
                                                         ? result.prediction.toFixed(4).replace(/\.?0+$/, '')
                                                         : result.prediction}
                                                 </p>
                                             </div>
+
                                             {result.probability && (
-                                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 mt-2">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                                                    <p className="text-xs text-white/60">{(result.probability * 100).toFixed(1)}% Confidence</p>
+                                                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-black/20 border border-white/10 backdrop-blur-sm">
+                                                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shadow-[0_0_10px_rgba(74,222,128,0.5)]" />
+                                                    <p className="text-sm font-medium text-white">{(result.probability * 100).toFixed(1)}% Confidence</p>
                                                 </div>
                                             )}
                                         </div>
@@ -337,19 +395,32 @@ export const PredictionModal = ({ isOpen, onClose, model, themeColor }: Predicti
                         <div className="p-6 pt-0">
                             <button
                                 onClick={handlePredict}
-                                disabled={loading || !isModelReady || Object.values(formData).some(v => !v) || featureColumns.length === 0}
-                                className="w-full py-3.5 rounded-xl font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:brightness-110 border"
+                                disabled={loading || !isModelReady || !canPredict}
+                                className="w-full py-4 rounded-xl font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:brightness-110 border shadow-lg relative overflow-hidden group"
                                 style={{
                                     background: `linear-gradient(135deg, ${themeColor}60, ${themeColor}30)`,
                                     borderColor: `${themeColor}50`
                                 }}
                             >
-                                {loading ? <Loader2 className="animate-spin w-5 h-5 mx-auto" /> : isModelReady ? "Run Prediction" : "Deploy Model First"}
+                                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                                <div className="relative flex items-center justify-center gap-2">
+                                    {loading ? <Loader2 className="animate-spin w-5 h-5" /> : (
+                                        <>
+                                            {isModelReady && canPredict && <Sparkles className="w-4 h-4" />}
+                                            <span>
+                                                {loading ? 'Processing...' :
+                                                    !isModelReady ? "Deploy Model First" :
+                                                        !canPredict ? (isImageModel ? "Upload Image First" : "Fill Inputs First") :
+                                                            "Run Prediction"}
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
                             </button>
                         </div>
                     </motion.div>
                 </div>
             )}
-        </ AnimatePresence>
+        </AnimatePresence>
     );
 };

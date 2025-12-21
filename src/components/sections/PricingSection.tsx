@@ -33,7 +33,7 @@ export function PricingSection({ themeColor }: PricingSectionProps) {
             price: "₹2499",
             icon: CreditCard,
             color: "from-yellow-400 to-yellow-600",
-            features: ["Everything in Silver", "8 vCPU • 64GB RAM", "🚀 RunPod GPU (RTX 4000)", "24 Hours Training", "500MB Dataset Limit", "Claude 3.5 Opus", "GPT-4o (Full)"],
+            features: ["Everything in Silver", "8 vCPU • 64GB RAM", "🚀 RunPod GPU (RTX 4000 Ada)", "9 vCPU • 50GB RAM • 20GB VRAM", "24 Hours Training", "500MB Dataset Limit", "Claude 3.5 Opus", "GPT-4o (Full)"],
             highlight: false
         }
     ]
@@ -123,7 +123,7 @@ export function PricingSection({ themeColor }: PricingSectionProps) {
                     </div>
 
                     <div className="mt-12 flex justify-center">
-                        <NavButton href="/pricing" variant="ghost" size="lg" icon="arrow" className="backdrop-blur-md bg-white/5">
+                        <NavButton href="/pricing" variant="ghost" size="lg" icon="arrow" className="backdrop-blur-md bg-white/5" requiresAuth>
                             View Full Pricing Details
                         </NavButton>
                     </div>

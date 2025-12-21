@@ -75,7 +75,7 @@ export function HowItWorksSection() {
                         transition={{ duration: 0.6, delay: 0.5 }}
                         className="flex justify-center mt-12"
                     >
-                        <NavButton href="/studio" variant="primary" size="lg" icon="arrow">
+                        <NavButton href="/studio" variant="primary" size="lg" icon="arrow" requiresAuth>
                             Try Demo
                         </NavButton>
                     </motion.div>

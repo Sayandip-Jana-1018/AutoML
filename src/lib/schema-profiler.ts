@@ -4,10 +4,12 @@
  */
 
 import { storage } from '@/lib/gcp';
+import JSZip from 'jszip';
+import path from 'path';
 
 export interface ColumnProfile {
     name: string;
-    type: 'numeric' | 'categorical' | 'text' | 'datetime' | 'boolean' | 'unknown';
+    type: 'numeric' | 'categorical' | 'text' | 'datetime' | 'boolean' | 'image' | 'unknown';
     nullCount: number;
     uniqueCount: number;
     sampleValues: string[];
@@ -21,11 +23,18 @@ export interface DatasetSchema {
         totalMissing: number;
         percentMissing: number;
     };
-    inferredTaskType: 'classification' | 'regression' | 'unknown';
+    inferredTaskType: 'classification' | 'regression' | 'image_classification' | 'unknown';
     taskTypeConfidence: number; // 0-1 confidence score
     targetColumnSuggestion?: string;
     // NEW: Preview data rows for display
     previewRows?: Record<string, any>[];
+    // NEW: Image dataset specific stats
+    imageStats?: {
+        totalImages: number;
+        unmatchedImages: number;
+        classDistribution: Record<string, number>;
+        formatCounts: Record<string, number>;
+    };
 }
 
 /**
@@ -92,7 +101,7 @@ function suggestTargetColumn(columns: ColumnProfile[]): string | undefined {
  */
 function inferTaskTypeWithConfidence(
     targetColumn?: ColumnProfile
-): { taskType: 'classification' | 'regression' | 'unknown'; confidence: number } {
+): { taskType: 'classification' | 'regression' | 'image_classification' | 'unknown'; confidence: number } {
     if (!targetColumn) {
         return { taskType: 'unknown', confidence: 0 };
     }
@@ -235,8 +244,18 @@ function parseCSVLine(line: string): string[] {
 
 /**
  * Downloads a file from GCS and profiles it
+ * Handles both CSV and ZIP (image) datasets
  */
-export async function profileDatasetFromGCS(gcsPath: string): Promise<DatasetSchema> {
+export async function profileDatasetFromGCS(
+    gcsPath: string,
+    fileSize?: number,
+    clientMetadata?: {
+        totalFiles?: number;
+        totalImages?: number;
+        classCounts?: Record<string, number>;
+        extractedSize?: number;
+    }
+): Promise<DatasetSchema> {
     // Parse GCS path: gs://bucket/path/to/file
     const match = gcsPath.match(/^gs:\/\/([^/]+)\/(.+)$/);
     if (!match) {
@@ -247,11 +266,171 @@ export async function profileDatasetFromGCS(gcsPath: string): Promise<DatasetSch
     const bucket = storage.bucket(bucketName);
     const file = bucket.file(filePath);
 
-    // Download file content
-    const [content] = await file.download();
-    const csvContent = content.toString('utf-8');
+    // Check extension
+    const ext = filePath.split('.').pop()?.toLowerCase();
 
-    return profileCSV(csvContent);
+    // Safety: If ZIP is > 200MB, skip deep profiling to avoid OOM on serverless
+    // BUT use client metadata if provided!
+    if (ext === 'zip' && fileSize && fileSize > 200 * 1024 * 1024) {
+        console.warn(`[Profiler] Skipping deep profiling for large ZIP (${(fileSize / 1024 / 1024).toFixed(1)} MB). Using client metadata if available.`);
+
+        const totalFiles = clientMetadata?.totalFiles || 0;
+        const totalImages = clientMetadata?.totalImages || 0;
+        const classCounts = clientMetadata?.classCounts || {};
+        const uniqueClasses = Object.keys(classCounts);
+
+        return {
+            columns: [
+                { name: 'filename', type: 'image', nullCount: 0, uniqueCount: totalFiles, sampleValues: [] },
+                { name: 'label', type: 'categorical', nullCount: 0, uniqueCount: Object.keys(classCounts).length, sampleValues: Object.keys(classCounts).slice(0, 5) }
+            ],
+            rowCount: totalImages,
+            columnCount: 2,
+            missingValueStats: { totalMissing: 0, percentMissing: 0 },
+            inferredTaskType: 'image_classification',
+            taskTypeConfidence: uniqueClasses.length > 0 ? 0.9 : 0.5,
+            targetColumnSuggestion: 'label',
+            previewRows: [],
+            imageStats: {
+                totalImages: totalImages || totalFiles,
+                unmatchedImages: 0,
+                classDistribution: classCounts,
+                formatCounts: {}
+            }
+        };
+    }
+
+    // Download file content (buffer) - ONLY for small files
+    const [content] = await file.download();
+
+    if (ext === 'zip') {
+        return profileZipDataset(content);
+    } else {
+        // Assume CSV/Text for now
+        const csvContent = content.toString('utf-8');
+        return profileCSV(csvContent);
+    }
+}
+
+/**
+ * Profiles a ZIP file containing an image dataset
+ */
+async function profileZipDataset(zipBuffer: Buffer): Promise<DatasetSchema> {
+    const zip = await JSZip.loadAsync(zipBuffer);
+
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tiff'];
+    const validImages = new Set<string>();
+    const formatCounts: Record<string, number> = {};
+    let metadataFileStr: string | null = null;
+
+    // 1. Scan ZIP contents
+    for (const [relativePath, entry] of Object.entries(zip.files)) {
+        if (entry.dir || relativePath.startsWith('__MACOSX') || relativePath.includes('/.')) continue;
+
+        const fileExt = '.' + relativePath.split('.').pop()?.toLowerCase();
+
+        if (imageExtensions.includes(fileExt)) {
+            validImages.add(relativePath);
+            formatCounts[fileExt] = (formatCounts[fileExt] || 0) + 1;
+        } else if (fileExt === '.csv' && !metadataFileStr) {
+            // Heuristic: Take the first CSV as metadata, or prefer 'metadata.csv' / 'train.csv'
+            // For now, simple approach: first found.
+            metadataFileStr = await entry.async('string');
+        }
+    }
+
+    const totalImages = validImages.size;
+    let schema: DatasetSchema;
+
+    if (metadataFileStr) {
+        // Parse metadata CSV to get schema
+        schema = profileCSV(metadataFileStr);
+        schema.inferredTaskType = 'image_classification'; // Assume image classification if ZIP + CSV
+
+        // Validate images against metadata
+        // Try to find the 'filename' or 'image' column
+        const filenameCol = schema.columns.find(c => ['image', 'file', 'filename', 'path', 'id'].includes(c.name.toLowerCase()));
+        if (filenameCol) {
+            filenameCol.type = 'image';
+        }
+
+        let unmatchedCount = 0;
+        const classDistribution: Record<string, number> = {};
+
+        if (filenameCol && schema.previewRows) {
+            // Check sampled rows for mismatches to get an estimate
+            let sampleMismatch = 0;
+            const samplesChecked = schema.previewRows.length;
+
+            schema.previewRows.forEach(row => {
+                const fname = row[filenameCol.name];
+                if (fname) {
+                    // Try exact match or relative path match
+                    const exists = validImages.has(fname) ||
+                        Array.from(validImages).some(img => img.endsWith(fname) || fname.endsWith(img));
+                    if (!exists) sampleMismatch++;
+                }
+            });
+
+            // If we found mismatches in the sample, estimate for the whole dataset
+            if (samplesChecked > 0) {
+                unmatchedCount = Math.floor((sampleMismatch / samplesChecked) * schema.rowCount);
+            }
+        }
+
+        // If we want class distribution, look for target column
+        if (schema.targetColumnSuggestion) {
+            const targetCol = schema.columns.find(c => c.name === schema.targetColumnSuggestion);
+            if (targetCol && targetCol.type === 'categorical') {
+                // Use sample values frequency from unique count approximation is hard without full data.
+                // But we can just use the folder counts as a fallback if the distribution is unknown?
+                // Or leaving it empty is fine, the frontend will use what it has.
+            }
+        }
+
+        schema.imageStats = {
+            totalImages,
+            unmatchedImages: unmatchedCount,
+            classDistribution: {},
+            formatCounts
+        };
+
+    } else {
+        // No metadata CSV - Folder based?
+        // We can infer classes from folder names
+        const folderCounts: Record<string, number> = {};
+
+        for (const imagePath of validImages) {
+            const parts = imagePath.split('/');
+            if (parts.length > 1) {
+                const parentFolder = parts[parts.length - 2];
+                folderCounts[parentFolder] = (folderCounts[parentFolder] || 0) + 1;
+            }
+        }
+
+        const uniqueClasses = Object.keys(folderCounts);
+
+        schema = {
+            columns: [
+                { name: 'filename', type: 'image', nullCount: 0, uniqueCount: totalImages, sampleValues: [] },
+                { name: 'label', type: 'categorical', nullCount: 0, uniqueCount: uniqueClasses.length, sampleValues: uniqueClasses.slice(0, 5) }
+            ],
+            rowCount: totalImages,
+            columnCount: 2,
+            missingValueStats: { totalMissing: 0, percentMissing: 0 },
+            inferredTaskType: 'image_classification',
+            taskTypeConfidence: 0.8,
+            targetColumnSuggestion: 'label',
+            imageStats: {
+                totalImages,
+                unmatchedImages: 0,
+                classDistribution: folderCounts,
+                formatCounts
+            }
+        };
+    }
+
+    return schema;
 }
 
 /**
@@ -262,6 +441,22 @@ export function schemaToPromptContext(schema: DatasetSchema): string {
         `- ${c.name} (${c.type}, ${c.nullCount} nulls, ${c.uniqueCount} unique)`
     ).join('\n');
 
+    let additionalStats = '';
+    if (schema.imageStats) {
+        const classDist = Object.entries(schema.imageStats.classDistribution || {})
+            .map(([cls, count]) => `  * ${cls}: ${count}`)
+            .join('\n');
+
+        additionalStats = `
+Image Stats:
+- Total Images: ${schema.imageStats.totalImages}
+- Unmatched Images: ${schema.imageStats.unmatchedImages} (in CSV but not ZIP)
+- Formats: ${Object.entries(schema.imageStats.formatCounts || {}).map(([k, v]) => `${k}=${v}`).join(', ')}
+- Class Distribution:
+${classDist}
+`;
+    }
+
     return `
 Dataset Summary:
 - Rows: ${schema.rowCount}
@@ -269,6 +464,7 @@ Dataset Summary:
 - Missing Values: ${schema.missingValueStats.percentMissing.toFixed(1)}%
 - Inferred Task: ${schema.inferredTaskType}
 - Suggested Target: ${schema.targetColumnSuggestion || 'Unknown'}
+${additionalStats}
 
 Columns:
 ${columnSummary}

@@ -1,150 +1,251 @@
 "use client"
 
-import { motion } from "framer-motion"
-import { Star, Quote } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
+import { Star, ChevronLeft, ChevronRight, Quote } from "lucide-react"
 import { useThemeColor } from "@/context/theme-context"
 import { useEffect, useState } from "react"
 import MagicReveal from "@/components/ui/MagicReveal"
 
 const testimonials = [
-    { name: "Sarah Chen", role: "ML Engineer", company: "TechCorp", avatar: "SC", quote: "AutoForge ML cut our model deployment time from weeks to hours. The AI code generation is incredibly accurate.", rating: 5 },
-    { name: "James Rodriguez", role: "Data Scientist", company: "DataFlow", avatar: "JR", quote: "Finally, a platform that understands what ML engineers actually need. The VS Code integration is seamless.", rating: 5 },
-    { name: "Emily Watson", role: "CTO", company: "StartupAI", avatar: "EW", quote: "We went from prototype to production in a single day. The multi-cloud training options are game-changing.", rating: 5 },
-    { name: "Michael Park", role: "Research Lead", company: "AILabs", avatar: "MP", quote: "The model registry and version control saved us countless hours of debugging. Highly recommended.", rating: 5 },
+    {
+        name: "Sarah Chen",
+        role: "ML Engineer",
+        company: "TechCorp",
+        avatar: "SC",
+        quote: "AutoForge ML cut our model deployment time from weeks to hours. The AI code generation is incredibly accurate and the interface is a joy to use.",
+        rating: 5
+    },
+    {
+        name: "James Rodriguez",
+        role: "Data Scientist",
+        company: "DataFlow",
+        avatar: "JR",
+        quote: "Finally, a platform that understands what ML engineers actually need. The VS Code integration is seamless and the auto-training is magical.",
+        rating: 5
+    },
+    {
+        name: "Emily Watson",
+        role: "CTO",
+        company: "StartupAI",
+        avatar: "EW",
+        quote: "We went from prototype to production in a single day. The multi-cloud training options are game-changing for our infrastructure.",
+        rating: 5
+    },
+    {
+        name: "Michael Park",
+        role: "Research Lead",
+        company: "AILabs",
+        avatar: "MP",
+        quote: "The model registry and version control saved us countless hours of debugging. Best ML platform I've ever used.",
+        rating: 5
+    },
 ]
-
-function HexagonPattern({ themeColor }: { themeColor: string }) {
-    return (
-        <div className="absolute inset-0 overflow-hidden opacity-15 pointer-events-none">
-            <svg width="100%" height="100%" className="absolute inset-0">
-                <defs>
-                    <pattern id="hexagons" width="56" height="100" patternUnits="userSpaceOnUse" patternTransform="scale(2)">
-                        <path d="M28 0 L56 16.7 L56 50 L28 66.7 L0 50 L0 16.7 Z M28 100 L56 116.7 L56 150 L28 166.7 L0 150 L0 116.7 Z" fill="none" stroke={themeColor} strokeWidth="0.5" />
-                    </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#hexagons)" />
-            </svg>
-
-            <motion.div
-                className="absolute top-20 left-20 w-20 h-20"
-                animate={{ y: [0, -15, 0], rotate: [0, 5, 0] }}
-                transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-            >
-                <svg viewBox="0 0 100 100" className="w-full h-full">
-                    <polygon points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5" fill={themeColor} opacity="0.1" stroke={themeColor} strokeWidth="1" />
-                </svg>
-            </motion.div>
-
-            <motion.div
-                className="absolute bottom-40 right-16 w-28 h-28"
-                animate={{ y: [0, 20, 0], rotate: [0, -10, 0] }}
-                transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-            >
-                <svg viewBox="0 0 100 100" className="w-full h-full">
-                    <polygon points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5" fill="none" stroke={themeColor} strokeWidth="1.5" opacity="0.3" />
-                </svg>
-            </motion.div>
-        </div>
-    )
-}
 
 export function TestimonialsSection() {
     const { themeColor } = useThemeColor()
     const [activeIndex, setActiveIndex] = useState(0)
+    const [direction, setDirection] = useState(0)
 
+    // Auto-advance
     useEffect(() => {
         const interval = setInterval(() => {
+            setDirection(1)
             setActiveIndex((prev) => (prev + 1) % testimonials.length)
-        }, 5000)
+        }, 6000)
         return () => clearInterval(interval)
     }, [])
 
+    const goTo = (index: number) => {
+        setDirection(index > activeIndex ? 1 : -1)
+        setActiveIndex(index)
+    }
+
+    const goNext = () => {
+        setDirection(1)
+        setActiveIndex((prev) => (prev + 1) % testimonials.length)
+    }
+
+    const goPrev = () => {
+        setDirection(-1)
+        setActiveIndex((prev) => (prev - 1 + testimonials.length) % testimonials.length)
+    }
+
+    const slideVariants = {
+        enter: (direction: number) => ({
+            x: direction > 0 ? 300 : -300,
+            opacity: 0,
+            scale: 0.9,
+        }),
+        center: {
+            x: 0,
+            opacity: 1,
+            scale: 1,
+            transition: {
+                type: "spring" as const,
+                stiffness: 100,
+                damping: 15
+            }
+        },
+        exit: (direction: number) => ({
+            x: direction > 0 ? -300 : 300,
+            opacity: 0,
+            scale: 0.9,
+            transition: {
+                type: "spring" as const,
+                stiffness: 200,
+                damping: 25
+            }
+        })
+    }
+
+    const current = testimonials[activeIndex]
+
     return (
-        <section className="relative z-20 py-24 px-6 md:px-12 lg:px-16 xl:px-20 overflow-hidden">
-            <HexagonPattern themeColor={themeColor} />
+        <section className="relative z-20 py-24 px-6 md:px-12 lg:px-16 xl:px-20 overflow-hidden backdrop-blur-md bg-white/5 dark:bg-white/[0.02]">
 
-            <div className="absolute inset-0 opacity-25" style={{ background: `radial-gradient(ellipse at center, ${themeColor}40, transparent 60%)` }} />
+            {/* Background gradient */}
+            <div
+                className="absolute inset-0 opacity-20"
+                style={{ background: `radial-gradient(ellipse at 50% 0%, ${themeColor}30, transparent 60%)` }}
+            />
 
-            <div className="max-w-6xl mx-auto relative">
+            <div className="max-w-4xl mx-auto relative">
                 <MagicReveal
                     title="Loved by Engineers"
                     titleClassName="text-4xl md:text-5xl font-black mb-4"
                     contentDelay={0.7}
-                    particleCount={70}
+                    particleCount={40}
                 >
-                    <p className="text-foreground/60 max-w-xl mx-auto text-center mb-16">
+                    <p className="text-foreground/60 max-w-lg mx-auto text-center mb-16">
                         Join thousands of ML professionals who've transformed their workflow
                     </p>
 
-                    {/* Testimonials Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-                        {testimonials.map((testimonial, i) => (
-                            <motion.div
-                                key={testimonial.name}
-                                initial={{ opacity: 0, y: 30 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ delay: i * 0.1 }}
-                                onClick={() => setActiveIndex(i)}
-                                className={`relative p-6 rounded-2xl cursor-pointer transition-all duration-500 group overflow-hidden backdrop-blur-xl ${i === activeIndex ? 'scale-[1.02]' : 'hover:scale-[1.01]'}`}
-                                style={{
-                                    background: i === activeIndex
-                                        ? `linear-gradient(135deg, ${themeColor}25, ${themeColor}10)`
-                                        : 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.03))',
-                                    border: `1px solid ${i === activeIndex ? themeColor + '60' : 'rgba(255,255,255,0.15)'}`,
-                                    boxShadow: i === activeIndex
-                                        ? `0 8px 32px ${themeColor}30, inset 0 1px 0 rgba(255,255,255,0.2)`
-                                        : '0 4px 24px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1)'
-                                }}
-                            >
-                                <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-transparent opacity-50" />
-                                {i === activeIndex && (
-                                    <div className="absolute inset-0 opacity-30" style={{ background: `radial-gradient(circle at top right, ${themeColor}40, transparent 60%)` }} />
-                                )}
+                    {/* Main Testimonial Card */}
+                    <div className="relative">
+                        {/* Navigation Arrows */}
+                        <button
+                            onClick={goPrev}
+                            className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 md:-translate-x-12 z-20 w-10 h-10 rounded-full bg-white/5 backdrop-blur-xl border border-white/10 flex items-center justify-center hover:bg-white/10 hover:scale-110 transition-all"
+                        >
+                            <ChevronLeft className="w-5 h-5 text-white/70" />
+                        </button>
+                        <button
+                            onClick={goNext}
+                            className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 md:translate-x-12 z-20 w-10 h-10 rounded-full bg-white/5 backdrop-blur-xl border border-white/10 flex items-center justify-center hover:bg-white/10 hover:scale-110 transition-all"
+                        >
+                            <ChevronRight className="w-5 h-5 text-white/70" />
+                        </button>
 
-                                <Quote className="absolute top-4 right-4 w-8 h-8 opacity-10" style={{ color: i === activeIndex ? themeColor : 'white' }} />
+                        {/* Card Container */}
+                        <div className="relative h-[280px] overflow-hidden">
+                            <AnimatePresence initial={false} custom={direction} mode="wait">
+                                <motion.div
+                                    key={activeIndex}
+                                    custom={direction}
+                                    variants={slideVariants}
+                                    initial="enter"
+                                    animate="center"
+                                    exit="exit"
+                                    className="absolute inset-0"
+                                >
+                                    <div
+                                        className="h-full rounded-3xl p-8 md:p-12 relative overflow-hidden backdrop-blur-xl"
+                                        style={{
+                                            background: `linear-gradient(135deg, ${themeColor}15, rgba(0,0,0,0.7), ${themeColor}10)`,
+                                            border: `1px solid ${themeColor}20`,
+                                            boxShadow: `0 25px 50px -12px rgba(0,0,0,0.5), 0 0 40px ${themeColor}10`
+                                        }}
+                                    >
+                                        {/* Subtle top highlight */}
+                                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
-                                <div className="relative z-10">
-                                    <div className="flex items-start gap-4 mb-4">
-                                        <div
-                                            className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0 relative overflow-hidden"
-                                            style={{ background: `linear-gradient(135deg, ${themeColor}, ${themeColor}99)`, boxShadow: `0 4px 12px ${themeColor}40` }}
-                                        >
-                                            {testimonial.avatar}
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-foreground text-base">{testimonial.name}</h4>
-                                            <p className="text-xs text-foreground/50">{testimonial.role} at {testimonial.company}</p>
+                                        {/* Quote icon */}
+                                        <Quote
+                                            className="absolute top-6 right-8 w-12 h-12 opacity-5"
+                                            style={{ color: themeColor }}
+                                        />
+
+                                        <div className="relative z-10 flex flex-col h-full">
+                                            {/* Quote */}
+                                            <p className="text-white/90 text-lg md:text-xl leading-relaxed flex-1 font-medium">
+                                                "{current.quote}"
+                                            </p>
+
+                                            {/* Author Info */}
+                                            <div className="flex items-center gap-4 mt-6 pt-6 border-t border-white/5">
+                                                {/* Avatar */}
+                                                <div
+                                                    className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
+                                                    style={{
+                                                        background: `linear-gradient(135deg, ${themeColor}, ${themeColor}80)`,
+                                                        boxShadow: `0 4px 20px ${themeColor}40`
+                                                    }}
+                                                >
+                                                    {current.avatar}
+                                                </div>
+
+                                                {/* Name & Role */}
+                                                <div className="flex-1">
+                                                    <h4 className="font-bold text-white text-base">{current.name}</h4>
+                                                    <p className="text-sm text-white/50">{current.role} at {current.company}</p>
+                                                </div>
+
+                                                {/* Stars */}
+                                                <div className="flex gap-1">
+                                                    {Array.from({ length: current.rating }).map((_, j) => (
+                                                        <Star
+                                                            key={j}
+                                                            className="w-4 h-4 fill-current"
+                                                            style={{ color: themeColor }}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-
-                                    <p className="text-foreground/80 text-sm leading-relaxed mb-4 font-medium">
-                                        "{testimonial.quote}"
-                                    </p>
-
-                                    <div className="flex gap-1">
-                                        {Array.from({ length: testimonial.rating }).map((_, j) => (
-                                            <Star key={j} className="w-4 h-4 fill-current" style={{ color: themeColor }} />
-                                        ))}
-                                    </div>
-                                </div>
-                            </motion.div>
-                        ))}
+                                </motion.div>
+                            </AnimatePresence>
+                        </div>
                     </div>
 
-                    {/* Dots indicator */}
-                    <div className="flex justify-center gap-3">
+                    {/* Dots Navigation */}
+                    <div className="flex justify-center gap-2 mt-8">
                         {testimonials.map((_, i) => (
                             <button
                                 key={i}
-                                onClick={() => setActiveIndex(i)}
-                                className="w-2.5 h-2.5 rounded-full transition-all duration-300"
+                                onClick={() => goTo(i)}
+                                className="relative h-2 rounded-full transition-all duration-500 overflow-hidden"
                                 style={{
-                                    background: i === activeIndex ? themeColor : 'rgba(255,255,255,0.2)',
-                                    transform: i === activeIndex ? 'scale(1.4)' : 'scale(1)',
-                                    boxShadow: i === activeIndex ? `0 0 12px ${themeColor}` : 'none'
+                                    width: i === activeIndex ? '32px' : '8px',
+                                    background: i === activeIndex ? 'transparent' : 'rgba(255,255,255,0.15)',
                                 }}
-                            />
+                            >
+                                {i === activeIndex && (
+                                    <motion.div
+                                        className="absolute inset-0 rounded-full"
+                                        style={{ background: themeColor }}
+                                        layoutId="activeDot"
+                                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                                    />
+                                )}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Small avatars preview */}
+                    <div className="flex justify-center gap-2 mt-6">
+                        {testimonials.map((t, i) => (
+                            <button
+                                key={i}
+                                onClick={() => goTo(i)}
+                                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${i === activeIndex ? 'ring-2 scale-110' : 'opacity-40 hover:opacity-70'}`}
+                                style={{
+                                    background: `linear-gradient(135deg, ${themeColor}90, ${themeColor}50)`,
+                                    boxShadow: i === activeIndex ? `0 0 0 2px ${themeColor}` : 'none'
+                                }}
+                            >
+                                {t.avatar}
+                            </button>
                         ))}
                     </div>
                 </MagicReveal>

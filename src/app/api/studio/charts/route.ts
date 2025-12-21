@@ -54,6 +54,34 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'projectId required' }, { status: 400 });
         }
 
+        // Fetch project and dataset info for context
+        const projectDoc = await adminDb.collection('projects').doc(projectId).get();
+        const projectData = projectDoc.data();
+        let datasetSchema: { columns: string[], columnTypes: Record<string, string>, rowCount: number, datasetType: string } | null = null;
+
+        if (projectData) {
+            // Try to get dataset schema from project or its datasets subcollection
+            const datasetsSnap = await adminDb.collection('projects').doc(projectId)
+                .collection('datasets').orderBy('createdAt', 'desc').limit(1).get();
+
+            if (!datasetsSnap.empty) {
+                const dsData = datasetsSnap.docs[0].data();
+                datasetSchema = {
+                    columns: dsData.columns || dsData.schema?.columns || [],
+                    columnTypes: dsData.columnTypes || dsData.schema?.columnTypes || {},
+                    rowCount: dsData.rowCount || dsData.schema?.rowCount || 0,
+                    datasetType: dsData.type || projectData.dataset?.type || 'tabular'
+                };
+            } else if (projectData.dataset) {
+                datasetSchema = {
+                    columns: projectData.dataset.columns || [],
+                    columnTypes: projectData.dataset.columnTypes || {},
+                    rowCount: projectData.dataset.rowCount || 0,
+                    datasetType: projectData.dataset.type || 'tabular'
+                };
+            }
+        }
+
         // Get user tier
         const userDoc = await adminDb.collection('users').doc(uid).get();
         const userTier = (userDoc.data()?.tier as 'free' | 'silver' | 'gold') || 'free';
@@ -83,7 +111,7 @@ export async function POST(request: NextRequest) {
 
         // Generate chart code using AI (use aiModel from request or fallback to tier-based)
         const selectedModel = aiModel || (userTier === 'gold' ? 'claude' : userTier === 'silver' ? 'openai' : 'gemini');
-        const pythonCode = await generateChartCode(chartPrompt, datasetPath, selectedModel);
+        const pythonCode = await generateChartCode(chartPrompt, datasetPath, selectedModel, datasetSchema);
 
         // Save chart to Firestore
         const chartRef = await adminDb.collection('charts').add({
@@ -128,8 +156,35 @@ import { anthropic } from '@ai-sdk/anthropic';
 async function generateChartCode(
     prompt: string,
     datasetPath: string | undefined,
-    selectedModel: 'gemini' | 'openai' | 'claude'
+    selectedModel: 'gemini' | 'openai' | 'claude',
+    schema?: { columns: string[], columnTypes: Record<string, string>, rowCount: number, datasetType: string } | null
 ): Promise<string> {
+    // Build schema context for AI
+    let schemaContext = '';
+    if (schema && schema.columns.length > 0) {
+        const columnsInfo = schema.columns.map(col => {
+            const type = schema.columnTypes[col] || 'unknown';
+            return `  - ${col} (${type})`;
+        }).join('\n');
+        schemaContext = `
+Dataset Information:
+- Total rows: ${schema.rowCount}
+- Dataset type: ${schema.datasetType}
+- Columns:
+${columnsInfo}
+`;
+    }
+
+    // Special handling for image datasets
+    const isImageDataset = schema?.datasetType === 'image';
+    const imageDatasetNote = isImageDataset ? `
+IMPORTANT: This is an IMAGE DATASET. The CSV likely contains metadata about images (filenames, labels, etc).
+- Focus on metadata analysis: class distribution, label counts, category breakdowns
+- Do NOT try to load or display actual images
+- Use bar charts, pie charts, or histograms based on categorical columns
+- If there's a label/class/category column, visualize its distribution
+` : '';
+
     const systemPrompt = `You are a Python data visualization expert. Generate clean, working Plotly code for interactive visualization.
 Rules:
 - Use pandas to load data from 'data.csv' (or provided path)
@@ -143,9 +198,11 @@ Rules:
   * Verify target columns are compatible types. 
   * If using sklearn, ensure data is numeric or properly encoded (use LabelEncoder if needed).
   * Drop NaNs in target columns explicitly before computing metrics.
-- Keep code concise but complete`;
+- Keep code concise but complete
+${imageDatasetNote}`;
 
-    const userPrompt = `Dataset: ${datasetPath || 'data.csv'}
+    const userPrompt = `${schemaContext}
+Dataset file: ${datasetPath || 'data.csv'}
 Task: ${prompt}
 Generate only the Python code, no explanations.`;
 

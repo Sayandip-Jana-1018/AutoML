@@ -3,6 +3,7 @@
  * Upload Stage Overlay - Redesigned Clean Centered Layout
  */
 import React, { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Upload, X, Loader2, ArrowRight, AlertCircle,
@@ -20,6 +21,7 @@ import { ImportModal } from './upload/ImportModal';
 import { UploadZone } from './upload/UploadZone';
 import { PreviewTable } from './upload/PreviewTable';
 import { PreviewHeader } from './upload/PreviewHeader';
+import { FileExplorer } from './FileExplorer';
 
 // File parsing utilities
 import {
@@ -27,6 +29,21 @@ import {
     CLIENT_PREVIEW_LIMIT,
     parseCSV, parseJSON, parseJSONL, parseHTMLTables, parseHTMLTableByIndex, parseZipFile, detectFileType, getBestHTMLTable
 } from '@/lib/file-parsers';
+import Link from 'next/link';
+import { Crown } from 'lucide-react';
+
+// Tier upload limits (must match server-side limits in /api/studio/upload)
+const TIER_UPLOAD_LIMITS: Record<'free' | 'silver' | 'gold', number> = {
+    free: 50 * 1024 * 1024,    // 50MB
+    silver: 200 * 1024 * 1024, // 200MB
+    gold: 1024 * 1024 * 1024   // 1GB
+};
+
+const TIER_LABELS: Record<'free' | 'silver' | 'gold', string> = {
+    free: 'Free',
+    silver: 'Silver',
+    gold: 'Gold'
+};
 
 // ============ PROPS ============
 interface UploadStageOverlayProps {
@@ -60,6 +77,15 @@ export function UploadStageOverlay({
     const [targetColumn, setTargetColumn] = useState<string | null>(null);
     const [zipAsClassFolders, setZipAsClassFolders] = useState(false);
 
+    // Upload size limit state
+    const [showUpgradeBanner, setShowUpgradeBanner] = useState(false);
+    const [upgradeInfo, setUpgradeInfo] = useState<{
+        fileSize: string;
+        tierLimit: string;
+        tierLabel: string;
+        nextTier: 'silver' | 'gold' | null;
+    } | null>(null);
+
     // Import modal state
     const [showUrlImport, setShowUrlImport] = useState(false);
     const [importUrl, setImportUrl] = useState('');
@@ -80,6 +106,9 @@ export function UploadStageOverlay({
     const [samplePercent, setSamplePercent] = useState<number>(100);
     const [useStratified, setUseStratified] = useState<boolean>(true);
 
+    // Image Lightbox
+    const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     // Hide body scroll
@@ -95,6 +124,29 @@ export function UploadStageOverlay({
 
     // File parsing (same logic as before)
     const parseLocalFile = async (file: File) => {
+        // PRE-VALIDATION: Check upload size limit BEFORE any parsing
+        const maxUploadSize = TIER_UPLOAD_LIMITS[userTier] || TIER_UPLOAD_LIMITS.free;
+        if (file.size > maxUploadSize) {
+            const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
+            const limitMB = (maxUploadSize / (1024 * 1024)).toFixed(0);
+            const nextTier = userTier === 'free' ? 'silver' : userTier === 'silver' ? 'gold' : null;
+            setUpgradeInfo({
+                fileSize: `${fileSizeMB} MB`,
+                tierLimit: `${limitMB} MB`,
+                tierLabel: TIER_LABELS[userTier],
+                nextTier
+            });
+            setShowUpgradeBanner(true);
+            setSelectedFile(null);
+            setLocalPreview(null);
+            setParseError(null);
+            return; // Don't proceed with parsing
+        }
+
+        // Clear any previous upgrade banner
+        setShowUpgradeBanner(false);
+        setUpgradeInfo(null);
+
         setSelectedFile(file); setParsingFile(true); setParseError(null); setLocalPreview(null); setTargetColumn(null);
         const detection = detectFileType(file);
         try {
@@ -154,8 +206,16 @@ export function UploadStageOverlay({
                         type: 'zip', zipFiles: [{ name: `${zipData.totalFiles} files`, size: file.size }],
                         zipImagePreviews: zipData.imagePreviews, zipFolders: zipData.folders, totalRows: zipData.totalImages,
                         confidence: detection.confidence,
-                        detectionReason: zipData.totalImages > 0 ? `Image dataset: ${zipData.totalImages} images in ${zipData.folders.length} folders` : `Archive with ${zipData.totalFiles} files`
+                        detectionReason: zipData.totalImages > 0 ? `Image dataset: ${zipData.totalImages} images in ${zipData.folders.length} folders` : `Archive with ${zipData.totalFiles} files`,
+                        fileTree: zipData.fileTree,
+                        extractedSize: zipData.extractedSize,
+                        totalFiles: zipData.totalFiles
                     });
+
+                    // Auto-detect class folders structure
+                    if (zipData.folders.length > 1) {
+                        setZipAsClassFolders(true);
+                    }
                 }
             } else if (detection.type === 'html') {
                 const text = await file.text();
@@ -194,7 +254,31 @@ export function UploadStageOverlay({
         setUploading(true);
         try {
             const cleaningConfig = qualityReport?.recommendations ? recommendationsToCleaningConfig(qualityReport.recommendations) : {};
-            await onUploadStart(selectedFile, { targetColumn, zipAsClassFolders, cleaningConfig, columnTypes: detectedColumnTypes });
+
+            // Auto-calculate for upload (remove reliance on manual state for ZIPs)
+            const isAutoClassFolders = localPreview?.type === 'zip' && localPreview.zipFolders && localPreview.zipFolders.length > 1;
+
+            // Prepare metadata for fallback profiling
+            const classCounts = localPreview?.zipFolders?.reduce((acc: any, f: any) => {
+                acc[f.name] = f.count;
+                return acc;
+            }, {}) || {};
+
+            const clientMetadata = {
+                totalFiles: localPreview?.totalFiles || 0,
+                totalImages: localPreview?.totalImages || localPreview?.totalRows || 0,
+                classCounts,
+                extractedSize: localPreview?.extractedSize
+            };
+
+            await onUploadStart(selectedFile, {
+                targetColumn,
+                zipAsClassFolders: isAutoClassFolders,
+                cleaningConfig,
+                columnTypes: detectedColumnTypes,
+                extractedSize: localPreview?.extractedSize,
+                clientMetadata
+            });
         } catch (e) { }
         finally { setUploading(false); }
     };
@@ -438,6 +522,90 @@ export function UploadStageOverlay({
                                 </motion.div>
                             )}
 
+                            {/* Upgrade Banner - When file exceeds tier limit */}
+                            {showUpgradeBanner && upgradeInfo && (
+                                <motion.div
+                                    key="upgrade-banner"
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    className="p-8"
+                                >
+                                    <div className="text-center">
+                                        {/* Icon */}
+                                        <motion.div
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            transition={{ type: "spring", bounce: 0.5, delay: 0.1 }}
+                                            className="w-20 h-20 mx-auto mb-6 rounded-2xl flex items-center justify-center"
+                                            style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.2), rgba(245,158,11,0.1))', boxShadow: '0 0 40px rgba(251,191,36,0.15)' }}
+                                        >
+                                            <Crown className="w-10 h-10 text-amber-400" />
+                                        </motion.div>
+
+                                        {/* Title */}
+                                        <h3 className="text-2xl font-bold text-white mb-3">File Too Large for Your Plan</h3>
+
+                                        {/* Size comparison */}
+                                        <div className="flex items-center justify-center gap-4 mb-6">
+                                            <div className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20">
+                                                <p className="text-xs text-red-400/70 uppercase tracking-wider mb-1">Your File</p>
+                                                <p className="text-lg font-bold text-red-400">{upgradeInfo.fileSize}</p>
+                                            </div>
+                                            <div className="text-white/30">→</div>
+                                            <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10">
+                                                <p className="text-xs text-white/50 uppercase tracking-wider mb-1">{upgradeInfo.tierLabel} Limit</p>
+                                                <p className="text-lg font-bold text-white/70">{upgradeInfo.tierLimit}</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Tier comparison */}
+                                        <div className="mb-8 p-4 rounded-xl bg-white/[0.03] border border-white/10 max-w-md mx-auto">
+                                            <p className="text-sm text-white/60 mb-3">Plan upload limits:</p>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <div className={`p-2 rounded-lg text-center ${userTier === 'free' ? 'bg-white/10 border border-white/20' : 'bg-white/[0.02]'}`}>
+                                                    <p className="text-[10px] text-white/40 uppercase">Free</p>
+                                                    <p className="text-sm font-bold text-white/70">50 MB</p>
+                                                </div>
+                                                <div className={`p-2 rounded-lg text-center ${userTier === 'silver' ? 'bg-white/10 border border-white/20' : 'bg-white/[0.02]'}`}>
+                                                    <p className="text-[10px] text-white/40 uppercase">Silver</p>
+                                                    <p className="text-sm font-bold text-white/70">200 MB</p>
+                                                </div>
+                                                <div className={`p-2 rounded-lg text-center bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/30`}>
+                                                    <p className="text-[10px] text-amber-400/70 uppercase">Gold</p>
+                                                    <p className="text-sm font-bold text-amber-400">1 GB</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Action buttons */}
+                                        <div className="flex items-center justify-center gap-4">
+                                            <button
+                                                onClick={() => { setShowUpgradeBanner(false); setUpgradeInfo(null); }}
+                                                className="px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 font-medium transition-all"
+                                            >
+                                                Try Smaller File
+                                            </button>
+                                            <Link
+                                                href="/pricing"
+                                                className="px-6 py-2.5 rounded-xl font-bold text-black flex items-center gap-2 transition-all hover:scale-105"
+                                                style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', boxShadow: '0 0 25px rgba(251,191,36,0.3)' }}
+                                            >
+                                                <Crown className="w-4 h-4" />
+                                                Upgrade Plan
+                                            </Link>
+                                        </div>
+
+                                        {/* Hint for Gold users */}
+                                        {userTier === 'gold' && (
+                                            <p className="text-xs text-white/40 mt-6">
+                                                Gold is the highest tier. Consider compressing your dataset or splitting into smaller files.
+                                            </p>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            )}
+
                             {/* Loading State */}
                             {(parsingFile || uploading || isProcessing) && (
                                 <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-12 flex flex-col items-center justify-center">
@@ -448,6 +616,16 @@ export function UploadStageOverlay({
                                     <h3 className="text-xl font-bold text-white mb-2">{parsingFile ? 'Analyzing Dataset' : uploading ? 'Uploading File' : 'Processing'}</h3>
                                     <p className="text-white/50 mb-6">{parsingFile ? 'Detecting structure & types' : selectedFile?.name}</p>
                                     {/* Detailed steps removed as per request - status is shown above */}
+                                    <button
+                                        onClick={() => {
+                                            setParsingFile(false);
+                                            setUploading(false);
+                                            // If we had an AbortController for upload, we would call abort() here
+                                        }}
+                                        className="px-4 py-2 rounded-lg bg-white/5 text-white/40 hover:text-white hover:bg-white/10 text-sm transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
                                 </motion.div>
                             )}
 
@@ -524,35 +702,83 @@ export function UploadStageOverlay({
                             {/* ZIP Preview */}
                             {hasLocalPreview && localPreview?.type === 'zip' && (
                                 <motion.div key="zip" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-8">
-                                    <div className="text-center mb-6">
+                                    <div className="absolute top-4 right-4">
+                                        <button
+                                            onClick={handleClearFile}
+                                            className="p-2 rounded-full hover:bg-white/10 text-white/30 hover:text-white transition-colors"
+                                            title="Remove file"
+                                        >
+                                            <X className="w-5 h-5" />
+                                        </button>
+                                    </div>
+
+                                    <div className="text-center mb-6 mt-2">
                                         <FileArchive className="w-16 h-16 mx-auto mb-4 opacity-60" style={{ color: themeColor }} />
                                         <p className="text-lg text-white font-medium">{localPreview.totalRows && localPreview.totalRows > 0 ? `${localPreview.totalRows} images` : localPreview.zipFiles?.[0]?.name}</p>
-                                        <p className="text-sm text-white/40">{localPreview.detectionReason}</p>
+                                        <div className="flex flex-col gap-1 items-center">
+                                            <p className="text-sm text-white/40">{localPreview.detectionReason}</p>
+                                            {localPreview.extractedSize && (
+                                                <p className="text-xs text-white/30">
+                                                    Extracted size: {(localPreview.extractedSize / 1024 / 1024).toFixed(1)} MB
+                                                </p>
+                                            )}
+                                            {localPreview.totalFiles && localPreview.totalFiles > 5000 && (
+                                                <div className="mt-2 text-xs px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center gap-1.15">
+                                                    <AlertCircle className="w-3 h-3" />
+                                                    High file count ({localPreview.totalFiles.toLocaleString()}). Processing may take longer.
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                     {localPreview.zipImagePreviews && localPreview.zipImagePreviews.length > 0 && (
                                         <div className="grid grid-cols-6 gap-2 mb-6">
                                             {localPreview.zipImagePreviews.map((img, idx) => (
-                                                <div key={idx} className="aspect-square rounded-lg overflow-hidden border border-white/10 bg-black/30">
-                                                    <img src={img} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
-                                                </div>
+                                                <motion.div
+                                                    key={idx}
+                                                    layoutId={`image-preview-${idx}`}
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    className="aspect-square rounded-lg overflow-hidden border border-white/10 bg-black/30 cursor-pointer relative group"
+                                                    onClick={() => setLightboxImage(img)}
+                                                >
+                                                    <motion.img
+                                                        src={img}
+                                                        alt={`Preview ${idx + 1}`}
+                                                        className="w-full h-full object-cover"
+                                                        style={{ imageRendering: 'pixelated' }} // Fix blur for small images
+                                                    />
+                                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                        <Eye className="w-4 h-4 text-white drop-shadow-md" />
+                                                    </div>
+                                                </motion.div>
                                             ))}
                                         </div>
                                     )}
-                                    {localPreview.zipFolders && localPreview.zipFolders.length > 0 && (
-                                        <div className="mb-6 p-4 rounded-xl bg-white/[0.03] border border-white/10">
-                                            <p className="text-xs text-white/50 mb-2">Detected classes:</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {localPreview.zipFolders.map((folder, idx) => (
-                                                    <span key={idx} className="px-3 py-1 text-sm rounded-lg bg-white/5 text-white/70">{folder.name} ({folder.count})</span>
-                                                ))}
+
+                                    {/* File Explorer (Tree View) */}
+                                    {localPreview.fileTree && (
+                                        <div className="mb-6 rounded-xl bg-white/[0.03] border border-white/10 overflow-hidden flex flex-col">
+                                            <div className="flex items-center justify-between p-3 border-b border-white/5 bg-white/[0.02]">
+                                                <p className="text-xs text-white/50 uppercase tracking-wider font-medium">Folder Structure</p>
+                                                <div className="flex gap-2">
+                                                    {localPreview.zipFolders && localPreview.zipFolders.length > 1 ? (
+                                                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 flex items-center gap-1">
+                                                            <CheckCircle2 className="w-3 h-3" /> {localPreview.zipFolders.length} Classes
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-white/40 border border-white/10">
+                                                            Flat Structure
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="p-2 max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                                                <FileExplorer node={localPreview.fileTree} themeColor={themeColor} />
                                             </div>
                                         </div>
                                     )}
+
                                     <div className="flex items-center justify-center gap-6">
-                                        <label className="flex items-center gap-2 text-sm text-white/50">
-                                            <input type="checkbox" checked={zipAsClassFolders} onChange={(e) => setZipAsClassFolders(e.target.checked)} style={{ accentColor: themeColor }} />
-                                            Treat folders as class labels
-                                        </label>
                                         <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleConfirmUpload}
                                             className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white"
                                             style={{ background: `linear-gradient(135deg, ${themeColor}, ${themeColor}80)`, boxShadow: `0 0 25px ${themeColor}40` }}>
@@ -561,6 +787,15 @@ export function UploadStageOverlay({
                                     </div>
                                 </motion.div>
                             )}
+
+                            {/* Image Lightbox Modal - Portal to body to escape parent stacking context */}
+                            {lightboxImage && (
+                                <LightboxPortal
+                                    src={lightboxImage}
+                                    onClose={() => setLightboxImage(null)}
+                                />
+                            )}
+
 
                             {/* Error */}
                             {workflowStatus === 'error' && (
@@ -602,4 +837,45 @@ export function UploadStageOverlay({
     );
 }
 
+
 export default UploadStageOverlay;
+
+function LightboxPortal({ src, onClose }: { src: string; onClose: () => void }) {
+    // Only render on client
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
+
+    if (!mounted) return null;
+
+    return createPortal(
+        <AnimatePresence>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-md flex items-center justify-center p-8 cursor-zoom-out"
+                onClick={onClose}
+            >
+                <button
+                    onClick={onClose}
+                    className="absolute top-6 right-6 p-3 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-[10000] pointer-events-auto"
+                >
+                    <X className="w-6 h-6" />
+                </button>
+                <motion.img
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    src={src}
+                    alt="Full preview"
+                    className="max-w-[500px] max-h-[500px] w-auto h-auto object-contain rounded-lg shadow-2xl cursor-default bg-transparent"
+                    style={{ imageRendering: 'pixelated' }}
+                    onClick={(e) => e.stopPropagation()}
+                />
+            </motion.div>
+        </AnimatePresence>,
+        document.body
+    );
+}
+
+

@@ -6,6 +6,7 @@ import { validateTrainingConfig, type SubscriptionTier } from '@/lib/resource-po
 import { createCleaningMetadata, type CleaningConfig, DEFAULT_CLEANING_CONFIG } from '@/lib/data-cleaning';
 import { submitComputeEngineJob, COMPUTE_ENGINE_CONFIGS, estimateTrainingCost } from '@/lib/compute-training';
 import { routeTraining, detectDatasetType, validateDatasetSize, validateDatasetModelCompatibility, type DatasetType } from '@/lib/training-router';
+import { validateScript, formatValidationResult, type ValidationResult } from '@/lib/script-validator';
 
 export const runtime = 'nodejs'; // Required for Google Cloud SDK
 
@@ -74,54 +75,45 @@ function detectAlgorithmFromScript(script: string): string {
 /**
  * Pre-flight validation to catch common script errors BEFORE training
  * This saves compute costs by rejecting broken scripts early
+ * 
+ * Uses the comprehensive script-validator library for thorough checks
  */
-function validateScriptPreFlight(script: string): { valid: boolean; errors: string[] } {
-    const errors: string[] = [];
+function validateScriptPreFlight(script: string): {
+    valid: boolean;
+    errors: string[];
+    warnings: string[];
+    validationResult?: ValidationResult;
+} {
+    const result = validateScript(script);
 
-    // 1. Check for placeholder file paths (common AI mistake)
-    const placeholderPaths = [
-        /['"]path_to/i,
-        /['"]your_file/i,
-        /['"]your_dataset/i,
-        /['"]placeholder/i,
-    ];
-    for (const pattern of placeholderPaths) {
-        if (pattern.test(script)) {
-            errors.push(`Script contains placeholder path like 'path_to', 'your_file', etc. Please use actual file paths.`);
-            break;
-        }
+    // Convert validation issues to string arrays for backward compatibility
+    const errors = result.errors.map(e => {
+        let msg = e.message;
+        if (e.line) msg += ` (line ${e.line})`;
+        if (e.suggestion) msg += ` - ${e.suggestion}`;
+        return msg;
+    });
+
+    const warnings = result.warnings.map(w => {
+        let msg = w.message;
+        if (w.line) msg += ` (line ${w.line})`;
+        if (w.suggestion) msg += ` - ${w.suggestion}`;
+        return msg;
+    });
+
+    // Log validation result for debugging
+    if (!result.valid) {
+        console.log(`[Train API] Script validation failed (${result.scriptType}):`, errors);
+    } else if (warnings.length > 0) {
+        console.log(`[Train API] Script validation warnings (${result.scriptType}):`, warnings);
     }
 
-    // 2. Check for required functions
-    if (!script.includes('def load_data')) {
-        errors.push("Missing 'load_data' function");
-    }
-    if (!script.includes('if __name__') && !script.includes('main()') && !script.includes('main(')) {
-        errors.push("Missing main execution block (if __name__ == '__main__' or main())");
-    }
-
-    // 3. Check for basic imports
-    if (!script.includes('import pandas') && !script.includes('from pandas')) {
-        errors.push("Missing pandas import");
-    }
-
-    // 4. Check for obvious syntax issues (basic patterns)
-    const openParens = (script.match(/\(/g) || []).length;
-    const closeParens = (script.match(/\)/g) || []).length;
-    if (Math.abs(openParens - closeParens) > 5) {
-        errors.push("Possible unbalanced parentheses");
-    }
-
-    // 5. Check script uses a valid dataset path (startup script will fix common paths)
-    // Accept: ./dataset.csv, /tmp/dataset.csv, /tmp/training/dataset.csv, DATASET_GCS_PATH
-    if (!script.includes('./dataset.csv') &&
-        !script.includes('/tmp/dataset.csv') &&
-        !script.includes('DATASET_GCS_PATH') &&
-        !script.includes('/tmp/training/dataset')) {
-        errors.push("Script should use './dataset.csv' as the data path (startup script will place dataset here)");
-    }
-
-    return { valid: errors.length === 0, errors };
+    return {
+        valid: result.valid,
+        errors,
+        warnings,
+        validationResult: result
+    };
 }
 
 export async function POST(req: Request) {
@@ -154,10 +146,17 @@ export async function POST(req: Request) {
         if (!preFlightResult.valid) {
             console.log(`[Train API] Pre-flight validation failed:`, preFlightResult.errors);
             return NextResponse.json({
-                error: `Script validation failed: ${preFlightResult.errors.join('; ')}`,
+                error: `Script validation failed: ${preFlightResult.errors[0]}`,
                 validationErrors: preFlightResult.errors,
-                suggestion: "Please fix the script and try again. The AI chat should generate scripts using '/tmp/dataset.csv' as the data path."
+                validationWarnings: preFlightResult.warnings,
+                scriptType: preFlightResult.validationResult?.scriptType || 'unknown',
+                suggestion: "Please fix the script errors before training. Check the validation errors above for details."
             }, { status: 400 });
+        }
+
+        // Log warnings even if valid (for debugging)
+        if (preFlightResult.warnings.length > 0) {
+            console.log(`[Train API] Script has ${preFlightResult.warnings.length} warning(s):`, preFlightResult.warnings);
         }
 
         console.log(`[Train API] Starting training for Project: ${projectId} (Tier: ${tier}, TaskType: ${taskType})`);
@@ -184,7 +183,17 @@ export async function POST(req: Request) {
         }
 
         // 3. Detect dataset type and route to appropriate backend
-        const datasetType: DatasetType = detectDatasetType(datasetFilename);
+        let datasetType: DatasetType = detectDatasetType(datasetFilename);
+
+        // 3a. Fallback: Check project's columnTypes for image columns
+        const projDocEarly = await adminDb.collection('projects').doc(projectId).get();
+        const projDataEarly = projDocEarly.data();
+        const columnTypes = projDataEarly?.dataset?.columnTypes || {};
+        const hasImageColumn = Object.values(columnTypes).some(t => t === 'image');
+        if (hasImageColumn && datasetType !== 'image') {
+            console.log(`[Train API] Detected image column in columnTypes. Overriding datasetType to 'image'.`);
+            datasetType = 'image';
+        }
 
         // 3b. Validate dataset-model compatibility (e.g., block LinearRegression on images)
         const detectedAlgorithm = detectAlgorithmFromScript(script);
@@ -276,7 +285,42 @@ export async function POST(req: Request) {
             projectData?.dataset?.gcsPath ||
             projectData?.dataset?.url ||
             '';
-        console.log(`[Train API] Dataset GCS path: ${datasetGcsPath || 'Not found'}`);
+
+        // Check for TFRecord shards (for fast image dataset loading)
+        let shardsGcsPrefix = projectData?.dataset?.shardsGcsPrefix || '';
+        let conversionStatus = projectData?.dataset?.conversionStatus || '';
+
+        // Wait for conversion if it's in progress (image datasets)
+        if (conversionStatus === 'pending' || conversionStatus === 'processing') {
+            console.log(`[Train API] Waiting for TFRecord conversion to complete...`);
+            const maxWaitMs = 5 * 60 * 1000; // 5 minutes max
+            const pollIntervalMs = 10 * 1000; // Check every 10 seconds
+            const startTime = Date.now();
+
+            while (Date.now() - startTime < maxWaitMs) {
+                await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+                const freshDoc = await adminDb.collection('projects').doc(projectId).get();
+                const freshData = freshDoc.data();
+                conversionStatus = freshData?.dataset?.conversionStatus || '';
+                shardsGcsPrefix = freshData?.dataset?.shardsGcsPrefix || '';
+
+                if (conversionStatus === 'completed') {
+                    console.log(`[Train API] Conversion complete after ${Math.round((Date.now() - startTime) / 1000)}s`);
+                    break;
+                }
+                if (conversionStatus === 'failed') {
+                    console.log(`[Train API] Conversion failed, using legacy path`);
+                    break;
+                }
+                console.log(`[Train API] Still waiting for conversion... (${conversionStatus})`);
+            }
+        }
+
+        if (shardsGcsPrefix && conversionStatus === 'completed') {
+            console.log(`[Train API] Using TFRecord shards: ${shardsGcsPrefix} (fast path)`);
+        } else {
+            console.log(`[Train API] Dataset GCS path: ${datasetGcsPath || 'Not found'} (legacy path)`);
+        }
 
         // 7. Upload Script to GCS
         const gcsPath = await uploadScriptToGCS(projectId, script);
@@ -314,7 +358,13 @@ export async function POST(req: Request) {
                 jobId: firestoreJobId,
                 scriptGcsPath: gcsPath,
                 datasetGcsPath,
-                tier
+                tier,
+                trainingConfig: {
+                    epochs: config.epochs,
+                    batchSize: config.batchSize,
+                    learningRate: config.learningRate,
+                    trees: config.trees
+                }
             });
             trainingResult = {
                 vmName: ceResult.vmName,
@@ -336,7 +386,13 @@ export async function POST(req: Request) {
                     jobId: firestoreJobId,
                     scriptGcsPath: gcsPath,
                     datasetGcsPath,
-                    tier
+                    tier,
+                    trainingConfig: {
+                        epochs: config.epochs,
+                        batchSize: config.batchSize,
+                        learningRate: config.learningRate,
+                        trees: config.trees
+                    }
                 });
                 trainingResult = {
                     vmName: ceResult.vmName,
@@ -347,13 +403,20 @@ export async function POST(req: Request) {
                     consoleUrl: ceResult.consoleUrl
                 };
             } else {
-                // Use RunPod GPU
+                // Use RunPod GPU - pass TFRecord shards if available
                 const rpResult = await submitRunPodTrainingJob({
                     projectId,
                     jobId: firestoreJobId,
                     scriptGcsPath: gcsPath,
                     datasetGcsPath,
-                    gpuType: routeDecision.gpuType
+                    gpuType: routeDecision.gpuType,
+                    shardsGcsPrefix: conversionStatus === 'completed' ? shardsGcsPrefix : undefined,
+                    trainingConfig: {
+                        epochs: config.epochs,
+                        batchSize: config.batchSize,
+                        learningRate: config.learningRate,
+                        trees: config.trees
+                    }
                 });
                 trainingResult = {
                     podId: rpResult.podId,
@@ -445,7 +508,9 @@ export async function POST(req: Request) {
             // Logs - Use originalFilename and show cost in INR
             logs: [
                 `Training job created (Backend: ${routeDecision.backend})`,
-                `VM: ${trainingResult.vmName} (${trainingResult.machineType})`,
+                routeDecision.backend === 'runpod'
+                    ? `Pod: ${trainingResult.podId} (${trainingResult.machineType})`
+                    : `VM: ${trainingResult.vmName} (${trainingResult.machineType})`,
                 `Script version: ${scriptVersionId} (v${versionNumber})`,
                 `Dataset: ${originalFilename} (${datasetSizeMB} MB, ${datasetType})`,
                 `Task Type: ${taskType}`,
@@ -463,7 +528,8 @@ export async function POST(req: Request) {
             projectId,
             status: 'PROVISIONING',
             backend: routeDecision.backend,
-            vmName: trainingResult.vmName,
+            vmName: trainingResult.vmName || null,
+            podId: trainingResult.podId || null,
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp()
         });

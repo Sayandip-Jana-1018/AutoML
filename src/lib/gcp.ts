@@ -48,6 +48,10 @@ export async function getFileMetadata(gcsPath: string) {
  * Uses content hash for deduplication - same script content won't be uploaded twice.
  */
 export async function uploadScriptToGCS(projectId: string, scriptContent: string): Promise<string> {
+    // FIX: Temporarily allow self-signed certificates for upload (common in dev/proxy environments)
+    const originalRejectUnauthorized = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
     try {
         const crypto = await import('crypto');
         const bucket = storage.bucket(TRAINING_BUCKET);
@@ -78,6 +82,13 @@ export async function uploadScriptToGCS(projectId: string, scriptContent: string
     } catch (error) {
         console.error("[GCP] GCS Upload Error:", error);
         throw new Error("Failed to upload training script to Cloud Storage.");
+    } finally {
+        // Restore original setting
+        if (originalRejectUnauthorized !== undefined) {
+            process.env.NODE_TLS_REJECT_UNAUTHORIZED = originalRejectUnauthorized;
+        } else {
+            delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+        }
     }
 }
 

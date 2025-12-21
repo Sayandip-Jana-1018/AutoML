@@ -57,8 +57,8 @@ export const RUNPOD_GPU_CONFIGS: Record<string, {
         id: 'NVIDIA RTX 4000 Ada Generation',
         name: 'RTX 4000 Ada',
         vram: 20,
-        costPerHour: 0.26,
-        specs: '8 vCPU, 50 GB RAM, 20 GB VRAM'
+        costPerHour: 0.27,
+        specs: '9 vCPU, 50 GB RAM, 20 GB VRAM'
     },
     'RTX 3090': {
         id: 'NVIDIA GeForce RTX 3090',
@@ -113,9 +113,14 @@ export function detectDatasetType(
         return 'image';
     }
 
-    if (ext === 'zip' || ext === 'tar' || ext === 'gz') {
+    if (ext === 'zip' || ext === 'tar' || ext === 'gz' || ext === '') {
         const nameLower = filename.toLowerCase();
-        if (imageArchivePatterns.some(p => nameLower.includes(p))) {
+        // Check for common image dataset keywords
+        if (imageArchivePatterns.some(p => nameLower.includes(p)) ||
+            nameLower.includes('cifar') ||
+            nameLower.includes('mnist') ||
+            nameLower.includes('coco') ||
+            nameLower.includes('voc')) {
             return 'image';
         }
     }
@@ -153,6 +158,10 @@ export function requiresGPU(taskType: string): boolean {
 
 /**
  * Route training to appropriate backend (client-safe version)
+ * 
+ * ROUTING RULES:
+ * - RunPod GPU: Only when Gold tier AND userPreference === 'gpu' (toggle ON)
+ * - GCP Compute Engine: All other cases (default)
  */
 export function routeTraining(params: {
     tier: SubscriptionTier;
@@ -165,14 +174,10 @@ export function routeTraining(params: {
 
     const ceConfig = COMPUTE_ENGINE_CONFIGS[tier];
 
-    const needsGPU =
-        userPreference === 'gpu' ||
-        datasetType === 'image' ||
-        requiresGPU(taskType);
+    // RunPod GPU: ONLY when Gold tier AND user explicitly enables GPU toggle
+    const useGPU = tier === 'gold' && userPreference === 'gpu';
 
-    const canUseGPU = tier === 'gold' && needsGPU;
-
-    if (canUseGPU) {
+    if (useGPU) {
         return {
             backend: 'runpod',
             machineType: 'RTX 4000 Ada',
@@ -181,10 +186,11 @@ export function routeTraining(params: {
             maxDurationHours: 8,
             gpuEnabled: true,
             gpuType: 'RTX 4000 Ada',
-            reason: 'GPU training for image/deep learning workload (Gold tier)'
+            reason: 'GPU training enabled by user (Gold tier)'
         };
     }
 
+    // Otherwise use Compute Engine (CPU)
     return {
         backend: 'gcp-compute-engine',
         machineType: ceConfig.machineType,
@@ -192,8 +198,8 @@ export function routeTraining(params: {
         estimatedCostPerHour: ceConfig.costPerHour,
         maxDurationHours: ceConfig.maxHours,
         gpuEnabled: false,
-        reason: tier === 'gold' && datasetType === 'image'
-            ? 'CPU training (upgrade to Gold for GPU)'
+        reason: datasetType === 'image'
+            ? 'CPU training for image dataset (enable GPU toggle for faster training)'
             : `Standard CPU training (${tier} tier)`
     };
 }

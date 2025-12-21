@@ -25,7 +25,17 @@ const PAGE_COLORS: Record<string, string> = {
 export function Navbar() {
   const { themeColor } = useThemeColor()
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  const [scrolled, setScrolled] = useState(false)
   const pathname = usePathname()
+
+  // Track scroll for blur effect
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 50)
+    }
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   const navItems = [
     { name: "Home", icon: Home, href: "/", defaultColor: PAGE_COLORS["/"] },
@@ -45,8 +55,20 @@ export function Navbar() {
       transition={{ duration: 0.5, ease: "easeOut" }}
       className="fixed top-6 left-0 right-0 z-50 flex justify-center px-4"
     >
-      {/* Glass Pill Container */}
-      <nav className="relative flex items-center gap-1 p-1.5 rounded-full bg-white/30 dark:bg-black/30 backdrop-blur-3xl border border-white/20 shadow-2xl dark:shadow-[0_0_30px_-10px_rgba(0,0,0,0.5)] shadow-black/5 overflow-hidden ring-1 ring-white/10">
+      {/* Glass Pill Container - Dynamic blur on scroll */}
+      <nav
+        className={cn(
+          "relative flex items-center gap-1 p-1.5 rounded-full border border-white/20 shadow-2xl dark:shadow-[0_0_30px_-10px_rgba(0,0,0,0.5)] shadow-black/5 overflow-hidden ring-1 ring-white/10 transition-all duration-300",
+          scrolled
+            ? "bg-white/40 dark:bg-black/50 backdrop-blur-2xl"
+            : "bg-white/20 dark:bg-black/20 backdrop-blur-xl"
+        )}
+        style={{
+          boxShadow: scrolled
+            ? `0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1)`
+            : undefined
+        }}
+      >
 
         {navItems.map((item, index) => {
           const isActive = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href))

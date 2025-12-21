@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { generateOptimizedImageScript } from '@/lib/image-training-script';
 
 export const runtime = 'nodejs';
 
@@ -32,10 +33,17 @@ export async function POST(req: Request) {
 
         const project = projectDoc.data();
         const schema = project?.dataset;
-        const taskType = project?.inferredTaskType || 'unknown';
+        let taskType = project?.inferredTaskType || 'unknown';
         const targetColumn = project?.targetColumnSuggestion || '';
         const columns = schema?.columns || [];
         const columnTypes = schema?.columnTypes || {};
+
+        // Fallback: If columnTypes has 'image' type, force image_classification
+        const hasImageColumn = Object.values(columnTypes).some(t => t === 'image');
+        if (hasImageColumn && taskType !== 'image_classification') {
+            console.log(`[AutoML] Detected image column in columnTypes. Overriding taskType to image_classification.`);
+            taskType = 'image_classification';
+        }
 
         if (!columns.length) {
             return NextResponse.json({ error: 'No dataset schema found. Upload a dataset first.' }, { status: 400 });
@@ -104,8 +112,19 @@ function selectBestAlgorithm(
     const categoricalCols = Object.values(columnTypes).filter(t => t === 'categorical' || t === 'text').length;
     const totalCols = columns.length;
 
+    // Image classification tasks
+    const hasImageColumn = Object.values(columnTypes).some(t => t === 'image');
+    if (hasImageColumn || taskType === 'image_classification') {
+        return {
+            algorithm: 'SimpleCNN',
+            importStatement: 'import tensorflow as tf\nfrom tensorflow.keras import layers, models',
+            reason: 'Deep Learning (CNN) is best suited for image classification tasks'
+        };
+    }
+
     // Classification tasks
     if (taskType === 'binary_classification' || taskType === 'multiclass_classification') {
+        // ... existing classification logic ...
         if (categoricalCols > numericCols) {
             return {
                 algorithm: 'RandomForestClassifier',
@@ -129,6 +148,7 @@ function selectBestAlgorithm(
 
     // Regression tasks
     if (taskType === 'regression') {
+        // ... existing regression logic ...
         if (numericCols > 10) {
             return {
                 algorithm: 'GradientBoostingRegressor',
@@ -170,6 +190,15 @@ function selectBestAlgorithm(
 function generatePreprocessingSteps(columns: string[], columnTypes: Record<string, string>): string[] {
     const steps: string[] = [];
 
+    const hasImage = Object.values(columnTypes).some(t => t === 'image');
+    if (hasImage) {
+        steps.push('Resize images to 128x128');
+        steps.push('Normalize pixel values (1/255)');
+        steps.push('Data Augmentation (flip, rotate)');
+        steps.push('Train/test split (80/20)');
+        return steps;
+    }
+
     const hasNumeric = Object.values(columnTypes).some(t => t === 'numeric');
     const hasCategorical = Object.values(columnTypes).some(t => t === 'categorical' || t === 'text');
     const hasDatetime = Object.values(columnTypes).some(t => t === 'datetime');
@@ -202,9 +231,15 @@ interface ScriptConfig {
 function generateAutoMLScript(config: ScriptConfig): string {
     const { taskType, targetColumn, columns, columnTypes, algorithm, algorithmImport } = config;
 
+    // Delegate to Optimized Image Script Generator if SimpleCNN
+    if (algorithm === 'SimpleCNN') {
+        return generateOptimizedImageScript({ taskType, targetColumn, algorithm });
+    }
+
     const numericCols = columns.filter(c => columnTypes[c] === 'numeric' && c !== targetColumn);
     const categoricalCols = columns.filter(c => (columnTypes[c] === 'categorical' || columnTypes[c] === 'text') && c !== targetColumn);
 
+    // ... existing tabular script generation ...
     // FIXED: Check BOTH taskType AND algorithm name for classification
     const isClassification = taskType.includes('classification') || algorithm.includes('Classifier');
     const metricImport = isClassification
@@ -269,6 +304,11 @@ warnings.filterwarnings('ignore')
 MODEL_OUTPUT_PATH = os.environ.get('MODEL_OUTPUT_PATH', '/tmp/model')
 GCS_OUTPUT_PATH = os.environ.get('GCS_OUTPUT_PATH', '')
 DATASET_GCS_PATH = os.environ.get('DATASET_GCS_PATH', '')
+
+# Training config from user overlay (environment variables override defaults)
+MLFORGE_MAX_TREES = int(os.environ.get('MLFORGE_MAX_TREES', 100))  # For tree-based models
+MLFORGE_LEARNING_RATE = float(os.environ.get('MLFORGE_LEARNING_RATE', 0.1))  # For boosting
+print(f"Training Config: MAX_TREES={MLFORGE_MAX_TREES}, LEARNING_RATE={MLFORGE_LEARNING_RATE}")
 
 # Configuration
 TARGET_COLUMN = "${targetColumn || columns[columns.length - 1]}"
@@ -423,7 +463,7 @@ ${isClassification ? `    # === CLASSIFICATION MODELS ===
         try:
             from sklearn.ensemble import RandomForestClassifier
             candidates['RandomForest'] = RandomForestClassifier(
-                n_estimators=50 if is_small else 100,
+                n_estimators=min(MLFORGE_MAX_TREES, 50 if is_small else 100),
                 max_depth=10 if is_small else None,
                 random_state=RANDOM_STATE, class_weight=class_weight_param, n_jobs=-1
             )
@@ -431,7 +471,8 @@ ${isClassification ? `    # === CLASSIFICATION MODELS ===
         try:
             from sklearn.ensemble import GradientBoostingClassifier
             candidates['GradientBoosting'] = GradientBoostingClassifier(
-                n_estimators=50 if is_small else 100, max_depth=3,
+                n_estimators=min(MLFORGE_MAX_TREES, 50 if is_small else 100), max_depth=3,
+                learning_rate=MLFORGE_LEARNING_RATE,
                 random_state=RANDOM_STATE, validation_fraction=0.1, n_iter_no_change=10
             )
         except: pass
@@ -441,7 +482,7 @@ ${isClassification ? `    # === CLASSIFICATION MODELS ===
         try:
             from xgboost import XGBClassifier
             candidates['XGBoost'] = XGBClassifier(
-                n_estimators=100, max_depth=6, learning_rate=0.1,
+                n_estimators=MLFORGE_MAX_TREES, max_depth=6, learning_rate=MLFORGE_LEARNING_RATE,
                 use_label_encoder=False, eval_metric='logloss',
                 random_state=RANDOM_STATE, verbosity=0
             )
@@ -451,7 +492,7 @@ ${isClassification ? `    # === CLASSIFICATION MODELS ===
         try:
             from lightgbm import LGBMClassifier
             candidates['LightGBM'] = LGBMClassifier(
-                n_estimators=100, max_depth=6, learning_rate=0.1,
+                n_estimators=MLFORGE_MAX_TREES, max_depth=6, learning_rate=MLFORGE_LEARNING_RATE,
                 random_state=RANDOM_STATE, verbose=-1, class_weight=class_weight_param
             )
             print("✓ LightGBM available")
@@ -481,7 +522,7 @@ ${isClassification ? `    # === CLASSIFICATION MODELS ===
         try:
             from sklearn.ensemble import RandomForestRegressor
             candidates['RandomForest'] = RandomForestRegressor(
-                n_estimators=50 if is_small else 100,
+                n_estimators=min(MLFORGE_MAX_TREES, 50 if is_small else 100),
                 max_depth=10 if is_small else None,
                 random_state=RANDOM_STATE, n_jobs=-1
             )
@@ -489,7 +530,8 @@ ${isClassification ? `    # === CLASSIFICATION MODELS ===
         try:
             from sklearn.ensemble import GradientBoostingRegressor
             candidates['GradientBoosting'] = GradientBoostingRegressor(
-                n_estimators=50 if is_small else 100, max_depth=3,
+                n_estimators=min(MLFORGE_MAX_TREES, 50 if is_small else 100), max_depth=3,
+                learning_rate=MLFORGE_LEARNING_RATE,
                 random_state=RANDOM_STATE, validation_fraction=0.1, n_iter_no_change=10
             )
         except: pass
@@ -499,7 +541,7 @@ ${isClassification ? `    # === CLASSIFICATION MODELS ===
         try:
             from xgboost import XGBRegressor
             candidates['XGBoost'] = XGBRegressor(
-                n_estimators=100, max_depth=6, learning_rate=0.1,
+                n_estimators=MLFORGE_MAX_TREES, max_depth=6, learning_rate=MLFORGE_LEARNING_RATE,
                 random_state=RANDOM_STATE, verbosity=0
             )
             print("✓ XGBoost available")
@@ -508,7 +550,7 @@ ${isClassification ? `    # === CLASSIFICATION MODELS ===
         try:
             from lightgbm import LGBMRegressor
             candidates['LightGBM'] = LGBMRegressor(
-                n_estimators=100, max_depth=6, learning_rate=0.1,
+                n_estimators=MLFORGE_MAX_TREES, max_depth=6, learning_rate=MLFORGE_LEARNING_RATE,
                 random_state=RANDOM_STATE, verbose=-1
             )
             print("✓ LightGBM available")
@@ -682,6 +724,242 @@ def main():
         raise
 
 if __name__ == "__main__":
+    main()
+`;
+}
+
+function generateImageScript(config: ScriptConfig): string {
+    const { taskType, targetColumn, columns, columnTypes, algorithm } = config;
+
+    // Find image column - look for first column with type 'image' or guess based on name
+    const imageColumn = columns.find(c => columnTypes[c] === 'image') || columns[0];
+
+    return `# AutoML Generated Script
+# Algorithm: ${algorithm} (Convolutional Neural Network)
+# Task Type: ${taskType}
+# Target Column: ${targetColumn}
+# Image Column: ${imageColumn}
+# Generated by AutoForgeML Studio
+
+import os
+import json
+import subprocess
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras import layers, models, regularizers
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+import warnings
+warnings.filterwarnings('ignore')
+
+# Set random seeds for reproducibility
+np.random.seed(42)
+tf.random.set_seed(42)
+
+# GPU Configuration
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        print(f"✅ GPU detected: {len(gpus)} device(s)")
+    except RuntimeError as e:
+        print(e)
+else:
+    print("ℹ️  No GPU detected, falling back to CPU")
+
+# Model output configuration from environment
+MODEL_OUTPUT_PATH = os.environ.get('MODEL_OUTPUT_PATH', '/tmp/model')
+GCS_OUTPUT_PATH = os.environ.get('GCS_OUTPUT_PATH', '')
+DATASET_GCS_PATH = os.environ.get('DATASET_GCS_PATH', '')
+
+# Configuration
+IMAGE_SIZE = (128, 128)
+BATCH_SIZE = 32
+EPOCHS = 20
+TARGET_COLUMN = "${targetColumn}"
+IMAGE_COLUMN = "${imageColumn}"
+
+def load_data():
+    """Load dataset from GCS or local path"""
+    print("Loading dataset...")
+    
+    # Try to load from GCS path passed via environment
+    if DATASET_GCS_PATH:
+        print(f"Dataset path: {DATASET_GCS_PATH}")
+        local_path = '/tmp/dataset.csv'
+        try:
+            subprocess.run(['gsutil', 'cp', DATASET_GCS_PATH, local_path], check=True)
+            df = pd.read_csv(local_path)
+        except Exception as e:
+            print(f"Error downloading from GCS: {e}")
+            raise
+    else:
+        # Fallback paths
+        try:
+            df = pd.read_csv('./dataset.csv')
+        except:
+            df = pd.read_csv('/tmp/dataset.csv')
+    
+    print(f"Loaded {len(df)} rows")
+    return df
+
+def create_model(num_classes):
+    """Create a robust CNN for image classification"""
+    print(f"Creating CNN model for {num_classes} classes...")
+    
+    model = models.Sequential([
+        # Data Augmentation Layer (active only during training)
+        layers.RandomFlip("horizontal", input_shape=(IMAGE_SIZE[0], IMAGE_SIZE[1], 3)),
+        layers.RandomRotation(0.1),
+        layers.RandomZoom(0.1),
+        layers.Rescaling(1./255),
+        
+        # Convolutional Block 1
+        layers.Conv2D(32, (3, 3), padding='same', activation='relu'),
+        layers.BatchNormalization(),
+        layers.MaxPooling2D((2, 2)),
+        
+        # Convolutional Block 2
+        layers.Conv2D(64, (3, 3), padding='same', activation='relu'),
+        layers.BatchNormalization(),
+        layers.MaxPooling2D((2, 2)),
+        layers.Dropout(0.2),
+        
+        # Convolutional Block 3
+        layers.Conv2D(128, (3, 3), padding='same', activation='relu'),
+        layers.BatchNormalization(),
+        layers.MaxPooling2D((2, 2)),
+        layers.Dropout(0.3),
+        
+        # Dense Layers
+        layers.Flatten(),
+        layers.Dense(256, activation='relu', kernel_regularizer=regularizers.l2(0.001)),
+        layers.BatchNormalization(),
+        layers.Dropout(0.5),
+        layers.Dense(num_classes, activation='softmax' if num_classes > 2 else 'sigmoid')
+    ])
+    
+    loss = 'sparse_categorical_crossentropy' if num_classes > 2 else 'binary_crossentropy'
+    
+    model.compile(
+        optimizer='adam',
+        loss='categorical_crossentropy', # using categorical from generator
+        metrics=['accuracy']
+    )
+    
+    model.summary()
+    return model
+
+def main():
+    try:
+        df = load_data()
+        
+        # Validate columns
+        if IMAGE_COLUMN not in df.columns or TARGET_COLUMN not in df.columns:
+            raise ValueError(f"Columns {IMAGE_COLUMN} or {TARGET_COLUMN} not found in dataset")
+        
+        # Get class names
+        classes = df[TARGET_COLUMN].unique()
+        num_classes = len(classes)
+        print(f"Classes ({num_classes}): {classes}")
+        
+        # Convert target to string for flow_from_dataframe
+        df[TARGET_COLUMN] = df[TARGET_COLUMN].astype(str)
+        
+        # Train/Test Split
+        train_df, val_df = train_test_split(df, test_size=0.2, random_state=42, stratify=df[TARGET_COLUMN])
+        
+        print(f"Training set: {len(train_df)} images")
+        print(f"Validation set: {len(val_df)} images")
+        
+        train_datagen = ImageDataGenerator()
+        val_datagen = ImageDataGenerator()
+        
+        print("Initializing Data Generators...")
+        train_generator = train_datagen.flow_from_dataframe(
+            dataframe=train_df,
+            directory=None, 
+            x_col=IMAGE_COLUMN,
+            y_col=TARGET_COLUMN,
+            target_size=IMAGE_SIZE,
+            batch_size=BATCH_SIZE,
+            class_mode='categorical',
+            shuffle=True
+        )
+        
+        val_generator = val_datagen.flow_from_dataframe(
+            dataframe=val_df,
+            directory=None,
+            x_col=IMAGE_COLUMN,
+            y_col=TARGET_COLUMN,
+            target_size=IMAGE_SIZE,
+            batch_size=BATCH_SIZE,
+            class_mode='categorical',
+            shuffle=False
+        )
+        
+        # Create Model
+        model = create_model(num_classes)
+        
+        # Callbacks
+        callbacks = [
+            EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True),
+            ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=1e-6)
+        ]
+        
+        # Train
+        print(f"\\\\nStarting training for {EPOCHS} epochs...")
+        history = model.fit(
+            train_generator,
+            epochs=EPOCHS,
+            validation_data=val_generator,
+            callbacks=callbacks
+        )
+        
+        # Evaluate
+        print("\\\\nEvaluating best model...")
+        val_loss, val_acc = model.evaluate(val_generator)
+        print(f"Validation Accuracy: {val_acc:.4f}")
+        print(f"Validation Loss: {val_loss:.4f}")
+        
+        # Detailed Metrics
+        y_pred_prob = model.predict(val_generator)
+        y_pred = np.argmax(y_pred_prob, axis=1)
+        y_true = val_generator.classes
+        
+        print("\\\\nClassification Report:")
+        print(classification_report(y_true, y_pred, target_names=list(val_generator.class_indices.keys())))
+        
+        # Save Model
+        print("\\\\nSaving model...")
+        os.makedirs(MODEL_OUTPUT_PATH, exist_ok=True)
+        model.save(os.path.join(MODEL_OUTPUT_PATH, 'model.h5'))
+        
+        # Save Metrics
+        metrics = {
+            'accuracy': float(val_acc),
+            'loss': float(val_loss),
+            'history': history.history
+        }
+        with open(os.path.join(MODEL_OUTPUT_PATH, 'metrics.json'), 'w') as f:
+            json.dump(metrics, f)
+            
+        print("SUCCESS: Training pipeline completed.")
+        
+        if GCS_OUTPUT_PATH:
+             subprocess.run(['gsutil', '-m', 'cp', '-r', f'{MODEL_OUTPUT_PATH}/*', GCS_OUTPUT_PATH], check=True)
+
+    except Exception as e:
+        print(f"ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
+if __name__ == '__main__':
     main()
 `;
 }

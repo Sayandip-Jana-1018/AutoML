@@ -224,7 +224,7 @@ export function VisualizeSection() {
                                 transition={{ duration: 0.5, delay: 0.6 }}
                                 className="flex justify-end mt-8"
                             >
-                                <NavButton href="/visualize" variant="ghost" size="md" icon="arrow">
+                                <NavButton href="/visualize" variant="ghost" size="md" icon="arrow" requiresAuth>
                                     See Analytics
                                 </NavButton>
                             </motion.div>

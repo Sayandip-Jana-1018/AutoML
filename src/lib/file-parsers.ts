@@ -7,7 +7,7 @@ import JSZip from 'jszip';
 // ============ TYPES ============
 export interface DataPreview {
     columns: string[];
-    columnTypes: Record<string, 'numeric' | 'categorical' | 'datetime'>;
+    columnTypes: Record<string, 'numeric' | 'categorical' | 'datetime' | 'image'>;
     rows: any[];
     totalRows: number;
     fileSize: number;
@@ -23,11 +23,15 @@ export interface LocalPreview {
     zipFiles?: { name: string; size: number }[];
     zipImagePreviews?: string[];
     zipFolders?: { name: string; count: number }[];
+    extractedSize?: number; // Total size of all files in ZIP
+    totalFiles?: number; // Total count of files in ZIP
+    totalImages?: number; // Total count of image files
     confidence: 'high' | 'medium' | 'low';
     detectionReason: string;
     nullCount?: number;
     duplicateRows?: number;
     missingColumns?: string[];
+    fileTree?: FileTreeNode;
 }
 
 export interface HTMLTableInfo {
@@ -38,7 +42,15 @@ export interface HTMLTableInfo {
     previewRow: string[];
 }
 
-export const CLIENT_PREVIEW_LIMIT = 100 * 1024 * 1024;
+export interface FileTreeNode {
+    name: string;
+    type: 'folder' | 'file';
+    count?: number; // For folders: total files inside (recursive)
+    size?: number;  // For files: size in bytes
+    children?: FileTreeNode[];
+}
+
+export const CLIENT_PREVIEW_LIMIT = 500 * 1024 * 1024;
 export const SUPPORTED_EXTENSIONS = ['.csv', '.tsv', '.xlsx', '.xls', '.json', '.jsonl', '.txt', '.zip', '.jpg', '.jpeg', '.png', '.gif', '.webp'];
 
 // ============ PARSING FUNCTIONS ============
@@ -351,8 +363,10 @@ export function parseHTMLTableByIndex(html: string, tableIndex: number): { colum
 export async function parseZipFile(file: File): Promise<{
     imagePreviews: string[];
     folders: { name: string; count: number }[];
+    fileTree: FileTreeNode;
     totalFiles: number;
     totalImages: number;
+    extractedSize?: number;
     tabularData?: { fileName: string; columns: string[]; rows: any[]; totalRows: number; nullCount?: number; duplicateRows?: number };
 }> {
     try {
@@ -361,24 +375,32 @@ export async function parseZipFile(file: File): Promise<{
         const tabularExtensions = ['.csv', '.tsv', '.json', '.jsonl'];
 
         const imagePreviews: string[] = [];
-        const folderCounts: Record<string, number> = {};
         let totalFiles = 0;
         let totalImages = 0;
-        let firstTabularFile: { path: string; entry: any; type: string } | null = null;
+        let extractedSize = 0;
+        let firstTabularFile: { path: string, entry: JSZip.JSZipObject, type: string } | null = null;
         let largestTabularSize = 0;
 
-        const entries = Object.entries(zip.files);
-        for (const [path, zipEntry] of entries) {
-            if (zipEntry.dir || path.startsWith('__MACOSX') || path.includes('/.')) continue;
-            totalFiles++;
+        const filePaths: { path: string; size: number }[] = [];
 
-            const ext = '.' + path.split('.').pop()?.toLowerCase();
+        // Pass 1: Gather all file paths and stats
+        for (const name of Object.keys(zip.files)) {
+            const zipEntry = zip.files[name];
+            if (zipEntry.dir || name.startsWith('__MACOSX') || name.includes('/.')) continue;
+
+            totalFiles++;
+            const size = (zipEntry as any)._data?.uncompressedSize || 0;
+            extractedSize += size;
+
+            const ext = '.' + name.split('.').pop()?.toLowerCase();
             const isImage = imageExtensions.includes(ext);
             const isTabular = tabularExtensions.includes(ext);
 
             if (isImage) {
                 totalImages++;
-                // ... image preview logic (keep first 6)
+                filePaths.push({ path: name, size });
+
+                // Keep first 6 images for preview
                 if (imagePreviews.length < 6) {
                     const blob = await zipEntry.async('blob');
                     const base64 = await new Promise<string>((resolve) => {
@@ -389,30 +411,78 @@ export async function parseZipFile(file: File): Promise<{
                     imagePreviews.push(base64);
                 }
             } else if (isTabular) {
-                // Heuristic: Prefer the largest tabular file as the "main" dataset (often READMEs or tiny metadata files are small)
-                // But generally stick to the first one found or use heuristics. 
-                // Let's pick the largest tabular file found so far? Or just the first one?
-                // "train.csv" is usually what we want.
-
-                // Let's try to find "train" in filename, or else default to largest.
-                const lowerPath = path.toLowerCase();
-                const currentSize = (zipEntry as any)._data?.uncompressedSize || 0; // JSZip internal or just use size if available
+                const lowerPath = name.toLowerCase();
+                const currentSize = (zipEntry as any)._data?.uncompressedSize || 0;
 
                 let score = currentSize;
-                if (lowerPath.includes('train')) score += 100000000; // Boost priority
+                if (lowerPath.includes('train')) score += 100000000;
                 if (lowerPath.includes('data')) score += 1000000;
 
                 if (!firstTabularFile || score > largestTabularSize) {
-                    firstTabularFile = { path, entry: zipEntry, type: ext };
+                    firstTabularFile = { path: name, entry: zipEntry, type: ext };
                     largestTabularSize = score;
                 }
             }
+        }
 
+        // Pass 2: Build File Tree
+        const rootNode: FileTreeNode = { name: 'root', type: 'folder', children: [], count: 0 };
+
+        filePaths.forEach(({ path, size }) => {
             const parts = path.split('/');
-            if (parts.length > 1) {
-                const folderName = parts[0];
-                folderCounts[folderName] = (folderCounts[folderName] || 0) + 1;
+            let currentNode = rootNode;
+
+            parts.forEach((part, idx) => {
+                if (idx === parts.length - 1) {
+                    // File node
+                    currentNode.children = currentNode.children || [];
+                    currentNode.children.push({ name: part, type: 'file', size });
+                } else {
+                    // Folder node
+                    currentNode.children = currentNode.children || [];
+                    let folderNode = currentNode.children.find(c => c.name === part && c.type === 'folder');
+                    if (!folderNode) {
+                        folderNode = { name: part, type: 'folder', children: [], count: 0 };
+                        currentNode.children.push(folderNode);
+                    }
+                    currentNode = folderNode;
+                }
+            });
+        });
+
+        // Pass 3: Calculate folder counts (recursive)
+        const calculateCounts = (node: FileTreeNode): number => {
+            if (node.type === 'file') return 1;
+            let count = 0;
+            node.children?.forEach(child => {
+                count += calculateCounts(child);
+            });
+            node.count = count;
+            return count;
+        };
+        calculateCounts(rootNode);
+
+        // Pass 4: Smart folder detection for backward compat
+        const folderCounts: Record<string, number> = {};
+        if (filePaths.length > 0) {
+            const pathComponents = filePaths.map(p => p.path.split('/'));
+            let depth = 0;
+            const maxDepth = Math.max(...pathComponents.map(p => p.length));
+
+            while (depth < maxDepth - 1) {
+                const uniqueAtDepth = new Set(pathComponents.map(p => p[depth]));
+                if (uniqueAtDepth.size > 1) break;
+                depth++;
             }
+
+            pathComponents.forEach(parts => {
+                if (parts.length > depth + 1) {
+                    const classFolder = parts[depth];
+                    folderCounts[classFolder] = (folderCounts[classFolder] || 0) + 1;
+                } else {
+                    folderCounts['(root)'] = (folderCounts['(root)'] || 0) + 1;
+                }
+            });
         }
 
         const folders = Object.entries(folderCounts)
@@ -440,10 +510,10 @@ export async function parseZipFile(file: File): Promise<{
             }
         }
 
-        return { imagePreviews, folders, totalFiles, totalImages, tabularData };
+        return { imagePreviews, folders, fileTree: rootNode, totalFiles, totalImages, tabularData, extractedSize };
     } catch (e) {
         console.error('ZIP parse error:', e);
-        return { imagePreviews: [], folders: [], totalFiles: 0, totalImages: 0 };
+        return { imagePreviews: [], folders: [], fileTree: { name: 'root', type: 'folder', children: [] }, totalFiles: 0, totalImages: 0 };
     }
 }
 

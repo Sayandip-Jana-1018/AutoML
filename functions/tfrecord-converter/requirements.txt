@@ -1,0 +1,6 @@
+tensorflow>=2.13.0
+Pillow>=9.0.0
+google-cloud-storage>=2.0.0
+google-cloud-firestore>=2.0.0
+functions-framework>=3.0.0
+Flask>=2.0.0

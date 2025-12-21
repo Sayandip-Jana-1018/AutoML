@@ -60,6 +60,7 @@ export default function VisualizePage() {
     const [selectedProjectName, setSelectedProjectName] = useState<string>('');
     const [projectDatasetPath, setProjectDatasetPath] = useState<string | null>(null);
     const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+    const [datasetType, setDatasetType] = useState<'tabular' | 'image' | 'unknown'>('unknown');
 
     // Custom alert modal state (replacing browser alert)
     const [alertModal, setAlertModal] = useState({ open: false, title: '', message: '' });
@@ -81,6 +82,17 @@ export default function VisualizePage() {
                     // Try to find GCS path in various potential fields
                     const path = data.datasetGcsPath || data.datasetPath || (data.dataset ? data.dataset.path : null) || (data.dataset ? data.dataset.gcsPath : null);
                     setProjectDatasetPath(path);
+
+                    // Detect dataset type from filename or explicit type field
+                    const filename = data.dataset?.filename || path?.split('/').pop() || '';
+                    const explicitType = data.dataset?.type || data.datasetType;
+                    if (explicitType === 'image' || filename.endsWith('.zip') || filename.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+                        setDatasetType('image');
+                    } else if (filename.match(/\.(csv|json|jsonl|tsv|xlsx?)$/i) || explicitType === 'tabular') {
+                        setDatasetType('tabular');
+                    } else {
+                        setDatasetType('unknown');
+                    }
                     console.log('Project Dataset Path:', path);
                 }
             } catch (err) {
@@ -287,7 +299,8 @@ export default function VisualizePage() {
                         body: JSON.stringify({
                             code: currentCode,
                             error: execResult.error,
-                            datasetPath: projectDatasetPath
+                            datasetPath: projectDatasetPath,
+                            projectId: selectedProject // Add projectId for context
                         })
                     });
                     const repairData = await repairRes.json();
@@ -602,6 +615,26 @@ export default function VisualizePage() {
                     onClose={() => setIsProjectModalOpen(false)}
                     onSelectProject={(id) => setSelectedProject(id)}
                 />
+
+                {/* Image Dataset Warning */}
+                {datasetType === 'image' && selectedProject && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="max-w-2xl mx-auto p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center"
+                    >
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                            <svg className="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            <span className="font-bold text-amber-400">Image Dataset Detected</span>
+                        </div>
+                        <p className="text-sm text-white/60">
+                            Traditional charts require tabular data with numeric columns. For image datasets,
+                            try the <strong>Auto Plot</strong> button to generate a class distribution chart if your images are organized in folders.
+                        </p>
+                    </motion.div>
+                )}
 
                 {/* Chart Type Grid */}
                 <ChartGrid

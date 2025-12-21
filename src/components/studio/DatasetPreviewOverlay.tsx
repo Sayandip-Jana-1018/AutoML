@@ -20,6 +20,13 @@ interface DatasetInfo {
     droppedColumns?: string[];
     missingValueStrategy?: string;
     qualityScore?: number;
+    // NEW: Image stats
+    imageStats?: {
+        totalImages: number;
+        unmatchedImages: number;
+        classDistribution: Record<string, number>;
+        formatCounts: Record<string, number>;
+    };
 }
 
 interface DatasetPreviewOverlayProps {
@@ -116,6 +123,53 @@ export const DatasetPreviewOverlay = ({ dataset, isOpen, onClose }: DatasetPrevi
                             <div className="max-w-4xl mx-auto">
                                 {activeTab === 'overview' ? (
                                     <div className="space-y-6">
+                                        {/* Image Stats Panel (Conditional) */}
+                                        {dataset.imageStats && (
+                                            <div className="col-span-3 grid grid-cols-3 gap-4 mb-4">
+                                                {/* Image Count */}
+                                                <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <FileSpreadsheet className="w-4 h-4 text-indigo-400" />
+                                                        <span className="text-xs font-medium text-white/50">Total Images</span>
+                                                    </div>
+                                                    <div className="text-3xl font-bold text-indigo-400">
+                                                        {dataset.imageStats.totalImages.toLocaleString()}
+                                                    </div>
+                                                </div>
+
+                                                {/* Unmatched Images Warning */}
+                                                <div className={`p-4 rounded-2xl border ${dataset.imageStats.unmatchedImages > 0 ? 'bg-red-500/10 border-red-500/20' : 'bg-green-500/10 border-green-500/20'}`}>
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <AlertTriangle className={`w-4 h-4 ${dataset.imageStats.unmatchedImages > 0 ? 'text-red-400' : 'text-green-400'}`} />
+                                                        <span className="text-xs font-medium text-white/50">Unmatched Images</span>
+                                                    </div>
+                                                    <div className={`text-3xl font-bold ${dataset.imageStats.unmatchedImages > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                                                        {dataset.imageStats.unmatchedImages.toLocaleString()}
+                                                    </div>
+                                                    {dataset.imageStats.unmatchedImages > 0 && (
+                                                        <p className="text-xs text-white/40 mt-1">
+                                                            Images in CSV not found in ZIP
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                {/* Format Breakdown */}
+                                                <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <Target className="w-4 h-4 text-white/40" />
+                                                        <span className="text-xs font-medium text-white/50">Formats</span>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {Object.entries(dataset.imageStats.formatCounts || {}).map(([fmt, count]) => (
+                                                            <span key={fmt} className="text-xs px-2 py-1 rounded bg-white/10 text-white/70">
+                                                                {fmt}: {count}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* Data Quality Summary */}
                                         <div className="grid grid-cols-3 gap-4">
                                             {/* Quality Score */}

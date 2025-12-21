@@ -84,6 +84,10 @@ export function requiresGPU(taskType: string): boolean {
 
 /**
  * Route training to appropriate backend
+ * 
+ * ROUTING RULES:
+ * - RunPod GPU: Only when Gold tier AND userPreference === 'gpu' (toggle ON)
+ * - GCP Compute Engine: All other cases (default)
  */
 export function routeTraining(params: {
     tier: SubscriptionTier;
@@ -97,17 +101,11 @@ export function routeTraining(params: {
     // Get base config for tier
     const ceConfig = COMPUTE_ENGINE_CONFIGS[tier];
 
-    // Check if GPU is needed
-    const needsGPU =
-        userPreference === 'gpu' ||
-        datasetType === 'image' ||
-        requiresGPU(taskType);
+    // RunPod GPU: ONLY when Gold tier AND user explicitly enables GPU toggle
+    // Image datasets recommend GPU but don't auto-route to it
+    const useGPU = tier === 'gold' && userPreference === 'gpu';
 
-    // Only Gold tier has GPU access
-    const canUseGPU = tier === 'gold' && needsGPU;
-
-    // Route to RunPod for GPU workloads
-    if (canUseGPU) {
+    if (useGPU) {
         return {
             backend: 'runpod',
             machineType: 'RTX 4000 Ada',
@@ -116,11 +114,11 @@ export function routeTraining(params: {
             maxDurationHours: 8,
             gpuEnabled: true,
             gpuType: 'RTX 4000 Ada',
-            reason: 'GPU training for image/deep learning workload (Gold tier)'
+            reason: 'GPU training enabled by user (Gold tier)'
         };
     }
 
-    // Otherwise use Compute Engine
+    // Otherwise use Compute Engine (CPU)
     return {
         backend: 'gcp-compute-engine',
         machineType: ceConfig.machineType,
@@ -128,8 +126,8 @@ export function routeTraining(params: {
         estimatedCostPerHour: ceConfig.costPerHour,
         maxDurationHours: ceConfig.maxHours,
         gpuEnabled: false,
-        reason: tier === 'gold' && datasetType === 'image'
-            ? 'CPU training (upgrade to Gold for GPU)'
+        reason: datasetType === 'image'
+            ? 'CPU training for image dataset (enable GPU toggle for faster training)'
             : `Standard CPU training (${tier} tier)`
     };
 }

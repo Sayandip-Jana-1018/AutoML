@@ -1,7 +1,9 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useThemeColor } from "@/context/theme-context"
+import { useAuth } from "@/context/auth-context"
 import { ArrowRight, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Magnetic from "@/components/ui/Magnetic"
@@ -15,6 +17,7 @@ interface NavButtonProps {
     className?: string
     magnetic?: boolean
     external?: boolean
+    requiresAuth?: boolean
 }
 
 export function NavButton({
@@ -25,9 +28,12 @@ export function NavButton({
     icon = "arrow",
     className,
     magnetic = true,
-    external = false
+    external = false,
+    requiresAuth = false
 }: NavButtonProps) {
     const { themeColor } = useThemeColor()
+    const { user } = useAuth()
+    const router = useRouter()
 
     // Size classes
     const sizeClasses = {
@@ -59,6 +65,18 @@ export function NavButton({
                 }
             default:
                 return {}
+        }
+    }
+
+    // Handle click with auth check
+    const handleClick = (e: React.MouseEvent) => {
+        if (requiresAuth && !user) {
+            e.preventDefault()
+            // Store intended destination
+            if (typeof window !== 'undefined') {
+                sessionStorage.setItem('redirectAfterLogin', href)
+            }
+            router.push('/auth/login')
         }
     }
 
@@ -114,7 +132,8 @@ export function NavButton({
 
     const button = (
         <Link
-            href={href}
+            href={requiresAuth && !user ? '#' : href}
+            onClick={handleClick}
             className={buttonClasses}
             style={getVariantStyles()}
         >

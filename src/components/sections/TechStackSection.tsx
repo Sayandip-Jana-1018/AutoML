@@ -86,7 +86,7 @@ export function TechStackSection() {
                         transition={{ duration: 0.6, delay: 0.8 }}
                         className="flex justify-end pr-0 lg:pr-8 mt-12"
                     >
-                        <NavButton href="/marketplace" variant="ghost" size="md" icon="arrow">
+                        <NavButton href="/marketplace" variant="ghost" size="md" icon="arrow" requiresAuth>
                             Explore Marketplace
                         </NavButton>
                     </motion.div>

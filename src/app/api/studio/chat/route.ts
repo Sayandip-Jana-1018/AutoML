@@ -16,8 +16,9 @@ export async function POST(req: Request) {
             currentScript,
             datasetType,
             model,
-            schema, // NEW: Rich schema from profiler
-            tier = 'free' as SubscriptionTier
+            schema, // Rich schema from profiler
+            tier = 'free' as SubscriptionTier,
+            datasetInfo // Additional dataset context (from Fix with AI)
         } = await req.json();
 
         // 0. Select Model Provider
@@ -36,8 +37,8 @@ export async function POST(req: Request) {
         const validTier: SubscriptionTier = ['free', 'silver', 'gold'].includes(tier) ? tier : 'free';
         const limits = RESOURCE_POLICIES[validTier];
 
-        // Build rich context from schema
-        const schemaContext = schema ? `
+        // Build rich context from schema and datasetInfo
+        let schemaContext = schema ? `
 Dataset Schema:
 - Rows: ${schema.rowCount || 'Unknown'}
 - Columns: ${schema.columnCount || 'Unknown'}
@@ -46,6 +47,16 @@ Dataset Schema:
 - Missing Values: ${schema.missingValueStats?.percentMissing?.toFixed(1) || 0}%
 - Column Types: ${schema.columns?.map((c: any) => `${c.name}(${c.type})`).join(', ') || 'Unknown'}
 ` : '';
+
+        // Add datasetInfo if provided (from Fix with AI flow)
+        if (datasetInfo) {
+            schemaContext += `
+Additional Dataset Context:
+- Filename: ${datasetInfo.filename || 'Unknown'}
+- Task Type: ${datasetInfo.taskType || 'Unknown'}
+- Target Column: ${datasetInfo.targetColumn || 'Unknown'}
+`;
+        }
 
         // 1. Enhanced Architect Agent Prompt with resource limits
         const systemPrompt = `
@@ -63,7 +74,8 @@ YOUR GOALS:
    - Create a complete, runnable Python training script
    - Use sensible defaults within the user's plan limits
    - For tree-based models, use n_estimators=100 by default (well within limits)
-   - For neural networks, use epochs=50 by default (well within limits)
+   - For neural networks/CNNs, the script uses epochs=20 and batch_size=32 by default
+   - Users can customize epochs/batch_size in the Training Config panel before training
 
 2. CRITICAL: TARGET COLUMN RULES:
    - YOU MUST use the "Suggested Target" from the Dataset Schema above as target_col
@@ -88,17 +100,47 @@ YOUR GOALS:
        ('cat', Pipeline([('imputer', SimpleImputer(strategy='constant', fill_value='missing')), ('encoder', OneHotEncoder(handle_unknown='ignore'))]), categorical_cols)
    ])
 
-4. CRITICAL: DATASET PATH (REQUIRED):
-   - ALWAYS use './dataset.csv' as the dataset path - this is where the training pipeline places the data
-   - NEVER use placeholders like 'path_to_your_csv' or 'your_file.csv'
-   - Use this exact pattern:
+4. CRITICAL: DATASET PATH AND LOADING (REQUIRED):
+   - Dataset Type: "${datasetType || 'unknown'}"
+   
+   FOR TABULAR/CSV DATASETS (datasetType contains 'tabular' or 'csv' or is unknown):
+   - Use './dataset.csv' as the dataset path
+   - Use this pattern:
    
    def load_data():
        return pd.read_csv('./dataset.csv')
    
-   if __name__ == "__main__":
-       df = load_data()  # NO ARGUMENTS - path is hardcoded
+   FOR IMAGE DATASETS (datasetType contains 'image'):
+   - DO NOT use pd.read_csv() - images are in folders, not CSV!
+   - Dataset is extracted to './dataset/' folder with class subfolders
+   - Use TensorFlow/Keras flow_from_directory:
    
+   from tensorflow.keras.preprocessing.image import ImageDataGenerator
+   
+   def find_dataset_path():
+       \"\"\"Find the dataset path - handles various folder structures\"\"\"
+       search_paths = ['./dataset', './data', '.']
+       for base_path in search_paths:
+           if not os.path.exists(base_path):
+               continue
+           subdirs = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))]
+           # Look for train/test split
+           if 'train' in subdirs:
+               train_dir = os.path.join(base_path, 'train')
+               test_dir = os.path.join(base_path, 'test') if 'test' in subdirs else None
+               return train_dir, test_dir
+           # Check for class folders directly
+           if len(subdirs) > 1:
+               return base_path, None
+       return './dataset', None
+   
+   train_datagen = ImageDataGenerator(validation_split=0.2)
+   train_generator = train_datagen.flow_from_directory(
+       train_path, target_size=(128, 128), batch_size=32,
+       class_mode='categorical', subset='training'
+   )
+   
+
 5. ONLY CHECK LIMITS IF USER EXPLICITLY REQUESTS:
    - If user says "use 1000 epochs" and limit is ${limits.maxEpochs}, set to ${limits.maxEpochs}
    - If user says "5000 trees" and limit is ${limits.maxTrees}, set to ${limits.maxTrees}

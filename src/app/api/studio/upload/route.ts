@@ -10,6 +10,13 @@ const TIER_UPLOAD_LIMITS = {
     gold: 1024 * 1024 * 1024   // 1GB
 };
 
+// Extracted size limits (to prevent zip bombs or disk exhaustion)
+const TIER_EXTRACTED_LIMITS = {
+    free: 200 * 1024 * 1024,    // 200MB extracted
+    silver: 1024 * 1024 * 1024, // 1GB extracted
+    gold: 5 * 1024 * 1024 * 1024 // 5GB extracted (for HAM10000 etc)
+};
+
 // Helper to infer dataset type (extended to support more formats)
 function inferDatasetType(mimeType: string, fileName: string, overrideType?: string): 'tabular' | 'image' | 'text' | 'json' | 'unknown' {
     // Use override if provided
@@ -51,6 +58,7 @@ export async function POST(req: Request) {
             fileName,
             contentType,
             fileSize,
+            extractedSize, // NEW: Extracted size from client pre-check
             userTier = 'free',
             fileHash,
             userId,
@@ -65,12 +73,24 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
-        // Quota check based on user tier
-        const maxSize = TIER_UPLOAD_LIMITS[userTier as keyof typeof TIER_UPLOAD_LIMITS] || TIER_UPLOAD_LIMITS.free;
+        const tier = userTier as keyof typeof TIER_UPLOAD_LIMITS || 'free';
+
+        // 1. Check Compressed Size Quota
+        const maxSize = TIER_UPLOAD_LIMITS[tier];
         if (fileSize && fileSize > maxSize) {
             const maxMB = Math.round(maxSize / 1024 / 1024);
             return NextResponse.json({
-                error: `File too large. ${userTier === 'free' ? 'Free' : userTier.charAt(0).toUpperCase() + userTier.slice(1)} tier limit is ${maxMB}MB. Upgrade to upload larger files.`,
+                error: `File too large. ${tier === 'free' ? 'Free' : tier.charAt(0).toUpperCase() + tier.slice(1)} tier limit is ${maxMB}MB. Upgrade to upload larger files.`,
+                code: 'QUOTA_EXCEEDED'
+            }, { status: 413 });
+        }
+
+        // 2. Check Extracted Size Quota (Anti-Zip Bomb / Disk Safety)
+        const maxExtracted = TIER_EXTRACTED_LIMITS[tier];
+        if (extractedSize && extractedSize > maxExtracted) {
+            const maxGB = (maxExtracted / 1024 / 1024 / 1024).toFixed(1);
+            return NextResponse.json({
+                error: `Extracted content too large. Your plan allows up to ${maxGB}GB of extracted data. Please compress or split your dataset.`,
                 code: 'QUOTA_EXCEEDED'
             }, { status: 413 });
         }

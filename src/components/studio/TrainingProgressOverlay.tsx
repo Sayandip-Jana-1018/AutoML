@@ -16,6 +16,8 @@ interface TrainingProgressOverlayProps {
     logs?: string[];
     jobId?: string | null;
     onRetry?: () => Promise<void> | void;
+    estimatedMinutes?: number; // Estimated total training time
+    startTime?: number; // Timestamp when training started (Date.now())
 }
 
 const TRAINING_STEPS = [
@@ -299,6 +301,213 @@ const ProgressWave = ({ progress, themeColor }: { progress: number; themeColor: 
     </div>
 );
 
+// Animated Estimated Time Display
+const EstimatedTimeDisplay = ({
+    estimatedMinutes,
+    startTime,
+    themeColor,
+    isActive
+}: {
+    estimatedMinutes: number;
+    startTime?: number;
+    themeColor: string;
+    isActive: boolean;
+}) => {
+    const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
+    const [elapsed, setElapsed] = useState(0);
+
+    useEffect(() => {
+        if (!isActive || !startTime || estimatedMinutes <= 0) return;
+
+        const updateTime = () => {
+            const now = Date.now();
+            const elapsedMs = now - startTime;
+            const elapsedSec = Math.floor(elapsedMs / 1000);
+            setElapsed(elapsedSec);
+
+            const totalSeconds = estimatedMinutes * 60;
+            const remainingSeconds = Math.max(0, totalSeconds - elapsedSec);
+
+            const hours = Math.floor(remainingSeconds / 3600);
+            const minutes = Math.floor((remainingSeconds % 3600) / 60);
+            const seconds = remainingSeconds % 60;
+
+            setTimeLeft({ hours, minutes, seconds });
+        };
+
+        updateTime();
+        const interval = setInterval(updateTime, 1000);
+        return () => clearInterval(interval);
+    }, [estimatedMinutes, startTime, isActive]);
+
+    // Calculate progress percentage
+    const totalSeconds = estimatedMinutes * 60;
+    const progressPercent = totalSeconds > 0 ? Math.min(100, (elapsed / totalSeconds) * 100) : 0;
+
+    if (!isActive || estimatedMinutes <= 0) return null;
+
+    const formatNumber = (n: number) => n.toString().padStart(2, '0');
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: "spring", damping: 20, stiffness: 200 }}
+            className="relative mb-6 px-4"
+        >
+            {/* Glow backdrop */}
+            <motion.div
+                className="absolute inset-0 rounded-2xl blur-2xl"
+                style={{ background: `${themeColor}15` }}
+                animate={{ opacity: [0.3, 0.6, 0.3] }}
+                transition={{ duration: 3, repeat: Infinity }}
+            />
+
+            {/* Main container */}
+            <div
+                className="relative backdrop-blur-xl rounded-2xl border p-4"
+                style={{
+                    background: `linear-gradient(135deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.2) 100%)`,
+                    borderColor: `${themeColor}30`
+                }}
+            >
+                <div className="flex items-center justify-between gap-4">
+                    {/* Time Display */}
+                    <div className="flex items-center gap-3">
+                        {/* Clock icon with pulse */}
+                        <motion.div
+                            className="relative"
+                            animate={{ scale: [1, 1.1, 1] }}
+                            transition={{ duration: 2, repeat: Infinity }}
+                        >
+                            <div
+                                className="w-10 h-10 rounded-xl flex items-center justify-center"
+                                style={{
+                                    background: `linear-gradient(135deg, ${themeColor}40, ${themeColor}20)`,
+                                    boxShadow: `0 0 20px ${themeColor}30`
+                                }}
+                            >
+                                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke={themeColor} strokeWidth="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                </svg>
+                            </div>
+                            {/* Pulse ring */}
+                            <motion.div
+                                className="absolute inset-0 rounded-xl"
+                                style={{ border: `2px solid ${themeColor}` }}
+                                animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
+                                transition={{ duration: 2, repeat: Infinity }}
+                            />
+                        </motion.div>
+
+                        {/* Time numbers */}
+                        <div className="flex flex-col">
+                            <span className="text-[10px] uppercase tracking-widest text-white/40 font-medium mb-1">
+                                Estimated Time Left
+                            </span>
+                            <div className="flex items-center gap-0.5 font-mono">
+                                {/* Hours */}
+                                <motion.span
+                                    key={`h-${timeLeft.hours}`}
+                                    initial={{ y: -10, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    className="text-2xl font-bold"
+                                    style={{ color: themeColor }}
+                                >
+                                    {formatNumber(timeLeft.hours)}
+                                </motion.span>
+                                <span className="text-lg text-white/30 mx-0.5">:</span>
+                                {/* Minutes */}
+                                <motion.span
+                                    key={`m-${timeLeft.minutes}`}
+                                    initial={{ y: -10, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    className="text-2xl font-bold"
+                                    style={{ color: themeColor }}
+                                >
+                                    {formatNumber(timeLeft.minutes)}
+                                </motion.span>
+                                <span className="text-lg text-white/30 mx-0.5">:</span>
+                                {/* Seconds */}
+                                <motion.span
+                                    key={`s-${timeLeft.seconds}`}
+                                    initial={{ y: -10, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    className="text-2xl font-bold"
+                                    style={{ color: themeColor }}
+                                >
+                                    {formatNumber(timeLeft.seconds)}
+                                </motion.span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Circular Progress */}
+                    <div className="relative w-14 h-14 flex-shrink-0">
+                        <svg className="w-14 h-14 -rotate-90">
+                            <circle
+                                cx="28"
+                                cy="28"
+                                r="24"
+                                stroke="rgba(255,255,255,0.1)"
+                                strokeWidth="4"
+                                fill="none"
+                            />
+                            <motion.circle
+                                cx="28"
+                                cy="28"
+                                r="24"
+                                stroke={themeColor}
+                                strokeWidth="4"
+                                fill="none"
+                                strokeLinecap="round"
+                                initial={{ pathLength: 0 }}
+                                animate={{ pathLength: progressPercent / 100 }}
+                                transition={{ duration: 0.5, ease: "easeOut" }}
+                                style={{
+                                    filter: `drop-shadow(0 0 6px ${themeColor})`
+                                }}
+                            />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <motion.span
+                                className="text-xs font-bold"
+                                style={{ color: themeColor }}
+                                key={Math.round(progressPercent)}
+                                initial={{ scale: 0.8 }}
+                                animate={{ scale: 1 }}
+                            >
+                                {Math.round(progressPercent)}%
+                            </motion.span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Elapsed time bar */}
+                <div className="mt-3">
+                    <div className="flex justify-between text-[10px] text-white/40 mb-1">
+                        <span>Elapsed: {Math.floor(elapsed / 60)}m {elapsed % 60}s</span>
+                        <span>Est. Total: ~{estimatedMinutes}m</span>
+                    </div>
+                    <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+                        <motion.div
+                            className="h-full rounded-full"
+                            style={{
+                                background: `linear-gradient(90deg, ${themeColor}, ${themeColor}80)`,
+                                boxShadow: `0 0 10px ${themeColor}`
+                            }}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${progressPercent}%` }}
+                            transition={{ duration: 0.5 }}
+                        />
+                    </div>
+                </div>
+            </div>
+        </motion.div>
+    );
+};
+
 export const TrainingProgressOverlay = ({
     isOpen,
     onClose,
@@ -307,7 +516,9 @@ export const TrainingProgressOverlay = ({
     errorCode,
     logs = [],
     jobId,
-    onRetry
+    onRetry,
+    estimatedMinutes = 0,
+    startTime
 }: TrainingProgressOverlayProps) => {
     const [isRetrying, setIsRetrying] = React.useState(false);
     const [isCollapsed, setIsCollapsed] = React.useState(false);
@@ -606,6 +817,14 @@ export const TrainingProgressOverlay = ({
                                         <span>{Math.round(progress)}%</span>
                                     </div>
                                 </div>
+
+                                {/* Estimated Time Display - Show during active training */}
+                                <EstimatedTimeDisplay
+                                    estimatedMinutes={estimatedMinutes}
+                                    startTime={startTime}
+                                    themeColor={themeColor}
+                                    isActive={['training', 'installing', 'provisioning'].includes(currentStep)}
+                                />
 
                                 {/* Horizontal Step Timeline */}
                                 <motion.div

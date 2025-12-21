@@ -125,3 +125,5 @@ https://en.wikipedia.org/wiki/List_of_largest_companies_by_revenue
 3. **REST APIs** - Add headers in JSON format if authentication is required
 4. **Kaggle** - Use format `username/dataset-name` and your API key
 5. **HTML** - Wikipedia tables work great for testing
+
+Kaggle - swaroopkml/cifar10-pngs-in-folders

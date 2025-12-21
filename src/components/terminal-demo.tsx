@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { useThemeColor } from "@/context/theme-context"
 import { Canvas, useFrame } from "@react-three/fiber"
-import { Environment, ContactShadows } from "@react-three/drei"
+import { ContactShadows, Environment } from "@react-three/drei"
 import { MacBook, DualMacBook } from "@/components/macbook"
 import * as THREE from "three"
 
@@ -342,18 +342,24 @@ export default function TerminalDemo() {
                     camera={{ position: [0, 0, 20], fov: 32 }}
                     gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
                     className="bg-transparent"
+                    style={{ pointerEvents: 'none' }}
                     onCreated={({ gl }) => {
                         if (!gl.getContext()) setWebglError(true)
                     }}
                 >
-                    <pointLight position={[10, 10, 10]} intensity={1.8} />
-                    <ambientLight intensity={0.7} />
-                    <spotLight position={[0, 10, 0]} intensity={2.5} color={themeColor} distance={25} />
+                    {/* Enhanced lighting for prominent MacBook appearance */}
+                    <ambientLight intensity={1.2} />
+                    <directionalLight position={[10, 10, 5]} intensity={1.8} color="#ffffff" />
+                    <directionalLight position={[-10, 5, 5]} intensity={1.2} color="#ffffff" />
+                    <pointLight position={[0, 10, 10]} intensity={1.8} color="#ffffff" />
+                    <pointLight position={[5, -5, 10]} intensity={0.8} color="#e0e0e0" />
+                    <spotLight position={[0, 15, 0]} intensity={1.2} color={themeColor} angle={0.5} distance={30} />
 
                     <Scene themeColor={themeColor} />
 
                     <ContactShadows position={[0, -4.5, 0]} opacity={0.5} scale={45} blur={2.5} far={4.5} />
-                    <Environment preset="city" />
+                    {/* Environment for metallic reflections */}
+                    <Environment preset="studio" background={false} />
                 </Canvas>
             )}
         </div>

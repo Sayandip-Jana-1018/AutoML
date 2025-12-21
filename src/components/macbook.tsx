@@ -46,7 +46,7 @@ export function MacBook({ children, ...props }: any) {
     useEffect(() => {
         if (!clone || !videoTexture || !videoElement) return
 
-        // Optimized traverse
+        // Only override Screen mesh material for video
         clone.traverse((child) => {
             if (child instanceof THREE.Mesh && child.name === 'Screen') {
                 child.material = new THREE.MeshBasicMaterial({
@@ -163,7 +163,7 @@ export function DualMacBook({ opacity = 1, ...props }: any) {
     useEffect(() => {
         if (!group.current || !videoTexture || !videoElement) return
 
-        // Apply video texture to ALL Screen meshes
+        // Apply video texture to Screen meshes only, keep original materials for body
         group.current.traverse((child) => {
             if (child instanceof THREE.Mesh && child.name.includes('Screen')) {
                 child.material = new THREE.MeshBasicMaterial({

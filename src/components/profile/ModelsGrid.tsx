@@ -11,6 +11,8 @@ interface Model {
     type: string
     status: string
     accuracy?: number
+    silhouette?: number  // Clustering metric
+    r2?: number          // Regression metric
     algorithm?: string
     target_column?: string
     projectId?: string
@@ -20,6 +22,26 @@ interface ModelsGridProps {
     models: Model[]
     loading: boolean
     onViewAll?: () => void
+}
+
+// Helper to display the most relevant metric for any model type
+function getMetricDisplay(model: Model): string {
+    // Classification - accuracy
+    if (model.accuracy != null && !isNaN(model.accuracy)) {
+        const pct = model.accuracy > 1 ? model.accuracy : model.accuracy * 100;
+        return `${pct.toFixed(1)}% Accuracy`;
+    }
+    // Clustering - silhouette score (convert to percentage for simplicity)
+    if (model.silhouette != null && !isNaN(model.silhouette)) {
+        const pct = Math.abs(model.silhouette) * 100;
+        return `${pct.toFixed(1)}% Score`;
+    }
+    // Regression - R² score
+    if (model.r2 != null && !isNaN(model.r2)) {
+        const pct = model.r2 * 100;
+        return `${pct.toFixed(1)}% R²`;
+    }
+    return 'Training...';
 }
 
 export function ModelsGrid({ models, loading, onViewAll }: ModelsGridProps) {
@@ -93,7 +115,7 @@ export function ModelsGrid({ models, loading, onViewAll }: ModelsGridProps) {
                             className="text-sm font-bold px-3 py-1.5 rounded-lg"
                             style={{ backgroundColor: `${themeColor}20`, color: themeColor }}
                         >
-                            {model.accuracy !== undefined ? `${(model.accuracy * 100).toFixed(1)}% Accuracy` : 'Training...'}
+                            {getMetricDisplay(model)}
                         </span>
                     </div>
                 </motion.div>

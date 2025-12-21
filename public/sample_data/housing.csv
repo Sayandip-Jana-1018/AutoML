@@ -1,6 +1,0 @@
-check_account,duration,credit_history,purpose,credit_amount,savings_account,employment_since,installment_rate,status,debtors,residence_since,property,age,plans,housing,existing_credits,job,maintenance,phone,foreign_worker,good_bad
-A11,6,A34,A43,1169,A65,A75,4,A93,A101,4,A121,67,A143,A152,2,A173,1,A192,A201,good
-A12,48,A32,A43,5951,A61,A73,2,A92,A101,2,A121,22,A143,A152,1,A173,1,A191,A201,bad
-A14,12,A34,A46,2096,A61,A74,2,A93,A101,3,A121,49,A143,A152,1,A172,2,A191,A201,good
-A11,42,A32,A42,7882,A61,A74,2,A93,A103,4,A122,45,A143,A153,1,A173,2,A191,A201,good
-A11,24,A33,A40,4870,A61,A73,3,A93,A101,4,A124,53,A143,A153,2,A173,2,A191,A201,bad

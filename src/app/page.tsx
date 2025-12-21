@@ -10,7 +10,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 
 import TerminalDemo from "@/components/terminal-demo"
 import { ScrollProgress } from "@/components/ScrollProgress"
-import { GradientOrbs } from "@/components/GradientOrbs"
+
 import { HeroSection } from "@/components/sections/HeroSection"
 import { HowItWorksSection } from "@/components/sections/HowItWorksSection"
 import { TechStackSection } from "@/components/sections/TechStackSection"
@@ -33,7 +33,7 @@ import AuthSuccessHandler from "@/components/auth-success-handler"
 
 export default function Home() {
     const { themeColor, setThemeColor, silkConfig } = useThemeColor()
-    const { user, loading } = useAuth()
+    const { user } = useAuth()
     const router = useRouter()
 
     // Set default theme color to Gold on mount
@@ -41,22 +41,7 @@ export default function Home() {
         setThemeColor("#0cb322ff")
     }, [setThemeColor])
 
-    // Protect Route
-    useEffect(() => {
-        if (!loading && !user) {
-            router.push("/auth/login")
-        }
-    }, [user, loading, router])
-
-    if (loading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-black text-white">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-        )
-    }
-
-    if (!user) return null // Prevent flash of content before redirect
+    // Homepage is now PUBLIC - no auth redirect
 
     return (
         <main className="relative bg-background selection:bg-primary/30 transition-colors duration-300">
@@ -72,7 +57,7 @@ export default function Home() {
                     rotation={silkConfig.rotation}
                 />
             </div>
-            <GradientOrbs count={4} />
+
             <NoiseOverlay />
             <TerminalDemo />
             <Navbar />
@@ -96,6 +81,7 @@ export default function Home() {
             <DemoSection />
             <SectionDivider />
             <TestimonialsSection />
+            <SectionDivider />
             <CTAFooterSection />
             <ThemeToggle />
             <ThemeColorPicker

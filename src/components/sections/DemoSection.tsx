@@ -3,9 +3,9 @@
 import { useState, useRef } from "react"
 import { motion, useScroll, useTransform } from "framer-motion"
 import { Play, Pause, Volume2, VolumeX, Maximize, ArrowRight } from "lucide-react"
-import Link from "next/link"
 import { useThemeColor } from "@/context/theme-context"
 import MagicReveal from "@/components/ui/MagicReveal"
+import { NavButton } from "@/components/NavButton"
 
 export function DemoSection() {
     const { themeColor } = useThemeColor()
@@ -33,9 +33,8 @@ export function DemoSection() {
     }
 
     return (
-        <section className="py-32 px-6 md:px-12 lg:px-20 relative z-10 overflow-hidden" ref={containerRef}>
+        <section className="py-32 px-6 md:px-12 lg:px-20 relative z-10 overflow-hidden backdrop-blur-md bg-white/5 dark:bg-white/[0.02]" ref={containerRef}>
             {/* Background Glow */}
-            <div className="absolute inset-0 z-0 bg-black/60 backdrop-blur-2xl" />
             <div
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150%] h-[150%] opacity-20 pointer-events-none blur-[120px] z-0"
                 style={{ background: `radial-gradient(circle, ${themeColor}, transparent 70%)` }}
@@ -120,17 +119,9 @@ export function DemoSection() {
             </motion.div>
 
             <div className="mt-12 text-center relative z-10">
-                <Link
-                    href="/studio"
-                    className="inline-flex items-center gap-2 px-8 py-4 rounded-full text-lg font-bold transition-transform hover:scale-105 active:scale-95 text-black"
-                    style={{
-                        background: themeColor,
-                        boxShadow: `0 0 20px ${themeColor}60`
-                    }}
-                >
-                    Try It Now
-                    <ArrowRight className="w-5 h-5" />
-                </Link>
+                <NavButton href="/deploy" variant="primary" size="lg" icon="arrow" requiresAuth>
+                    See It In Action
+                </NavButton>
             </div>
         </section>
     )

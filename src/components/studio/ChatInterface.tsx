@@ -16,9 +16,32 @@ interface ChatInterfaceProps {
     datasetType?: string;
     schema?: any;
     themeColor: string;
+    /** Optional message to send programmatically (e.g., from fix validation errors button) */
+    externalMessage?: string | null;
+    /** Callback when external message has been processed */
+    onExternalMessageSent?: () => void;
+    /** Dataset info for context (filename, columns, rows, etc.) */
+    datasetInfo?: {
+        filename?: string;
+        columns?: string[];
+        rows?: number;
+        taskType?: string;
+        targetColumn?: string;
+    };
 }
 
-export const ChatInterface = ({ projectId, currentScript, currentScriptVersion, currentVersionId, datasetType, schema, themeColor }: ChatInterfaceProps) => {
+export const ChatInterface = ({
+    projectId,
+    currentScript,
+    currentScriptVersion,
+    currentVersionId,
+    datasetType,
+    schema,
+    themeColor,
+    externalMessage,
+    onExternalMessageSent,
+    datasetInfo
+}: ChatInterfaceProps) => {
     const { user, userTier } = useAuth();
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
@@ -84,32 +107,49 @@ export const ChatInterface = ({ projectId, currentScript, currentScriptVersion, 
         return () => unsubscribe();
     }, [projectId]);
 
-    const handleSend = async () => {
-        if (!input.trim() || sending || !user) return;
+    // Handle external message (e.g., from "Fix with AI" button)
+    useEffect(() => {
+        if (externalMessage && !sending && user) {
+            handleSend(externalMessage);
+            onExternalMessageSent?.();
+        }
+    }, [externalMessage]);
+
+    const handleSend = async (messageOverride?: string) => {
+        const messageToSend = messageOverride || input;
+        if (!messageToSend.trim() || sending || !user) return;
         setSending(true);
 
         try {
             await addDoc(collection(db, 'projects', projectId, 'messages'), {
                 role: 'user',
-                content: input,
+                content: messageToSend,
                 createdAt: serverTimestamp(),
                 user_email: user.email
             });
-            setInput('');
+            if (!messageOverride) setInput('');
 
             const res = await fetch('/api/studio/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     projectId,
-                    message: input,
+                    message: messageToSend,
                     currentScript,
                     currentScriptVersion,
                     currentVersionId,
                     datasetType,
                     model: selectedModel,
                     schema,
-                    tier: userTier || 'free' // Pass user tier for resource limits
+                    tier: userTier || 'free',
+                    // Include dataset info for better context
+                    datasetInfo: datasetInfo ? {
+                        filename: datasetInfo.filename,
+                        columns: datasetInfo.columns,
+                        rows: datasetInfo.rows,
+                        taskType: datasetInfo.taskType,
+                        targetColumn: datasetInfo.targetColumn
+                    } : undefined
                 })
             });
 
@@ -279,7 +319,7 @@ export const ChatInterface = ({ projectId, currentScript, currentScriptVersion, 
                         disabled={sending}
                     />
                     <button
-                        onClick={handleSend}
+                        onClick={() => handleSend()}
                         disabled={sending || !input.trim()}
                         style={{ backgroundColor: themeColor }}
                         className={`hover:brightness-110 disabled:opacity-50 px-3 md:px-4 py-1.5 md:py-2.5 rounded-lg text-xs md:text-sm font-bold transition-all min-w-[50px] md:min-w-[60px] min-h-[36px] md:min-h-[44px] ${['#ffffff', '#00ffff', '#f59e0b', '#84cc16', '#FEBC2E'].includes(themeColor) ? 'text-black' : 'text-white'

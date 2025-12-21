@@ -37,6 +37,9 @@ import {
 import { TrainingConfigOverlay, TrainingConfigTrigger, type TrainingConfig } from '@/components/studio/TrainingConfigOverlay';
 import { TrainingProgressOverlay, type TrainingStep } from '@/components/studio/TrainingProgressOverlay';
 import { TrainingSuccessOverlay } from '@/components/studio/TrainingSuccessOverlay';
+import { TrainingErrorOverlay, type TrainingError } from '@/components/studio/TrainingErrorOverlay';
+
+import { validateScript, formatValidationResult, type ValidationResult, type ValidationIssue } from '@/lib/script-validator';
 
 import { RESOURCE_POLICIES } from '@/lib/resource-policy';
 
@@ -88,9 +91,9 @@ export default function StudioPage() {
         const limits = RESOURCE_POLICIES[userTier || 'free'];
         return {
             machineType: limits.allowedMachineTypes[0],
-            epochs: Math.min(10, limits.maxEpochs),
+            epochs: Math.min(20, limits.maxEpochs),  // Default 20 (matches script fallback)
             batchSize: 32,
-            learningRate: 0.01,
+            learningRate: 0.001,  // Default 0.001 (matches script fallback)
             trees: Math.min(100, limits.maxTrees)
         };
     });
@@ -99,7 +102,11 @@ export default function StudioPage() {
     const training = useTraining();
     const [showTrainingProgress, setShowTrainingProgress] = useState(false);
     const [trainingStep, setTrainingStep] = useState<TrainingStep>('preparing');
-    const [trainingError, setTrainingError] = useState<string | null>(null);
+    const [trainingError, setTrainingError] = useState<TrainingError | null>(null);
+    const [showErrorOverlay, setShowErrorOverlay] = useState(false);
+    // Use context for startTime and estimatedMinutes so they persist
+    const { startTime: trainingStartTime, setStartTime: setTrainingStartTime,
+        estimatedMinutes: estimatedTrainingMinutes, setEstimatedMinutes: setEstimatedTrainingMinutes } = training;
 
     // Sync overlay visibility with global context on mount
     // IMPORTANT: Only show overlay if the activeJob belongs to THIS project
@@ -137,6 +144,9 @@ export default function StudioPage() {
         };
     } | null>(null);
     const [suggestionLoading, setSuggestionLoading] = useState(false);
+
+    // External message for chat (used by "Fix with AI" button)
+    const [externalChatMessage, setExternalChatMessage] = useState<string | null>(null);
 
     // Load suggestion from URL if present
     useEffect(() => {
@@ -337,11 +347,13 @@ export default function StudioPage() {
                 console.log(`[Studio] Poll result:`, data);
 
                 // Update training step based on current status from GCS
-                if (data.status === 'installing') {
+                if (data.status === 'provisioning' || data.status === 'PROVISIONING') {
+                    setTrainingStep('provisioning');
+                } else if (data.status === 'installing') {
                     setTrainingStep('installing');
                 } else if (data.status === 'downloading') {
                     setTrainingStep('installing'); // Same step for downloading
-                } else if (data.status === 'running' || data.status === 'training') {
+                } else if (data.status === 'running' || data.status === 'training' || data.status === 'RUNNING') {
                     setTrainingStep('training');
                 }
 
@@ -522,6 +534,7 @@ export default function StudioPage() {
         setShowTrainingProgress(true);
         setTrainingError(null);
         setTrainingStep('preparing');
+        setTrainingStartTime(Date.now()); // Start the timer
 
         try {
             await handleSave(true); // Save silently when training
@@ -539,6 +552,8 @@ export default function StudioPage() {
                     projectId,
                     script: localCode,
                     config: trainingConfig,
+                    // GPU preference - MUST be at top level for Train API
+                    preferGPU: trainingConfig.preferGPU || false,
                     // Dataset info from project
                     originalFilename: project?.dataset?.filename || 'dataset.csv',
                     datasetFilename: project?.dataset?.filename || 'dataset.csv',
@@ -567,8 +582,30 @@ export default function StudioPage() {
                 });
             }
 
-            // Step 4: Training started
-            setTrainingStep('training');
+            // Set estimated time from API response (convert to number)
+            if (data.estimatedMinutes) {
+                // Parse "295–325" format to get average, or use directly if number
+                const estStr = String(data.estimatedMinutes);
+                if (estStr.includes('–') || estStr.includes('-')) {
+                    const [min, max] = estStr.split(/[–-]/).map(Number);
+                    setEstimatedTrainingMinutes(Math.round((min + max) / 2));
+                } else {
+                    setEstimatedTrainingMinutes(Number(estStr) || 30);
+                }
+            } else {
+                // Fallback: estimate based on dataset type (longer for images)
+                const taskType = String(project?.inferredTaskType || '');
+                const isImageDataset = taskType.includes('image') ||
+                    (project?.dataset?.filename || '').endsWith('.zip');
+                const datasetMB = project?.dataset?.fileSize ? project.dataset.fileSize / (1024 * 1024) : 10;
+                const fallbackMinutes = isImageDataset
+                    ? Math.max(60, Math.ceil(datasetMB / 2)) // Images: at least 60 min
+                    : Math.max(10, Math.ceil(datasetMB / 5)); // Tabular: at least 10 min
+                setEstimatedTrainingMinutes(fallbackMinutes);
+            }
+
+            // Step 4: Provisioning started (VM spinning up, will progress to training)
+            setTrainingStep('provisioning');
             setActiveTab('terminal');
 
             // Keep overlay visible - it shows progress throughout training
@@ -576,7 +613,14 @@ export default function StudioPage() {
         } catch (err: any) {
             console.error(err);
             setTrainingStep('failed');
-            setTrainingError(err.message || 'Training failed');
+            setTrainingError({
+                step: 'train',
+                message: err.message || 'Training failed to start',
+                details: err.validationErrors?.join('\n') || err.details,
+                suggestions: err.suggestions || ['Check your script for errors', 'Ensure dataset is uploaded correctly']
+            });
+            setShowErrorOverlay(true);
+            setShowTrainingProgress(false);
             training.failTraining(err.message || 'Training failed');
             setIsRunning(false);
         }
@@ -643,12 +687,12 @@ export default function StudioPage() {
             });
         } catch (error) {
             console.error('AutoML failed:', error);
-            showToast({
-                type: 'error',
-                title: 'AutoML Failed',
-                message: error instanceof Error ? error.message : 'Unknown error',
-                duration: 5000
+            setTrainingError({
+                step: 'automl',
+                message: error instanceof Error ? error.message : 'Script generation failed',
+                suggestions: ['Try a different algorithm', 'Check dataset format']
             });
+            setShowErrorOverlay(true);
         } finally {
             setIsAutoMLRunning(false);
         }
@@ -701,7 +745,14 @@ export default function StudioPage() {
         }
     };
 
-    const handleUploadStart = async (file: File, options?: { targetColumn?: string; zipAsClassFolders?: boolean; cleaningConfig?: any; columnTypes?: any }) => {
+    const handleUploadStart = async (file: File, options?: {
+        targetColumn?: string;
+        zipAsClassFolders?: boolean;
+        cleaningConfig?: any;
+        columnTypes?: any;
+        extractedSize?: number;
+        clientMetadata?: any; // New: Pass simple metadata for improved profiling of large files
+    }) => {
         try {
             let fileHash: string | undefined;
             try {
@@ -728,7 +779,8 @@ export default function StudioPage() {
                     userId: user?.uid,
                     // Pass options from upload UI
                     targetColumn: options?.targetColumn,
-                    zipAsClassFolders: options?.zipAsClassFolders
+                    zipAsClassFolders: options?.zipAsClassFolders,
+                    extractedSize: options?.extractedSize // Send extracted size for validation
                 })
             });
 
@@ -769,6 +821,7 @@ export default function StudioPage() {
 
             if (!uploadRes.ok) throw new Error('Failed to upload file to storage');
 
+            // Pass client metadata to confirm endpoint to help profiler if it skips deep scan
             const confirmRes = await fetch('/api/studio/upload/confirm', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -777,7 +830,8 @@ export default function StudioPage() {
                     datasetId,
                     gcsPath,
                     triggeredBy: 'frontend',
-                    userId: user?.uid
+                    userId: user?.uid,
+                    clientMetadata: options?.clientMetadata
                 })
             });
 
@@ -886,54 +940,142 @@ export default function StudioPage() {
     };
 
     // Import Jupyter Notebook
+    // Import Python script or Jupyter notebook
     const handleImportNotebook = () => {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = '.ipynb';
+        input.accept = '.ipynb,.py';  // Accept both notebook and Python files
         input.onchange = async (e) => {
             const file = (e.target as HTMLInputElement).files?.[0];
             if (!file) return;
 
             try {
                 const text = await file.text();
-                const notebook = JSON.parse(text);
+                let code = '';
+                let sourceType = '';
 
-                // Extract Python code from cells
-                const codeCells = notebook.cells?.filter((cell: any) => cell.cell_type === 'code') || [];
-                const code = codeCells
-                    .map((cell: any) => {
-                        const source = Array.isArray(cell.source) ? cell.source.join('') : cell.source;
-                        return source;
-                    })
-                    .join('\n\n');
+                // Handle .py files directly
+                if (file.name.endsWith('.py')) {
+                    code = text;
+                    sourceType = 'Python script';
+                }
+                // Handle .ipynb (Jupyter notebook) files
+                else if (file.name.endsWith('.ipynb')) {
+                    const notebook = JSON.parse(text);
+                    const codeCells = notebook.cells?.filter((cell: any) => cell.cell_type === 'code') || [];
+                    code = codeCells
+                        .map((cell: any) => {
+                            const source = Array.isArray(cell.source) ? cell.source.join('') : cell.source;
+                            return source;
+                        })
+                        .join('\n\n');
+                    sourceType = `${codeCells.length} notebook cell(s)`;
+                }
 
                 if (code.trim()) {
+                    // Validate the imported script
+                    const validationResult = validateScript(code);
+
                     setLocalCode(code);
-                    showToast({
-                        type: 'success',
-                        title: 'Notebook Imported',
-                        message: `Imported ${codeCells.length} code cell(s) from ${file.name}`,
-                        duration: 5000
-                    });
+
+                    if (!validationResult.valid) {
+                        // Show errors
+                        showToast({
+                            type: 'error',
+                            title: 'Script Has Errors',
+                            message: `Imported ${sourceType} from ${file.name}, but found ${validationResult.errors.length} error(s). Fix before training.`,
+                            duration: 8000
+                        });
+                        console.log('Script validation errors:', validationResult.errors);
+                    } else if (validationResult.warnings.length > 0) {
+                        // Show warnings (using 'info' type since 'warning' not supported)
+                        showToast({
+                            type: 'info',
+                            title: 'Script Imported with Warnings',
+                            message: `Imported from ${file.name}. ${validationResult.warnings.length} warning(s) - review before training.`,
+                            duration: 6000
+                        });
+                    } else {
+                        // All good!
+                        showToast({
+                            type: 'success',
+                            title: 'Script Imported',
+                            message: `Imported ${sourceType} from ${file.name}. Detected as ${validationResult.scriptType} script.`,
+                            duration: 5000
+                        });
+                    }
                 } else {
                     showToast({
                         type: 'error',
                         title: 'No Code Found',
-                        message: 'The notebook contains no Python code cells',
+                        message: file.name.endsWith('.py') ? 'The Python file is empty' : 'The notebook contains no Python code cells',
                         duration: 5000
                     });
                 }
             } catch (err) {
-                console.error('Failed to import notebook:', err);
+                console.error('Failed to import script:', err);
                 showToast({
                     type: 'error',
                     title: 'Import Failed',
-                    message: 'Could not parse the notebook file',
+                    message: file.name.endsWith('.py') ? 'Could not read the Python file' : 'Could not parse the notebook file',
                     duration: 5000
                 });
             }
         };
         input.click();
+    };
+
+    // Handle "Fix with AI" request from validation errors
+    const handleRequestFix = (code: string, errors: ValidationIssue[]) => {
+        // Build a detailed prompt with the errors and dataset context
+        const errorList = errors.map((e, i) => {
+            let line = `${i + 1}. ${e.message}`;
+            if (e.suggestion) line += ` (Suggestion: ${e.suggestion})`;
+            return line;
+        }).join('\n');
+
+        // Build dataset context
+        let datasetContext = '';
+        if (activeDataset) {
+            datasetContext = `\n\nDataset Information:
+- Filename: ${activeDataset.originalFilename || 'unknown'}
+- Type: ${activeDataset.type || 'unknown'}
+- Rows: ${activeDataset.rowCount || 'unknown'}`;
+            if (activeDataset.schema?.columns) {
+                const columnNames = activeDataset.schema.columns.slice(0, 10).map((c: any) => c.name).join(', ');
+                datasetContext += `\n- Columns: ${columnNames}${activeDataset.schema.columns.length > 10 ? '...' : ''}`;
+            }
+            if (activeDataset.schema?.targetColumn) {
+                datasetContext += `\n- Target Column: ${activeDataset.schema.targetColumn}`;
+            }
+        }
+
+        const fixPrompt = `Please fix the following validation errors in my script:
+
+${errorList}
+${datasetContext}
+
+Please provide the complete corrected script that fixes all these issues. Make sure to:
+1. Use the correct dataset path (./dataset.csv for tabular, use find_dataset_path() for images)
+2. Include all necessary imports
+3. Save the trained model as "trained_model.pkl" or "trained_model.h5"
+4. Save metrics to "metrics.json"`;
+
+        // Apply the code to editor first (so AI can see it)
+        setLocalCode(code);
+
+        // Close suggestion panel
+        setShowSuggestionPanel(false);
+
+        // Send to chat
+        setExternalChatMessage(fixPrompt);
+
+        showToast({
+            type: 'info',
+            title: 'Sent to AI',
+            message: 'Validation errors sent to AI for fixing. Check the chat panel.',
+            duration: 4000
+        });
     };
 
     // Open project in VS Code with one-click connection
@@ -1277,6 +1419,12 @@ export default function StudioPage() {
                 config={trainingConfig}
                 onConfigChange={setTrainingConfig}
                 onStartTraining={handleRunTraining}
+                // Pass project context for correct defaults & GPU detection
+                datasetFilename={project.dataset?.filename || 'dataset.csv'}
+                datasetSizeMB={project.dataset?.fileSize ? project.dataset.fileSize / (1024 * 1024) : 5}
+                datasetImageCount={project.dataset?.rowCount}
+                taskType={project.inferredTaskType || 'classification'}
+                columnTypes={project.dataset?.columnTypes}
             />
 
             {/* Training Progress Overlay */}
@@ -1289,7 +1437,9 @@ export default function StudioPage() {
                     }
                 }}
                 currentStep={trainingStep}
-                error={trainingError}
+                error={trainingError?.message}
+                estimatedMinutes={estimatedTrainingMinutes}
+                startTime={trainingStartTime}
             />
 
             {/* Training Success Celebration with Confetti */}
@@ -1649,6 +1799,15 @@ export default function StudioPage() {
                                 datasetType={activeDataset?.type}
                                 schema={activeDataset?.schema}
                                 themeColor={themeColor}
+                                externalMessage={externalChatMessage}
+                                onExternalMessageSent={() => setExternalChatMessage(null)}
+                                datasetInfo={activeDataset ? {
+                                    filename: activeDataset.originalFilename,
+                                    columns: activeDataset.schema?.columns?.map((c: any) => c.name),
+                                    rows: activeDataset.rowCount,
+                                    taskType: activeDataset.type,
+                                    targetColumn: activeDataset.schema?.targetColumn
+                                } : undefined}
                             />
                         </div>
                     </div>
@@ -1665,6 +1824,7 @@ export default function StudioPage() {
                 }}
                 suggestion={suggestionData}
                 currentScript={localCode}
+                onRequestFix={handleRequestFix}
                 onApply={(mergedCode) => {
                     setLocalCode(mergedCode);
                     setShowSuggestionPanel(false);
@@ -1860,6 +2020,26 @@ export default function StudioPage() {
                     </div>
                 )}
             </AnimatePresence>
+
+            {/* Training Error Overlay */}
+            <TrainingErrorOverlay
+                isOpen={showErrorOverlay}
+                onClose={() => {
+                    setShowErrorOverlay(false);
+                    setTrainingError(null);
+                }}
+                onRetry={() => {
+                    setShowErrorOverlay(false);
+                    setTrainingError(null);
+                    // Trigger AutoML again if it was an automl error
+                    if (trainingError?.step === 'automl') {
+                        handleAutoML();
+                    } else if (trainingError?.step === 'train') {
+                        handleRunTraining();
+                    }
+                }}
+                error={trainingError}
+            />
         </div>
     );
 }

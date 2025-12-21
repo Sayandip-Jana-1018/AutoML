@@ -122,12 +122,13 @@ export default function MagicReveal({
                     animate={controls}
                 >
                     <h2
-                        className={titleClassName}
+                        className={`${titleClassName} animate-gradient-text`}
                         style={{
                             backgroundImage: `linear-gradient(135deg, ${themeColor}, #ffffff 40%, ${themeColor})`,
                             WebkitBackgroundClip: "text",
                             WebkitTextFillColor: "transparent",
-                            backgroundClip: "text"
+                            backgroundClip: "text",
+                            backgroundSize: "200% 200%"
                         }}
                     >
                         {title}

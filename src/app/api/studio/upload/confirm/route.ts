@@ -21,7 +21,8 @@ export async function POST(req: Request) {
             gcsPath,
             cleaningConfig = {},  // Default to empty object, never null
             triggeredBy = 'frontend',
-            userId = ''  // For user-level deduplication
+            userId = '',  // For user-level deduplication
+            clientMetadata = {} // New optional field
         } = await req.json();
 
         if (!projectId || !datasetId || !gcsPath) {
@@ -135,8 +136,8 @@ export async function POST(req: Request) {
         // 2. Profile the dataset
         let schema;
         try {
-            schema = await profileDatasetFromGCS(gcsPath);
-            console.log(`[Upload Confirm] Profiled: ${schema.rowCount} rows`);
+            schema = await profileDatasetFromGCS(gcsPath, fileSize, clientMetadata);
+            console.log(`[Upload Confirm] profiled: ${schema.rowCount} rows`);
             console.log(`[Upload Confirm] Target: ${userTargetColumn ? `USER-SELECTED: ${userTargetColumn}` : `AUTO-DETECTED: ${schema.targetColumnSuggestion}`}`);
         } catch (profileError: unknown) {
             const errorMessage = profileError instanceof Error ? profileError.message : 'Failed to profile dataset';
@@ -169,7 +170,8 @@ export async function POST(req: Request) {
                 missingValueStats: schema.missingValueStats || {},
                 inferredTaskType: schema.inferredTaskType || 'unknown',
                 taskTypeConfidence: schema.taskTypeConfidence || 0,
-                targetColumnSuggestion: userTargetColumn || schema.targetColumnSuggestion || ''
+                targetColumnSuggestion: userTargetColumn || schema.targetColumnSuggestion || '',
+                imageStats: schema.imageStats || null
             },
             gcsPath: gcsPath || '',
             md5Hash: md5Hash || '',
@@ -209,7 +211,9 @@ export async function POST(req: Request) {
                 taskTypeConfidence: schema.taskTypeConfidence || 0,
                 targetColumnSuggestion: userTargetColumn || schema.targetColumnSuggestion || '',
                 // NEW: Store preview rows for data display
-                previewRows: schema.previewRows || []
+                previewRows: schema.previewRows || [],
+                // NEW: Image dataset stats
+                imageStats: schema.imageStats || null
             },
             columnNames: schema.columns.map(c => c.name),
             rowCount: schema.rowCount || 0,
@@ -252,6 +256,51 @@ export async function POST(req: Request) {
             'dataset.gcsPath': gcsPath,     // Also store as gcsPath for compatibility
             'dataset.fileSize': fileSize || 0
         });
+
+        // 5.5. Trigger TFRecord conversion for image datasets (async, non-blocking)
+        const isImageDataset = schema.inferredTaskType === 'image_classification' ||
+            (schema.imageStats && schema.imageStats.totalImages > 0) ||
+            gcsPath.toLowerCase().endsWith('.zip');
+
+        if (isImageDataset && gcsPath.toLowerCase().endsWith('.zip')) {
+            console.log(`[Upload Confirm] 🔄 Triggering TFRecord conversion for image dataset`);
+
+            // Update project with conversion status
+            await adminDb.collection('projects').doc(projectId).update({
+                'dataset.conversionStatus': 'pending',
+                'dataset.conversionProgress': 0
+            });
+
+            // Trigger Cloud Function asynchronously (don't await)
+            const cloudFunctionUrl = process.env.TFRECORD_CONVERTER_URL;
+            if (cloudFunctionUrl) {
+                // Parse bucket and path specifically from gs:// URL
+                // Format: gs://<bucket-name>/<file-path>
+                const gcsMatch = gcsPath.match(/^gs:\/\/([^/]+)\/(.+)$/);
+                const bucketName = gcsMatch ? gcsMatch[1] : 'automl-dc494.firebasestorage.app'; // Fallback
+                const filePath = gcsMatch ? gcsMatch[2] : gcsPath;
+
+                console.log(`[Upload Confirm] Triggering conversion for bucket: ${bucketName}, path: ${filePath}`);
+
+                fetch(cloudFunctionUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        projectId,
+                        datasetPath: filePath,
+                        bucket: bucketName,
+                        shardSizeMB: 50,
+                        valSplit: 0.2
+                    })
+                }).then(res => {
+                    console.log(`[Upload Confirm] TFRecord conversion triggered: ${res.status}`);
+                }).catch(err => {
+                    console.warn(`[Upload Confirm] TFRecord conversion trigger failed:`, err);
+                });
+            } else {
+                console.warn(`[Upload Confirm] TFRECORD_CONVERTER_URL not configured, skipping conversion`);
+            }
+        }
 
         // 6. Create user_datasets entry for cross-project deduplication
         if (userId && (fileHash || md5Hash)) {

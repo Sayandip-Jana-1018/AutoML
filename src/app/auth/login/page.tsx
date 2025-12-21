@@ -8,6 +8,7 @@ import { useThemeColor } from "@/context/theme-context"
 import Plasma from "@/components/react-bits/Plasma"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Lock, Mail, ArrowRight, Loader2, AlertCircle, Github, Phone, Smartphone } from "lucide-react"
+import { EasterEgg } from "@/components/EasterEgg"
 import { FaMicrosoft, FaApple, FaGoogle } from 'react-icons/fa'
 import { auth, googleProvider, githubProvider, microsoftProvider, appleProvider, db } from "@/lib/firebase"
 import { signInWithEmailAndPassword, signInWithPopup, signInWithPhoneNumber, RecaptchaVerifier, ConfirmationResult, AuthProvider, fetchSignInMethodsForEmail, linkWithCredential, OAuthProvider } from "firebase/auth"
@@ -88,11 +89,30 @@ export default function LoginPage() {
                 });
             }
 
-            router.push("/?login=success")
+            // Check for redirect URL stored by requiresAuth buttons
+            const redirectUrl = typeof window !== 'undefined'
+                ? sessionStorage.getItem('redirectAfterLogin')
+                : null
+
+            if (redirectUrl) {
+                sessionStorage.removeItem('redirectAfterLogin')
+                router.push(redirectUrl)
+            } else {
+                router.push("/?login=success")
+            }
         } catch (e) {
             console.error("Error creating user doc:", e)
-            // Still redirect even if doc creation fails (it might already exist)
-            router.push("/?login=success")
+            // Still redirect even if doc creation fails
+            const redirectUrl = typeof window !== 'undefined'
+                ? sessionStorage.getItem('redirectAfterLogin')
+                : null
+
+            if (redirectUrl) {
+                sessionStorage.removeItem('redirectAfterLogin')
+                router.push(redirectUrl)
+            } else {
+                router.push("/?login=success")
+            }
         }
     }
 
@@ -242,14 +262,64 @@ export default function LoginPage() {
                 <ThemeToggle />
             </div>
 
+            {/* Rocket Confetti Button */}
+            <EasterEgg />
+
             <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5, ease: "easeOut" }}
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
                 className="relative z-10 w-full max-w-md p-6"
             >
-                <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/20 backdrop-blur-2xl shadow-2xl">
-                    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+                {/* Floating Particles Across Page */}
+                <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+                    {[...Array(15)].map((_, i) => (
+                        <motion.div
+                            key={i}
+                            className="absolute rounded-full"
+                            style={{
+                                background: themeColor,
+                                boxShadow: `0 0 15px ${themeColor}`,
+                                width: `${4 + (i % 3) * 3}px`,
+                                height: `${4 + (i % 3) * 3}px`,
+                                left: `${5 + i * 6}%`,
+                                top: `${5 + (i % 5) * 20}%`
+                            }}
+                            animate={{
+                                y: [0, -30 - (i % 3) * 20, 0],
+                                x: [0, (i % 2 === 0 ? 15 : -15), 0],
+                                opacity: [0.2, 0.7, 0.2],
+                                scale: [1, 1.4, 1]
+                            }}
+                            transition={{
+                                duration: 4 + i * 0.3,
+                                repeat: Infinity,
+                                ease: "easeInOut",
+                                delay: i * 0.3
+                            }}
+                        />
+                    ))}
+                </div>
+
+                {/* Animated Glowing Border */}
+                <motion.div
+                    className="absolute inset-0 rounded-3xl -z-10"
+                    style={{
+                        backgroundImage: `linear-gradient(135deg, ${themeColor}40, transparent 40%, transparent 60%, ${themeColor}40)`,
+                        backgroundSize: '200% 200%'
+                    }}
+                    animate={{
+                        backgroundPosition: ['0% 0%', '100% 100%', '0% 0%']
+                    }}
+                    transition={{
+                        duration: 5,
+                        repeat: Infinity,
+                        ease: "linear"
+                    }}
+                />
+
+                <div className="relative overflow-hidden rounded-3xl border border-white/15 bg-black/30 backdrop-blur-3xl shadow-2xl" style={{ boxShadow: `0 25px 50px -12px rgba(0,0,0,0.5), 0 0 30px ${themeColor}15` }}>
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/8 via-transparent to-white/3 pointer-events-none" />
 
                     <div className="relative p-8">
                         <div className="text-center mb-8">

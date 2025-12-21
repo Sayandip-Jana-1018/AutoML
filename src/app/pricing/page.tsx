@@ -253,7 +253,7 @@ export default function PricingPage() {
                 "Everything in Silver",
                 `e2-highmem-8 (8 vCPU • 64 GB RAM)`,
                 "🚀 RunPod GPU (RTX 4000 Ada)",
-                "20 GB VRAM for Deep Learning",
+                "9 vCPU • 50 GB RAM • 20 GB VRAM",
                 `Max ${RESOURCE_POLICIES.gold.maxTrainingHours} Hours Training`,
                 "500 MB Dataset Limit",
                 "Image/CNN Training Support",

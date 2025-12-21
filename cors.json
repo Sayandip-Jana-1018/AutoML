@@ -1,25 +1,18 @@
 [
     {
         "origin": [
-            "http://localhost:3000",
-            "http://localhost:3001",
-            "https://mlforge.vercel.app",
-            "https://*.vercel.app"
+            "*"
         ],
         "method": [
             "GET",
-            "PUT",
             "POST",
+            "PUT",
             "DELETE",
             "HEAD",
             "OPTIONS"
         ],
         "responseHeader": [
             "Content-Type",
-            "Content-Length",
-            "Content-Range",
-            "Content-Disposition",
-            "Accept-Ranges",
             "x-goog-resumable"
         ],
         "maxAgeSeconds": 3600
