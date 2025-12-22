@@ -1251,35 +1251,28 @@ Please provide the complete corrected script that fixes all these issues. Make s
                 algorithm: job.config?.algorithm || 'Custom Model'
             });
 
-            // 2. CONDITIONALLY update the Model Registry (Public Marketplace)
+            // 2. ALWAYS update the Model Registry when "Load Globally" is clicked
+            // This ensures Marketplace, Profile, and Deploy all show the same loaded version
+            // The visibility filter in API already controls what's shown publicly
             if (projectModel?.id) {
-                if (projectModel.visibility === 'public') {
-                    // If Public: Update the registry so everyone sees the new version
-                    await updateDoc(doc(db, 'models', projectModel.id), {
-                        bestVersionId: job.id,
-                        bestMetricValue: job.metrics.accuracy || 0,
-                        metrics: job.metrics,
-                        updatedAt: serverTimestamp()
-                    });
+                await updateDoc(doc(db, 'models', projectModel.id), {
+                    bestVersionId: job.id,
+                    bestMetricValue: job.metrics.accuracy || job.metrics.silhouette || job.metrics.r2 || 0,
+                    metrics: job.metrics,
+                    scriptVersion: job.scriptVersion || 1,
+                    algorithm: job.config?.algorithm || 'Custom Model',
+                    updatedAt: serverTimestamp()
+                });
 
-                    // Update local state
-                    setProjectModel(prev => prev ? { ...prev, bestVersionId: job.id } : null);
+                // Update local state
+                setProjectModel(prev => prev ? { ...prev, bestVersionId: job.id } : null);
 
-                    showToast({
-                        type: 'success',
-                        title: '✅ Version Loaded & Published!',
-                        message: `Active in Deploy page AND updated in Marketplace (Public)`,
-                        duration: 5000
-                    });
-                } else {
-                    // If Private: Do NOT update registry metrics. Keep experiments private.
-                    showToast({
-                        type: 'success',
-                        title: '✅ Version Loaded Locally',
-                        message: `Active in Deploy page. Marketplace remains unchanged (Private).`,
-                        duration: 5000
-                    });
-                }
+                showToast({
+                    type: 'success',
+                    title: '✅ Version Loaded Globally!',
+                    message: `Active in Deploy, Profile, Marketplace, and Visualize pages`,
+                    duration: 5000
+                });
             }
         } catch (error) {
             console.error('Failed to load version:', error);

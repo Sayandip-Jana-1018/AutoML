@@ -463,74 +463,79 @@ export default function VisualizePage() {
                         </div>
                     ) : (
                         <div className="space-y-8">
-                            {/* Detailed Algorithm Comparison from AutoML (find first model that has it) */}
-                            {models.filter(m => m.projectId === selectedProject).find(m => m.metrics?.algorithm_comparison) && (
-                                <div
-                                    className="rounded-2xl overflow-hidden backdrop-blur-xl mx-auto max-w-5xl"
-                                    style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)' }}
-                                >
-                                    <div className="p-4 border-b border-white/10 bg-white/5 flex flex-col items-center text-center">
-                                        <h3 className="font-semibold text-white flex items-center gap-2 justify-center">
-                                            <Sparkles className="w-4 h-4 text-yellow-400" />
-                                            AutoML Algorithm Benchmark
-                                        </h3>
-                                        <p className="text-xs text-white/40 mt-1">Performance comparison of all algorithms tested during training</p>
+                            {/* Detailed Algorithm Comparison from AutoML (use LATEST model version) */}
+                            {(() => {
+                                // Sort by script version descending to get latest first, then find one with algorithm_comparison
+                                const latestModelWithBenchmark = models
+                                    .filter(m => m.projectId === selectedProject && m.metrics?.algorithm_comparison)
+                                    .sort((a, b) => (b.scriptVersion || 0) - (a.scriptVersion || 0))[0];
+
+                                if (!latestModelWithBenchmark) return null;
+                                const comparison = latestModelWithBenchmark.metrics?.algorithm_comparison as any;
+                                if (!comparison) return null;
+
+                                return (
+                                    <div
+                                        className="rounded-2xl overflow-hidden backdrop-blur-xl mx-auto max-w-5xl"
+                                        style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)' }}
+                                    >
+                                        <div className="p-4 border-b border-white/10 bg-white/5 flex flex-col items-center text-center">
+                                            <h3 className="font-semibold text-white flex items-center gap-2 justify-center">
+                                                <Sparkles className="w-4 h-4 text-yellow-400" />
+                                                AutoML Algorithm Benchmark
+                                                <span className="text-xs text-white/40 ml-2">(v{latestModelWithBenchmark.scriptVersion || 1})</span>
+                                            </h3>
+                                            <p className="text-xs text-white/40 mt-1">Performance comparison of all algorithms tested during training</p>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full">
+                                                <thead>
+                                                    <tr className="border-b border-white/10">
+                                                        <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Algorithm</th>
+                                                        <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">CV Score (Mean)</th>
+                                                        <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Std Dev</th>
+                                                        <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Rating</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {(() => {
+                                                        // Handle array or object format
+                                                        let items: { algorithm: string; mean: number; std: number }[] = [];
+                                                        if (Array.isArray(comparison)) {
+                                                            items = comparison.map((c: any) => ({
+                                                                algorithm: c.algorithm,
+                                                                mean: c.mean ?? c.cv_score,
+                                                                std: c.std ?? c.cv_std
+                                                            }));
+                                                        } else if (typeof comparison === 'object') {
+                                                            items = Object.entries(comparison).map(([algo, metrics]: any) => ({
+                                                                algorithm: algo,
+                                                                mean: metrics.cv_score || metrics.mean,
+                                                                std: metrics.cv_std || metrics.std
+                                                            }));
+                                                        }
+
+                                                        return items.sort((a: any, b: any) => b.mean - a.mean).map((item: any, i: number) => (
+                                                            <tr key={i} className="border-b border-white/5 hover:bg-white/5">
+                                                                <td className="p-4 font-medium text-white text-center">{item.algorithm}</td>
+                                                                <td className="p-4 text-center font-bold" style={{ color: i === 0 ? themeColor : 'white' }}>
+                                                                    {(item.mean * 100).toFixed(2)}%
+                                                                </td>
+                                                                <td className="p-4 text-center text-white/40">
+                                                                    ±{(item.std * 100).toFixed(2)}%
+                                                                </td>
+                                                                <td className="p-4 text-center text-yellow-400 text-xs">
+                                                                    {"★".repeat(Math.max(1, Math.round(item.mean * 5)))}
+                                                                </td>
+                                                            </tr>
+                                                        ));
+                                                    })()}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full">
-                                            <thead>
-                                                <tr className="border-b border-white/10">
-                                                    <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Algorithm</th>
-                                                    <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">CV Score (Mean)</th>
-                                                    <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Std Dev</th>
-                                                    <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Rating</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {/* Coerce algorithm_comparison to array format if it's an object */}
-                                                {(() => {
-                                                    const bestModel = models.filter(m => m.projectId === selectedProject).find(m => m.metrics?.algorithm_comparison);
-                                                    const comparison = bestModel?.metrics?.algorithm_comparison as any;
-
-                                                    if (!comparison) return null;
-
-                                                    // Handle array or object format
-                                                    let items: { algorithm: string; mean: number; std: number }[] = [];
-                                                    if (Array.isArray(comparison)) {
-                                                        // Fix: metrics from backend uses cv_score, but UI expects mean. Map it.
-                                                        items = comparison.map((c: any) => ({
-                                                            algorithm: c.algorithm,
-                                                            mean: c.mean ?? c.cv_score,
-                                                            std: c.std ?? c.cv_std
-                                                        }));
-                                                    } else if (typeof comparison === 'object') {
-                                                        items = Object.entries(comparison).map(([algo, metrics]: any) => ({
-                                                            algorithm: algo,
-                                                            mean: metrics.cv_score || metrics.mean,
-                                                            std: metrics.cv_std || metrics.std
-                                                        }));
-                                                    }
-
-                                                    return items.sort((a: any, b: any) => b.mean - a.mean).map((item: any, i: number) => (
-                                                        <tr key={i} className="border-b border-white/5 hover:bg-white/5">
-                                                            <td className="p-4 font-medium text-white text-center">{item.algorithm}</td>
-                                                            <td className="p-4 text-center font-bold" style={{ color: i === 0 ? themeColor : 'white' }}>
-                                                                {(item.mean * 100).toFixed(2)}%
-                                                            </td>
-                                                            <td className="p-4 text-center text-white/40">
-                                                                ±{(item.std * 100).toFixed(2)}%
-                                                            </td>
-                                                            <td className="p-4 text-center text-yellow-400 text-xs">
-                                                                {"★".repeat(Math.max(1, Math.round(item.mean * 5)))}
-                                                            </td>
-                                                        </tr>
-                                                    ));
-                                                })()}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            )}
+                                );
+                            })()}
 
                             {/* Standard Model List */}
                             <div
@@ -602,11 +607,14 @@ export default function VisualizePage() {
                         </div>
                     )}
 
-                    {/* Comparison Charts Logic - Prioritize Benchmark Data */}
+                    {/* Comparison Charts Logic - Prioritize Benchmark Data from LATEST version */}
                     {(() => {
                         const projectModels = models.filter(m => m.projectId === selectedProject);
-                        const bestModel = projectModels.find(m => m.metrics?.algorithm_comparison);
-                        const benchmarkData = bestModel?.metrics?.algorithm_comparison;
+                        // Sort by version descending and get latest model with benchmark data
+                        const latestBenchmarkModel = projectModels
+                            .filter(m => m.metrics?.algorithm_comparison)
+                            .sort((a, b) => (b.scriptVersion || 0) - (a.scriptVersion || 0))[0];
+                        const benchmarkData = latestBenchmarkModel?.metrics?.algorithm_comparison;
 
                         // Parse Benchmark Data
                         let chartData: any[] = [];

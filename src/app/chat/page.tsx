@@ -323,30 +323,44 @@ export default function ChatPage() {
                 const studioModel = modelMap[selectedModel.id] || 'gemini';
 
                 // Build comprehensive prompt for COMPLETE NEW VERSION
-                const codeGenPrompt = `You are a Senior ML Engineer. Generate a COMPLETELY NEW and IMPROVED Python ML training script.
+                const codeGenPrompt = `You are a Senior ML Engineer. Generate an IMPROVED Python ML training script.
 
-REFERENCE SCRIPT (for structure and context only):
+CURRENT SCRIPT:
 \`\`\`python
 ${currentScript}
 \`\`\`
 
-USER'S IMPROVEMENT REQUESTS (implement ALL of these):
+CONVERSATION HISTORY (implement improvements discussed here):
 ${messages.slice(-10).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n---\n')}
 
-LATEST INSTRUCTION: ${messageContent}
+LATEST REQUEST: ${messageContent}
 
-CRITICAL REQUIREMENTS:
-1. Generate a BRAND NEW COMPLETE SCRIPT from scratch
-2. Implement ALL the improvements discussed in the chat
-3. Include ALL necessary imports at the top
-4. Include ALL functions: load_data, preprocess, train_model, evaluate, save_model
-5. Include the main() function and if __name__ == "__main__" block
-6. The script must be 100% complete and immediately runnable
-7. NO placeholders like "...", NO comments like "rest of code", NO "same as before"
-8. This is NOT a modification - it's a complete rewrite with improvements
+YOUR MISSION:
+1. Implement ALL improvements specifically requested in the conversation above
+2. You MAY also add additional improvements if you believe they will boost accuracy/performance
+3. You MAY modify or skip a suggested improvement if you know it will cause errors
+4. Use your ML expertise to create the BEST possible script
 
-OUTPUT FORMAT:
-Return ONLY the complete Python script. No explanations, no markdown headers, just pure Python code.`;
+FLEXIBILITY - Consider the data type and apply appropriate techniques:
+• TABULAR DATA: Feature engineering, scaling, encoding, class imbalance handling
+• IMAGE DATA: Augmentation, transfer learning, proper normalization
+• TEXT DATA: Tokenization, embeddings, proper text preprocessing
+• TIME SERIES: Lag features, rolling windows, proper train/test splits
+• Apply techniques that make sense for the specific problem
+
+SAFETY REQUIREMENTS (MUST FOLLOW):
+• The script MUST run without errors - test your logic mentally
+• All imports must be at the top and valid
+• Handle edge cases (division by zero, missing values, etc.)
+• Don't use packages that aren't installed (stick to sklearn, pandas, numpy, and optionally xgboost/lightgbm)
+• If adding new features, ensure they're added to the feature list
+
+OUTPUT STRUCTURE:
+• Complete script with: load_data, preprocess, train_model, evaluate, save_model, main
+• Include if __name__ == "__main__": main()
+• NO placeholders, NO "...", NO incomplete code
+
+Return ONLY the Python script. No explanations.`;
 
                 // Call GenAI to generate implementation code
                 const genRes = await fetch('/api/studio/chat', {
