@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
         }
 
         const projectData = projectDoc.data();
-        const currentScript = projectData?.script || '';
+        const currentScript = projectData?.currentScript || '';
 
         // Only update if code actually changed
         if (currentScript === code) {
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
         // Update the project script
         await projectRef.update({
-            script: code,
+            currentScript: code,
             lastUpdated: FieldValue.serverTimestamp(),
             lastSyncSource: source,
             lastSyncAt: FieldValue.serverTimestamp()

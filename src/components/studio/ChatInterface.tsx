@@ -149,7 +149,9 @@ export const ChatInterface = ({
                         rows: datasetInfo.rows,
                         taskType: datasetInfo.taskType,
                         targetColumn: datasetInfo.targetColumn
-                    } : undefined
+                    } : undefined,
+                    // INCLUDE HISTORY
+                    history: messages.map(m => ({ role: m.role, content: m.content }))
                 })
             });
 

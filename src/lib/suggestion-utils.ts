@@ -191,3 +191,75 @@ export function isImprovementSuggestion(content: string): boolean {
 
     return hasImprovementKeyword && hasCodeBlock;
 }
+
+/**
+ * Detect if code is a snippet (incomplete) rather than a full script
+ * A full script should have imports and a main function structure
+ */
+export function isSnippet(code: string): boolean {
+    if (!code || code.length < 50) return false; // Too short to judge
+
+    // Check for imports - a full script almost always has imports
+    const hasImports = /^\s*(import|from)\s+\w+/m.test(code);
+
+    // Check for main function patterns
+    const hasMainStructure = /def\s+(main|train|load_data|preprocess|evaluate|save_model)\s*\(/m.test(code);
+
+    // Check for if __name__ == "__main__" block - indicates complete script
+    const hasMainBlock = /__name__\s*==\s*["']__main__["']/m.test(code);
+
+    // Check for placeholder patterns
+    const hasPlaceholders = /\.\.\.|# ?(rest of|existing|same as|continue|your code|TODO)/i.test(code);
+
+    // If has placeholders, definitely a snippet
+    if (hasPlaceholders) return true;
+
+    // If it has imports AND main structure/block, it's a COMPLETE script
+    if (hasImports && (hasMainStructure || hasMainBlock)) return false;
+
+    // If it has imports AND is substantial (>500 chars), likely complete
+    if (hasImports && code.length > 500) return false;
+
+    // If no imports and code is substantial, it's probably a snippet
+    if (!hasImports && code.length > 100) return true;
+
+    return false;
+}
+
+/**
+ * Merge a code snippet with the base script by replacing matching functions
+ */
+export function mergeSnippetWithBase(snippet: string, baseScript: string): string {
+    if (!snippet || !baseScript) return snippet || baseScript;
+
+    // Extract function definitions from snippet
+    const functionPattern = /def\s+(\w+)\s*\([^)]*\):\s*((?:(?!^def\s)[\s\S])*)/gm;
+    const snippetFunctions: Map<string, string> = new Map();
+
+    let match;
+    while ((match = functionPattern.exec(snippet)) !== null) {
+        const funcName = match[1];
+        const fullMatch = match[0];
+        snippetFunctions.set(funcName, fullMatch);
+    }
+
+    // If no functions found in snippet, it might be top-level code - return base
+    if (snippetFunctions.size === 0) {
+        return baseScript;
+    }
+
+    // Replace matching functions in base script
+    let mergedScript = baseScript;
+    for (const [funcName, funcCode] of snippetFunctions) {
+        const baseFuncPattern = new RegExp(
+            `def\\s+${funcName}\\s*\\([^)]*\\):\\s*(?:(?!^def\\s)[\\s\\S])*`,
+            'gm'
+        );
+
+        if (baseFuncPattern.test(mergedScript)) {
+            mergedScript = mergedScript.replace(baseFuncPattern, funcCode);
+        }
+    }
+
+    return mergedScript;
+}

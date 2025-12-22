@@ -39,6 +39,9 @@ interface Model {
         silhouette?: number
         inertia?: number
         extractedFrom?: string
+        // Benchmark comparison data
+        algorithm_comparison?: any[] | Record<string, any>
+        best_algorithm?: string
     }
     feature_columns?: string[]
     created_at: string
@@ -104,6 +107,18 @@ export default function DeployPage() {
                     )
                 }
 
+                // DEDUPLICATION: Remove duplicates by model_id and name
+                const seenIds = new Set<string>();
+                const seenNames = new Set<string>();
+                modelsList = modelsList.filter((m: any) => {
+                    const uniqueKey = m.projectId || m.model_id;
+                    if (seenIds.has(uniqueKey)) return false;
+                    if (m.name && seenNames.has(m.name)) return false;
+                    seenIds.add(uniqueKey);
+                    if (m.name) seenNames.add(m.name);
+                    return true;
+                });
+
                 // enrich with feature columns
                 modelsList = modelsList.map((model: Model) => {
                     // Try to find matching dataset (most recent one or by linking ID if available - here heuristics)
@@ -126,10 +141,54 @@ export default function DeployPage() {
         return () => unsubscribeModels()
     }, [user])
 
+    // Helper to find best model from algorithm_comparison benchmark
+    const getBestFromBenchmark = (model: Model): { algorithm: string, score: number } | null => {
+        const comparison = model.metrics?.algorithm_comparison
+        if (!comparison) return null
+
+        // Handle both array and object formats
+        let comparisonArray: any[] = []
+        if (Array.isArray(comparison)) {
+            comparisonArray = comparison
+        } else if (typeof comparison === 'object') {
+            // Convert object format to array
+            comparisonArray = Object.entries(comparison).map(([name, data]: [string, any]) => ({
+                algorithm: name,
+                name: name,
+                cv_score: data.cv_score ?? data.mean ?? data.score ?? 0,
+                mean: data.mean ?? data.cv_score ?? 0
+            }))
+        }
+
+        if (comparisonArray.length === 0) return null
+
+        // Find best performing algorithm
+        let best = comparisonArray[0]
+        for (const alg of comparisonArray) {
+            const currentScore = alg.mean ?? alg.cv_score ?? alg.score ?? 0
+            const bestScore = best.mean ?? best.cv_score ?? best.score ?? 0
+            if (currentScore > bestScore) {
+                best = alg
+            }
+        }
+
+        return {
+            algorithm: best.algorithm || best.name || 'Unknown',
+            score: best.mean ?? best.cv_score ?? best.score ?? 0
+        }
+    }
+
     // Smart metric display - shows the most relevant metric for each model type
-    // All metrics displayed as user-friendly percentages
+    // Prioritizes benchmark comparison data over direct metrics
     const getMetricDisplay = (model: Model) => {
         const m = model.metrics || {}
+
+        // First check for benchmark comparison data - show best model from there
+        const best = getBestFromBenchmark(model)
+        if (best && best.score > 0) {
+            const pct = best.score > 1 ? best.score : best.score * 100
+            return `${pct.toFixed(2)}%`
+        }
 
         // Classification metrics (accuracy first)
         if (m.accuracy != null && !isNaN(m.accuracy)) {
@@ -161,10 +220,25 @@ export default function DeployPage() {
         return "N/A"
     }
 
+    // Get best algorithm name from benchmark or fallback to registered algorithm
+    const getBestAlgorithmName = (model: Model) => {
+        // First try best_algorithm field
+        if (model.metrics?.best_algorithm) {
+            return model.metrics.best_algorithm
+        }
+        // Then try to find from algorithm_comparison
+        const best = getBestFromBenchmark(model)
+        if (best) {
+            return best.algorithm
+        }
+        // Fallback to registered algorithm
+        return model.algorithm
+    }
+
     // Get metric label based on model type - simplified for beginners
     const getMetricLabel = (model: Model) => {
         const m = model.metrics || {}
-        if (m.accuracy != null) return "ACCURACY"
+        if (m.accuracy != null || m.algorithm_comparison) return "ACCURACY"
         if (m.silhouette != null) return "SCORE"  // Simplified label for clustering
         if (m.r2 != null) return "SCORE"
         if (m.rmse != null) return "ERROR"
@@ -203,13 +277,20 @@ export default function DeployPage() {
                             animate={{ opacity: 1, y: 0 }}
                             className="text-center"
                         >
-                            <h1 className="text-3xl md:text-5xl font-black mb-2 tracking-tight">
-                                <span className="text-transparent bg-clip-text bg-gradient-to-b from-white to-white/50">
-                                    My Deployments
-                                </span>
+                            <h1
+                                className="text-3xl md:text-5xl font-black mb-2 pb-4 tracking-tight animate-gradient-text"
+                                style={{
+                                    backgroundImage: `linear-gradient(135deg, ${themeColor}, #ffffff 40%, ${themeColor})`,
+                                    WebkitBackgroundClip: 'text',
+                                    WebkitTextFillColor: 'transparent',
+                                    backgroundClip: 'text',
+                                    backgroundSize: '200% 200%'
+                                }}
+                            >
+                                My Deployments
                             </h1>
-                            <p className="text-sm text-white/60 max-w-md mx-auto">
-                                Manage your trained models - deploy, undeploy, and run private predictions.
+                            <p className="text-sm text-white/60 max-w-md mx-auto -mt-2">
+                                Deploy, undeploy, and run private predictions
                             </p>
                             {/* Quick nav to marketplace */}
                             <a
@@ -277,7 +358,17 @@ export default function DeployPage() {
                                                         <h3 className="text-lg font-bold text-white truncate">
                                                             {model.name || `${model.target_column} Model`}
                                                         </h3>
-                                                        <p className="text-xs text-white/40">{model.algorithm}</p>
+                                                        <p className="text-xs text-white/40">{getBestAlgorithmName(model)}</p>
+                                                        <p className="text-[10px] text-white/30 mt-0.5">
+                                                            {model.deployedAt?.toDate ?
+                                                                `Deployed ${model.deployedAt.toDate().toLocaleDateString()} ${model.deployedAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` :
+                                                                model.deployedAt?.seconds ?
+                                                                    `Deployed ${new Date(model.deployedAt.seconds * 1000).toLocaleDateString()} ${new Date(model.deployedAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` :
+                                                                    model.created_at ?
+                                                                        `Created ${new Date(model.created_at).toLocaleDateString()}` :
+                                                                        ''
+                                                            }
+                                                        </p>
                                                     </div>
                                                 </div>
                                                 {/* Status Badge */}

@@ -149,9 +149,23 @@ export default function ProfilePage() {
                 status: 'Deployed',
                 accuracy: doc.data().metrics?.accuracy ?? doc.data().metrics?.silhouette ?? doc.data().metrics?.r2 ?? doc.data().bestMetricValue,
                 silhouette: doc.data().metrics?.silhouette,
-                r2: doc.data().metrics?.r2
+                r2: doc.data().metrics?.r2,
+                algorithm_comparison: doc.data().metrics?.algorithm_comparison // Benchmark data for best model display
             }))
-            setUserModels(models)
+
+            // DEDUPLICATION: Remove duplicates by projectId and name
+            const seenIds = new Set<string>();
+            const seenNames = new Set<string>();
+            const dedupedModels = models.filter((m: any) => {
+                const uniqueKey = m.projectId || m.id;
+                if (seenIds.has(uniqueKey)) return false;
+                if (seenNames.has(m.name)) return false;
+                seenIds.add(uniqueKey);
+                seenNames.add(m.name);
+                return true;
+            });
+
+            setUserModels(dedupedModels)
             setLoadingAssets(false)
         }, (err) => {
             console.error('Error fetching models:', err)
@@ -455,7 +469,18 @@ export default function ProfilePage() {
                                         </div>
                                     ) : (
                                         <>
-                                            <h1 className="text-3xl font-bold mb-1" style={{ color: themeColor }}>{profileData.name || "User Name"}</h1>
+                                            <h1
+                                                className="text-3xl font-bold mb-1 animate-gradient-text"
+                                                style={{
+                                                    backgroundImage: `linear-gradient(135deg, ${themeColor}, #ffffff 40%, ${themeColor})`,
+                                                    WebkitBackgroundClip: 'text',
+                                                    WebkitTextFillColor: 'transparent',
+                                                    backgroundClip: 'text',
+                                                    backgroundSize: '200% 200%'
+                                                }}
+                                            >
+                                                {profileData.name || "User Name"}
+                                            </h1>
                                             <p className="text-black/60 dark:text-white/40 text-sm mb-2 font-medium">{profileData.email}</p>
                                             <div className="flex flex-wrap gap-2 justify-center lg:justify-start">
                                                 {profileData.role && (

@@ -547,12 +547,12 @@ export function ScriptVersionsView({ projectId, onVersionSelect, themeColor }: S
 
             {/* Diff Modal */}
             {showDiffModal && (
-                <div className="fixed inset-0 z-50 flex items-start justify-center pt-32 px-4 pb-4" onClick={() => setShowDiffModal(false)}>
+                <div className="fixed inset-0 z-[200] flex items-start justify-center px-4 pb-4" onClick={() => setShowDiffModal(false)}>
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
                     <motion.div
                         initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="relative w-full max-w-6xl max-h-[75vh] rounded-2xl overflow-hidden flex flex-col backdrop-blur-xl"
+                        className="relative w-full max-w-6xl max-h-[85vh] mt-16 rounded-2xl overflow-hidden flex flex-col backdrop-blur-xl"
                         style={{
                             border: `1px solid ${themeColor}30`,
                             boxShadow: `0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.1)`

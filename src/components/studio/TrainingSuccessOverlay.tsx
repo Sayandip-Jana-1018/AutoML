@@ -162,7 +162,7 @@ export const TrainingSuccessOverlay = ({
                 >
                     {/* Background blur */}
                     <motion.div
-                        className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
@@ -336,28 +336,32 @@ export const TrainingSuccessOverlay = ({
                                         </motion.div>
                                     )}
 
-                                    {/* CTA Button */}
+                                    {/* CTA Button - Dark Glassmorphic Design */}
                                     <motion.button
                                         onClick={onClose}
-                                        className="w-full py-4 rounded-2xl font-bold text-white text-lg transition-all relative overflow-hidden"
+                                        className="w-full py-4 rounded-2xl font-bold text-white text-lg transition-all relative overflow-hidden backdrop-blur-xl border"
                                         style={{
-                                            background: `linear-gradient(135deg, ${themeColor}, #8B5CF6, ${themeColor})`,
-                                            backgroundSize: '200% 200%',
-                                            boxShadow: `0 10px 40px ${themeColor}40`
+                                            background: 'linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.7) 100%)',
+                                            borderColor: 'rgba(255,255,255,0.15)',
+                                            boxShadow: `0 10px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1), 0 0 20px ${themeColor}20`
                                         }}
                                         initial={{ y: 20, opacity: 0 }}
                                         animate={{ y: 0, opacity: 1 }}
                                         transition={{ delay: 0.6 }}
-                                        whileHover={{ scale: 1.02, boxShadow: `0 15px 50px ${themeColor}60` }}
+                                        whileHover={{
+                                            scale: 1.02,
+                                            boxShadow: `0 15px 50px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.15), 0 0 30px ${themeColor}30`,
+                                            borderColor: 'rgba(255,255,255,0.25)'
+                                        }}
                                         whileTap={{ scale: 0.98 }}
                                     >
                                         <motion.div
                                             className="absolute inset-0"
                                             style={{
-                                                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+                                                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent)',
                                             }}
                                             animate={{ x: ['-100%', '100%'] }}
-                                            transition={{ duration: 2, repeat: Infinity }}
+                                            transition={{ duration: 3, repeat: Infinity }}
                                         />
                                         <span className="relative flex items-center justify-center gap-3">
                                             <Rocket className="w-5 h-5" />

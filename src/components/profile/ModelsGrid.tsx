@@ -16,6 +16,7 @@ interface Model {
     algorithm?: string
     target_column?: string
     projectId?: string
+    algorithm_comparison?: any[] // Benchmark comparison from AutoML
 }
 
 interface ModelsGridProps {
@@ -24,24 +25,68 @@ interface ModelsGridProps {
     onViewAll?: () => void
 }
 
+// Helper to find the best model from algorithm_comparison benchmark
+function getBestFromBenchmark(model: Model): { algorithm: string, score: number } | null {
+    const comparison = model.algorithm_comparison
+    if (!comparison) return null
+
+    // Handle both array and object formats
+    let comparisonArray: any[] = []
+    if (Array.isArray(comparison)) {
+        comparisonArray = comparison
+    } else if (typeof comparison === 'object') {
+        // Convert object format to array (e.g., {RandomForest: {cv_score: 0.82}} -> [{algorithm: 'RandomForest', cv_score: 0.82}])
+        comparisonArray = Object.entries(comparison).map(([name, data]: [string, any]) => ({
+            algorithm: name,
+            name: name,
+            cv_score: data.cv_score ?? data.mean ?? data.score ?? 0,
+            mean: data.mean ?? data.cv_score ?? 0
+        }))
+    }
+
+    if (comparisonArray.length === 0) return null
+
+    // Find the best performing algorithm
+    let best = comparisonArray[0];
+    for (const alg of comparisonArray) {
+        const currentScore = alg.mean ?? alg.cv_score ?? alg.score ?? 0;
+        const bestScore = best.mean ?? best.cv_score ?? best.score ?? 0;
+        if (currentScore > bestScore) {
+            best = alg;
+        }
+    }
+    return {
+        algorithm: best.algorithm || best.name || 'Unknown',
+        score: best.mean ?? best.cv_score ?? best.score ?? 0
+    };
+}
+
 // Helper to display the most relevant metric for any model type
-function getMetricDisplay(model: Model): string {
+function getMetricDisplay(model: Model): { metric: string, algorithm?: string } {
+    // First check for benchmark comparison data - show best model from there
+    const best = getBestFromBenchmark(model);
+    if (best && best.score > 0) {
+        const pct = best.score > 1 ? best.score : best.score * 100;
+        return { metric: `${pct.toFixed(2)}% Accuracy`, algorithm: best.algorithm };
+    }
+
+    // Fallback to direct metrics if no benchmark data
     // Classification - accuracy
     if (model.accuracy != null && !isNaN(model.accuracy)) {
         const pct = model.accuracy > 1 ? model.accuracy : model.accuracy * 100;
-        return `${pct.toFixed(1)}% Accuracy`;
+        return { metric: `${pct.toFixed(1)}% Accuracy` };
     }
-    // Clustering - silhouette score (convert to percentage for simplicity)
+    // Clustering - silhouette score
     if (model.silhouette != null && !isNaN(model.silhouette)) {
         const pct = Math.abs(model.silhouette) * 100;
-        return `${pct.toFixed(1)}% Score`;
+        return { metric: `${pct.toFixed(1)}% Score` };
     }
     // Regression - R² score
     if (model.r2 != null && !isNaN(model.r2)) {
         const pct = model.r2 * 100;
-        return `${pct.toFixed(1)}% R²`;
+        return { metric: `${pct.toFixed(1)}% R²` };
     }
-    return 'Training...';
+    return { metric: 'Training...' };
 }
 
 export function ModelsGrid({ models, loading, onViewAll }: ModelsGridProps) {
@@ -108,14 +153,15 @@ export function ModelsGrid({ models, loading, onViewAll }: ModelsGridProps) {
                         {model.name || 'Trained Model'}
                     </h3>
                     <p className="text-black/60 dark:text-white/50 text-sm mb-3">
-                        {model.algorithm || model.type || 'ML Model'}
+                        {/* Show best algorithm from benchmark if available, otherwise show registered algorithm */}
+                        {getMetricDisplay(model).algorithm || model.algorithm || model.type || 'ML Model'}
                     </p>
                     <div className="flex justify-between items-center">
                         <span
                             className="text-sm font-bold px-3 py-1.5 rounded-lg"
                             style={{ backgroundColor: `${themeColor}20`, color: themeColor }}
                         >
-                            {getMetricDisplay(model)}
+                            {getMetricDisplay(model).metric}
                         </span>
                     </div>
                 </motion.div>

@@ -17,6 +17,10 @@ import { ChartCard, ChartGrid, Chart, POPULAR_CHARTS } from '@/components/visual
 import { ProjectModal } from '@/components/visualize/ProjectModal';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { runClientSidePython } from '@/lib/pyodide-manager';
+import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
+    LineChart, Line, ComposedChart, ErrorBar, Scatter
+} from 'recharts';
 
 type TabType = 'comparison' | 'charts';
 
@@ -38,8 +42,10 @@ interface Model {
         recall?: number;
         f1?: number;
         silhouette?: number;
+        algorithm_comparison?: any; // Comparison data from AutoML
     };
     bestMetricValue?: number;
+    algorithm?: string;
 }
 
 export default function VisualizePage() {
@@ -48,7 +54,7 @@ export default function VisualizePage() {
     const [activeTab, setActiveTab] = useState<TabType>('comparison');
     const [models, setModels] = useState<Model[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedModels, setSelectedModels] = useState<string[]>([]);
+
 
     // Chart state
     const [chartPrompt, setChartPrompt] = useState('');
@@ -130,8 +136,11 @@ export default function VisualizePage() {
                             f1: data.metrics?.f1 ?? data.f1,
                             // Clustering metrics
                             silhouette: data.metrics?.silhouette,
+                            // Preserve full metrics object for extra data (like algorithm_comparison)
+                            metrics: data.metrics,
                             // Use best available metric for display
-                            bestMetricValue: data.bestMetricValue ?? data.metrics?.accuracy ?? data.metrics?.silhouette ?? data.metrics?.r2
+                            bestMetricValue: data.bestMetricValue ?? data.metrics?.accuracy ?? data.metrics?.silhouette ?? data.metrics?.r2,
+                            algorithm: data.algorithm || data.config?.algorithm || data.metrics?.best_algorithm
                         } as Model & { ownerId?: string };
                     })
                     .filter(m => m.ownerId === user.uid || m.projectId); // Filter by owner
@@ -399,13 +408,7 @@ export default function VisualizePage() {
         }
     };
 
-    const toggleModelSelection = (modelId: string) => {
-        setSelectedModels(prev =>
-            prev.includes(modelId)
-                ? prev.filter(id => id !== modelId)
-                : [...prev, modelId]
-        );
-    };
+
 
     const renderTabContent = () => {
         if (loading) {
@@ -419,166 +422,351 @@ export default function VisualizePage() {
         if (activeTab === 'comparison') {
             return (
                 <div className="space-y-6">
+                    {/* Project Selector Header for Models Tab */}
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+                        <button
+                            onClick={() => setIsProjectModalOpen(true)}
+                            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white/5 border border-white/20 hover:bg-white/10 transition-all group"
+                        >
+                            <span className="text-white/60">Project:</span>
+                            <span className="font-bold text-white group-hover:scale-105 transition-transform inline-block">
+                                {selectedProjectName || 'Select Project'}
+                            </span>
+                            <ChevronRight className="w-4 h-4 text-white/40 group-hover:translate-x-1 transition-transform" />
+                        </button>
+                    </div>
 
-                    {models.length === 0 ? (
+                    <ProjectModal
+                        isOpen={isProjectModalOpen}
+                        onClose={() => setIsProjectModalOpen(false)}
+                        onSelectProject={(id) => setSelectedProject(id)}
+                    />
+
+                    {!selectedProject ? (
                         <div className="text-center py-16">
                             <BarChart3 className="w-16 h-16 mx-auto text-white/20 mb-4" />
-                            <h3 className="text-xl font-semibold text-white/60 mb-2">No Models Yet</h3>
-                            <p className="text-white/40 mb-6">Train your first model in the Studio</p>
+                            <h3 className="text-xl font-semibold text-white/60 mb-2">Select a Project</h3>
+                            <p className="text-white/40 mb-6">Choose a project to see its trained models and comparisons</p>
+                        </div>
+                    ) : models.filter(m => m.projectId === selectedProject).length === 0 ? (
+                        <div className="text-center py-16">
+                            <BarChart3 className="w-16 h-16 mx-auto text-white/20 mb-4" />
+                            <h3 className="text-xl font-semibold text-white/60 mb-2">No Models Found</h3>
+                            <p className="text-white/40 mb-6">This project hasn't trained any models yet.</p>
                             <Link
-                                href="/studio"
+                                href={`/studio/${selectedProject}`}
                                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold"
                                 style={{ background: themeColor, color: 'black' }}
                             >
-                                Go to Studio <ChevronRight className="w-4 h-4" />
+                                Go to Training Studio <ChevronRight className="w-4 h-4" />
                             </Link>
                         </div>
                     ) : (
-                        <div
-                            className="rounded-2xl overflow-hidden backdrop-blur-xl mx-auto max-w-5xl"
-                            style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)' }}
-                        >
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead>
-                                        <tr className="border-b border-white/10">
-                                            <th className="p-4 text-left text-xs font-semibold text-white/40 uppercase tracking-wider">Select</th>
-                                            <th className="p-4 text-left text-xs font-semibold text-white/40 uppercase tracking-wider">Model</th>
-                                            <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Accuracy</th>
-                                            <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Precision</th>
-                                            <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Recall</th>
-                                            <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">F1</th>
-                                            <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {models.map((model, i) => (
-                                            <motion.tr
-                                                key={model.id}
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                transition={{ delay: i * 0.05 }}
-                                                className="border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
-                                                onClick={() => toggleModelSelection(model.id)}
-                                            >
-                                                <td className="p-4">
-                                                    <div
-                                                        className="w-5 h-5 rounded border-2 flex items-center justify-center transition-colors"
-                                                        style={{
-                                                            borderColor: selectedModels.includes(model.id) ? themeColor : 'rgba(255,255,255,0.3)',
-                                                            background: selectedModels.includes(model.id) ? themeColor : 'transparent'
-                                                        }}
+                        <div className="space-y-8">
+                            {/* Detailed Algorithm Comparison from AutoML (find first model that has it) */}
+                            {models.filter(m => m.projectId === selectedProject).find(m => m.metrics?.algorithm_comparison) && (
+                                <div
+                                    className="rounded-2xl overflow-hidden backdrop-blur-xl mx-auto max-w-5xl"
+                                    style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)' }}
+                                >
+                                    <div className="p-4 border-b border-white/10 bg-white/5 flex flex-col items-center text-center">
+                                        <h3 className="font-semibold text-white flex items-center gap-2 justify-center">
+                                            <Sparkles className="w-4 h-4 text-yellow-400" />
+                                            AutoML Algorithm Benchmark
+                                        </h3>
+                                        <p className="text-xs text-white/40 mt-1">Performance comparison of all algorithms tested during training</p>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="border-b border-white/10">
+                                                    <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Algorithm</th>
+                                                    <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">CV Score (Mean)</th>
+                                                    <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Std Dev</th>
+                                                    <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Rating</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {/* Coerce algorithm_comparison to array format if it's an object */}
+                                                {(() => {
+                                                    const bestModel = models.filter(m => m.projectId === selectedProject).find(m => m.metrics?.algorithm_comparison);
+                                                    const comparison = bestModel?.metrics?.algorithm_comparison as any;
+
+                                                    if (!comparison) return null;
+
+                                                    // Handle array or object format
+                                                    let items: { algorithm: string; mean: number; std: number }[] = [];
+                                                    if (Array.isArray(comparison)) {
+                                                        // Fix: metrics from backend uses cv_score, but UI expects mean. Map it.
+                                                        items = comparison.map((c: any) => ({
+                                                            algorithm: c.algorithm,
+                                                            mean: c.mean ?? c.cv_score,
+                                                            std: c.std ?? c.cv_std
+                                                        }));
+                                                    } else if (typeof comparison === 'object') {
+                                                        items = Object.entries(comparison).map(([algo, metrics]: any) => ({
+                                                            algorithm: algo,
+                                                            mean: metrics.cv_score || metrics.mean,
+                                                            std: metrics.cv_std || metrics.std
+                                                        }));
+                                                    }
+
+                                                    return items.sort((a: any, b: any) => b.mean - a.mean).map((item: any, i: number) => (
+                                                        <tr key={i} className="border-b border-white/5 hover:bg-white/5">
+                                                            <td className="p-4 font-medium text-white text-center">{item.algorithm}</td>
+                                                            <td className="p-4 text-center font-bold" style={{ color: i === 0 ? themeColor : 'white' }}>
+                                                                {(item.mean * 100).toFixed(2)}%
+                                                            </td>
+                                                            <td className="p-4 text-center text-white/40">
+                                                                ±{(item.std * 100).toFixed(2)}%
+                                                            </td>
+                                                            <td className="p-4 text-center text-yellow-400 text-xs">
+                                                                {"★".repeat(Math.max(1, Math.round(item.mean * 5)))}
+                                                            </td>
+                                                        </tr>
+                                                    ));
+                                                })()}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Standard Model List */}
+                            <div
+                                className="rounded-2xl overflow-hidden backdrop-blur-xl mx-auto max-w-5xl"
+                                style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)' }}
+                            >
+                                <div className="p-4 border-b border-white/10 bg-white/5 text-center">
+                                    <h3 className="font-semibold text-white">Registered Models</h3>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="border-b border-white/10">
+                                                <th className="p-4 text-left text-xs font-semibold text-white/40 uppercase tracking-wider">Model Name</th>
+                                                <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Accuracy</th>
+                                                <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Precision</th>
+                                                <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Recall</th>
+                                                <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">F1</th>
+                                                <th className="p-4 text-center text-xs font-semibold text-white/40 uppercase tracking-wider">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {models
+                                                .filter(m => m.projectId === selectedProject)
+                                                .map((model, i) => (
+                                                    <motion.tr
+                                                        key={model.id}
+                                                        initial={{ opacity: 0, y: 10 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        transition={{ delay: i * 0.05 }}
+                                                        className="border-b border-white/5 hover:bg-white/5 transition-colors"
                                                     >
-                                                        {selectedModels.includes(model.id) && <CheckCircle className="w-3 h-3 text-black" />}
-                                                    </div>
-                                                </td>
-                                                <td className="p-4">
-                                                    <div className="font-semibold text-white">{model.name}</div>
-                                                    <div className="text-xs text-white/40">v{model.scriptVersion || 1}</div>
-                                                </td>
-                                                <td className="p-4 text-center">
-                                                    <span className="font-bold" style={{ color: (model.accuracy || model.silhouette) ? themeColor : 'rgba(255,255,255,0.3)' }}>
-                                                        {model.accuracy ? `${(model.accuracy * 100).toFixed(1)}%` :
-                                                            model.silhouette ? `${(Math.abs(model.silhouette) * 100).toFixed(1)}%` : '-'}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 text-center text-white/60">
-                                                    {model.precision ? `${(model.precision * 100).toFixed(1)}%` : '-'}
-                                                </td>
-                                                <td className="p-4 text-center text-white/60">
-                                                    {model.recall ? `${(model.recall * 100).toFixed(1)}%` : '-'}
-                                                </td>
-                                                <td className="p-4 text-center text-white/60">
-                                                    {model.f1 ? `${(model.f1 * 100).toFixed(1)}%` : '-'}
-                                                </td>
-                                                <td className="p-4 text-center">
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${model.status === 'ready' ? 'bg-green-500/20 text-green-400' :
-                                                        model.status === 'training' ? 'bg-yellow-500/20 text-yellow-400' :
-                                                            'bg-gray-500/20 text-gray-400'
-                                                        }`}>
-                                                        {model.status}
-                                                    </span>
-                                                </td>
-                                            </motion.tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                                        <td className="p-4">
+                                                            <div className="font-semibold text-white">{model.algorithm || model.name}</div>
+                                                            {model.algorithm && model.name !== model.algorithm && (
+                                                                <div className="text-xs text-white/40">{model.name}</div>
+                                                            )}
+                                                            <div className="text-xs text-white/40">v{model.scriptVersion || 1} • {new Date(model.createdAt?.seconds * 1000).toLocaleDateString()}</div>
+                                                        </td>
+                                                        <td className="p-4 text-center">
+                                                            <span className="font-bold" style={{ color: (model.accuracy || model.silhouette) ? themeColor : 'rgba(255,255,255,0.3)' }}>
+                                                                {model.accuracy ? `${(model.accuracy * 100).toFixed(1)}%` :
+                                                                    model.silhouette ? `${(Math.abs(model.silhouette) * 100).toFixed(1)}%` : '-'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4 text-center text-white/60">
+                                                            {model.precision ? `${(model.precision * 100).toFixed(1)}%` : '-'}
+                                                        </td>
+                                                        <td className="p-4 text-center text-white/60">
+                                                            {model.recall ? `${(model.recall * 100).toFixed(1)}%` : '-'}
+                                                        </td>
+                                                        <td className="p-4 text-center text-white/60">
+                                                            {model.f1 ? `${(model.f1 * 100).toFixed(1)}%` : '-'}
+                                                        </td>
+                                                        <td className="p-4 text-center">
+                                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${model.status === 'ready' ? 'bg-green-500/20 text-green-400' :
+                                                                model.status === 'training' ? 'bg-yellow-500/20 text-yellow-400' :
+                                                                    'bg-gray-500/20 text-gray-400'
+                                                                }`}>
+                                                                {model.status}
+                                                            </span>
+                                                        </td>
+                                                    </motion.tr>
+                                                ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Model Comparison - Vertical Bar Graphs */}
-                    {selectedModels.length >= 2 && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="mt-6 p-6 rounded-2xl backdrop-blur-xl"
-                            style={{ background: 'rgba(0,0,0,0.4)', border: `1px solid ${themeColor}30` }}
-                        >
-                            <div className="flex flex-col items-center mb-6">
-                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                    <BarChart3 className="w-5 h-5" style={{ color: themeColor }} />
-                                    Model Comparison
-                                </h3>
-                                <span className="text-xs text-white/40">{selectedModels.length} models selected</span>
-                                <button
-                                    onClick={() => setSelectedModels([])}
-                                    className="mt-2 text-xs px-3 py-1 rounded-lg bg-white/10 text-white/60 hover:bg-white/20"
-                                >
-                                    Clear Selection
-                                </button>
-                            </div>
+                    {/* Comparison Charts Logic - Prioritize Benchmark Data */}
+                    {(() => {
+                        const projectModels = models.filter(m => m.projectId === selectedProject);
+                        const bestModel = projectModels.find(m => m.metrics?.algorithm_comparison);
+                        const benchmarkData = bestModel?.metrics?.algorithm_comparison;
 
-                            {/* Vertical Bar Chart Grid */}
-                            <div className="grid grid-cols-4 gap-6">
-                                {['Accuracy', 'Precision', 'Recall', 'F1'].map(metric => (
-                                    <div key={metric} className="flex flex-col items-center">
-                                        <div className="text-xs text-white/40 uppercase tracking-wider mb-3">{metric}</div>
-                                        <div className="flex items-end justify-center gap-2 h-32">
-                                            {selectedModels.map((modelId, idx) => {
-                                                const model = models.find(m => m.id === modelId);
-                                                if (!model) return null;
-                                                // For Accuracy, also check silhouette for clustering models
-                                                const value = metric === 'Accuracy' ? (model.accuracy ?? model.silhouette) :
-                                                    metric === 'Precision' ? model.precision :
-                                                        metric === 'Recall' ? model.recall : model.f1;
-                                                const percent = (value ?? 0) * 100;
-                                                const colors = ['#22c55e', '#8b5cf6', '#f59e0b', '#ef4444', '#3b82f6'];
-                                                const barColor = colors[idx % colors.length];
-                                                return (
-                                                    <div key={modelId} className="flex flex-col items-center" title={model.name}>
-                                                        <span className="text-xs font-bold text-white mb-1">{percent.toFixed(0)}%</span>
-                                                        <motion.div
-                                                            initial={{ height: 0 }}
-                                                            animate={{ height: `${percent * 1.2}px` }}
-                                                            className="w-8 rounded-t-lg"
-                                                            style={{ background: barColor, minHeight: 4 }}
-                                                        />
-                                                        <span className="text-[8px] text-white/40 mt-1 w-10 text-center truncate">{model.name}</span>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
+                        // Parse Benchmark Data
+                        let chartData: any[] = [];
+                        let isBenchmark = false;
+                        let comparisonTitle = 'Model Comparison';
+                        let comparisonCount = 0;
+
+                        if (benchmarkData) {
+                            isBenchmark = true;
+                            comparisonTitle = 'AutoML Candidate Comparison';
+                            if (Array.isArray(benchmarkData)) {
+                                chartData = benchmarkData.map((c: any) => ({
+                                    name: c.algorithm,
+                                    accuracy: (c.mean ?? c.cv_score) * 100,
+                                    std: (c.std ?? c.cv_std) * 100
+                                }));
+                            } else if (typeof benchmarkData === 'object') {
+                                chartData = Object.entries(benchmarkData).map(([algo, metrics]: any) => ({
+                                    name: algo,
+                                    accuracy: (metrics.mean || metrics.cv_score) * 100,
+                                    std: (metrics.std || metrics.cv_std) * 100
+                                }));
+                            }
+                        } else if (projectModels.length >= 2) {
+                            chartData = projectModels.map(m => ({
+                                name: m.algorithm || m.name,
+                                accuracy: (m.accuracy || 0) * 100,
+                                std: 0,
+                                f1: (m.f1 || 0) * 100
+                            }));
+                        }
+
+                        comparisonCount = chartData.length;
+                        if (comparisonCount < 2 && !benchmarkData) return null;
+
+                        // Sort by accuracy descending
+                        chartData.sort((a, b) => b.accuracy - a.accuracy);
+
+                        // Vibrant Colors
+                        const vibrantColors = ['#FF0080', '#7928CA', '#0070F3', '#00DFD8', '#FF4D4D', '#F5A623', '#50E3C2'];
+
+                        const CustomTooltip = ({ active, payload, label }: any) => {
+                            if (active && payload && payload.length) {
+                                return (
+                                    <div className="bg-black/80 border border-white/10 p-3 rounded-lg backdrop-blur-md shadow-xl">
+                                        <p className="text-white font-bold mb-1">{label}</p>
+                                        {payload.map((p: any, idx: number) => (
+                                            <div key={idx} className="flex items-center gap-2 text-xs">
+                                                <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+                                                <span className="text-white/70">{p.name}:</span>
+                                                <span className="text-white font-mono">{typeof p.value === 'number' ? p.value.toFixed(2) : p.value}%</span>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
+                                );
+                            }
+                            return null;
+                        };
 
-                            {/* Legend */}
-                            <div className="flex justify-center gap-4 mt-4 flex-wrap">
-                                {selectedModels.map((modelId, idx) => {
-                                    const model = models.find(m => m.id === modelId);
-                                    if (!model) return null;
-                                    const colors = ['#22c55e', '#8b5cf6', '#f59e0b', '#ef4444', '#3b82f6'];
-                                    return (
-                                        <div key={modelId} className="flex items-center gap-2">
-                                            <div className="w-3 h-3 rounded" style={{ background: colors[idx % colors.length] }} />
-                                            <span className="text-xs text-white/60">{model.name}</span>
+                        return (
+                            <div className="mt-8 space-y-8">
+                                <div className="flex flex-col items-center justify-center text-center px-4">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <BarChart3 className="w-6 h-6 text-purple-400" />
+                                        <h3 className="text-xl font-bold text-white">
+                                            {comparisonTitle}
+                                        </h3>
+                                    </div>
+                                    <span className="text-xs text-white/40 uppercase tracking-widest">
+                                        Comparing {comparisonCount} Algorithms
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                    {/* 1. Bar Chart - Accuracy Ranking */}
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="p-5 rounded-2xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 backdrop-blur-xl shadow-lg shadow-purple-500/5"
+                                    >
+                                        <div className="text-sm font-semibold text-white/60 mb-6 text-center">Accuracy Ranking</div>
+                                        <div className="h-[300px] w-full">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 50 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                                                    <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} axisLine={false} tickLine={false} />
+                                                    <YAxis tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
+                                                    <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                                                    <Bar dataKey="accuracy" name="Accuracy" radius={[4, 4, 0, 0]}>
+                                                        {chartData.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={vibrantColors[index % vibrantColors.length]} />
+                                                        ))}
+                                                    </Bar>
+                                                </BarChart>
+                                            </ResponsiveContainer>
                                         </div>
-                                    );
-                                })}
+                                    </motion.div>
+
+                                    {/* 2. Stability Chart (Bar with Error Logic represented) */}
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.1 }}
+                                        className="p-5 rounded-2xl bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 backdrop-blur-xl shadow-lg shadow-cyan-500/5"
+                                    >
+                                        <div className="text-sm font-semibold text-white/60 mb-6 text-center">{isBenchmark ? 'Stability (Accuracy ± Std)' : 'F1 Score'}</div>
+                                        <div className="h-[300px] w-full">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                {isBenchmark ? (
+                                                    <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 50 }}>
+                                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                                                        <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} axisLine={false} tickLine={false} />
+                                                        <YAxis domain={['auto', 'auto']} tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
+                                                        <RechartsTooltip content={<CustomTooltip />} />
+                                                        <Bar dataKey="accuracy" name="Mean Accuracy" fill="#2e2e2e" radius={[4, 4, 0, 0]} fillOpacity={0.3}>
+                                                            <ErrorBar dataKey="std" width={4} strokeWidth={2} stroke="#00DFD8" />
+                                                        </Bar>
+                                                        <Scatter dataKey="accuracy" name="Mean" fill="#00DFD8" shape="circle" />
+                                                    </ComposedChart>
+                                                ) : (
+                                                    <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                                                        <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} axisLine={false} tickLine={false} />
+                                                        <YAxis tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
+                                                        <RechartsTooltip content={<CustomTooltip />} />
+                                                        <Bar dataKey="f1" name="F1 Score" radius={[4, 4, 0, 0]}>
+                                                            {chartData.map((entry, index) => (
+                                                                <Cell key={`cell-${index}`} fill={vibrantColors[(index + 2) % vibrantColors.length]} />
+                                                            ))}
+                                                        </Bar>
+                                                    </BarChart>
+                                                )}
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </motion.div>
+
+                                    {/* 3. Line Chart - Performance Curve */}
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.2 }}
+                                        className="p-5 rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 backdrop-blur-xl shadow-lg shadow-blue-500/5"
+                                    >
+                                        <div className="text-sm font-semibold text-white/60 mb-6 text-center">Performance Curve</div>
+                                        <div className="h-[300px] w-full">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <LineChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 50 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                                                    <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} axisLine={false} tickLine={false} />
+                                                    <YAxis tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} domain={[0, 100]} />
+                                                    <RechartsTooltip content={<CustomTooltip />} />
+                                                    <Line type="monotone" dataKey="accuracy" stroke="#0070F3" strokeWidth={3} dot={{ fill: '#0070F3', r: 4 }} activeDot={{ r: 6, fill: '#fff' }} />
+                                                </LineChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </motion.div>
+                                </div>
                             </div>
-                        </motion.div>
-                    )}
+                        );
+                    })()}
                 </div>
             );
         }
@@ -586,35 +774,90 @@ export default function VisualizePage() {
         // Charts Tab
         return (
             <div className="space-y-6">
-                {/* Project Selector Header */}
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                    <button
-                        onClick={() => setIsProjectModalOpen(true)}
-                        className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white/5 border border-white/20 hover:bg-white/10 transition-all group"
-                    >
-                        <span className="text-white/60">Project:</span>
-                        <span className="font-bold text-white group-hover:scale-105 transition-transform inline-block">
-                            {selectedProjectName || 'Select a Project'}
-                        </span>
-                        <ChevronRight className="w-4 h-4 text-white/40 group-hover:translate-x-1 transition-transform" />
-                    </button>
+                {/* Best Model Info Header (Derived from Selected Project) */}
+                <div className="flex flex-col items-center justify-center gap-6 mb-8">
+                    {selectedProject ? (
+                        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-8 px-8 py-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md shadow-2xl">
+                            <div className="flex flex-col items-center sm:items-start">
+                                <span className="text-[10px] text-white/40 uppercase tracking-widest font-bold mb-1">Active Project</span>
+                                <span className="font-bold text-white text-xl tracking-tight">{selectedProjectName}</span>
+                            </div>
+
+                            <div className="hidden sm:block w-px h-10 bg-white/10"></div>
+
+                            <div className="flex flex-col items-center sm:items-start">
+                                <span className="text-[10px] text-white/40 uppercase tracking-widest font-bold mb-1">Best Model</span>
+                                {loading ? (
+                                    <div className="h-6 w-32 bg-white/10 rounded animate-pulse" />
+                                ) : (
+                                    (() => {
+                                        const projectModels = models.filter(m => m.projectId === selectedProject);
+                                        // Find true best model (including benchmark candidates)
+                                        const modelWithBenchmark = projectModels.find(m => m.metrics?.algorithm_comparison);
+                                        const benchmarkData = modelWithBenchmark?.metrics?.algorithm_comparison;
+
+                                        let bestName = 'No Models Found';
+                                        let bestScore = 0;
+
+                                        if (benchmarkData && (Array.isArray(benchmarkData) || typeof benchmarkData === 'object')) {
+                                            const benchmarks = Array.isArray(benchmarkData)
+                                                ? benchmarkData.map((c: any) => ({ name: c.algorithm, score: (c.mean ?? c.cv_score) }))
+                                                : Object.entries(benchmarkData).map(([k, v]: any) => ({ name: k, score: (v.mean || v.cv_score) }));
+
+                                            if (benchmarks.length > 0) {
+                                                const sorted = benchmarks.sort((a, b) => b.score - a.score);
+                                                bestName = sorted[0].name;
+                                                bestScore = sorted[0].score;
+                                            }
+                                        } else if (projectModels.length > 0) {
+                                            const best = projectModels.sort((a, b) => (b.bestMetricValue || 0) - (a.bestMetricValue || 0))[0];
+                                            bestName = best.algorithm || best.name;
+                                            bestScore = best.bestMetricValue || 0;
+                                        }
+
+                                        return (
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-2">
+                                                    <Sparkles className="w-4 h-4 text-yellow-400" />
+                                                    <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 text-xl">
+                                                        {bestName}
+                                                    </span>
+                                                </div>
+                                                {bestScore > 0 && (
+                                                    <span className="text-xs px-2.5 py-1 rounded-lg bg-green-500/20 text-green-400 font-bold font-mono border border-green-500/20">
+                                                        {(bestScore * 100).toFixed(1)}%
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    })()
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center py-8">
+                            <p className="text-white/40 mb-2">No project selected.</p>
+                            <button
+                                onClick={() => setActiveTab('comparison')} // Switch to models tab
+                                className="text-sm font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+                            >
+                                Go to Models tab to select a project &rarr;
+                            </button>
+                        </div>
+                    )}
 
                     <button
                         onClick={() => handleGenerateChart('Analyze the dataset columns and create the most significant and insightful interactive Plotly visualization for this data. Use the most relevant columns.')}
                         disabled={!!generatingChart || !selectedProject}
-                        className="flex items-center gap-2 px-6 py-3 rounded-xl bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 transition-all group"
+                        className="flex items-center gap-2 px-8 py-3 rounded-xl bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 hover:border-purple-500/40 hover:from-purple-500/20 hover:to-blue-500/20 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Analyze dataset and plot the best graph automatically"
                     >
                         {generatingChart && generatingChart.includes('Analyze') ? <Loader2 className="w-5 h-5 text-purple-400 animate-spin" /> : <Wand2 className="w-5 h-5 text-purple-400" />}
-                        <span className="font-bold text-white">Auto Plot</span>
+                        <span className="font-bold text-white tracking-wide">AI Auto-Plot Best Chart</span>
                     </button>
                 </div>
 
-                <ProjectModal
-                    isOpen={isProjectModalOpen}
-                    onClose={() => setIsProjectModalOpen(false)}
-                    onSelectProject={(id) => setSelectedProject(id)}
-                />
+
 
                 {/* Image Dataset Warning */}
                 {datasetType === 'image' && selectedProject && (
@@ -727,7 +970,7 @@ export default function VisualizePage() {
     return (
         <div className="min-h-screen bg-black text-white relative overflow-hidden">
             <div className="fixed inset-0 z-0">
-                <Plasma color={themeColor} speed={0.5} opacity={0.3} />
+                <Plasma color={themeColor} speed={1.5} opacity={0.5} scale={0.6} />
             </div>
 
             <Navbar />
@@ -742,8 +985,17 @@ export default function VisualizePage() {
                     animate={{ opacity: 1, y: 0 }}
                     className="mb-10 text-center"
                 >
-                    <h1 className="text-5xl font-bold mb-2">
-                        <span style={{ color: themeColor }}>Visualization</span> Dashboard
+                    <h1
+                        className="text-5xl font-bold mb-2 animate-gradient-text"
+                        style={{
+                            backgroundImage: `linear-gradient(135deg, ${themeColor}, #ffffff 40%, ${themeColor})`,
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            backgroundClip: 'text',
+                            backgroundSize: '200% 200%'
+                        }}
+                    >
+                        Visualization Dashboard
                     </h1>
                     <p className="text-white/50">Explore your data and compare models</p>
                 </motion.div>

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { ML_WORKFLOW_STEPS } from './WorkflowTimeline';
 import { Navbar } from './navbar';
+import { useToast } from '@/components/ToastProvider';
 import { detectColumnTypes, getNextColumnType, type ColumnTypeInfo } from '@/lib/column-type-detection';
 import { analyzeDataQuality, recommendationsToCleaningConfig, type DataQualityReport } from '@/lib/data-quality-analyzer';
 
@@ -107,7 +108,10 @@ export function UploadStageOverlay({
     const [useStratified, setUseStratified] = useState<boolean>(true);
 
     // Image Lightbox
+    // Image Lightbox
     const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
+    const { showToast } = useToast();
 
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -314,13 +318,21 @@ export function UploadStageOverlay({
 
             // Handle HTTP errors gracefully without throwing to avoid crash overlays
             if (!res.ok) {
+                let errorMsg = 'Failed to fetch';
                 if (res.status === 403 || res.status === 401) {
-                    setParseError('Access denied. This site might block automated access.');
+                    errorMsg = 'Access denied. This site might block automated access.';
                 } else if (res.status === 404) {
-                    setParseError('File or page not found (404). Check the URL.');
+                    errorMsg = 'File or page not found (404). Check the URL.';
                 } else {
-                    setParseError(`Failed to fetch: ${res.statusText} (${res.status})`);
+                    errorMsg = `Failed to fetch: ${res.statusText} (${res.status})`;
                 }
+                setParseError(errorMsg);
+                showToast({
+                    type: 'error',
+                    title: 'Import Failed',
+                    message: errorMsg,
+                    duration: 5000
+                });
                 setFetchingUrl(false);
                 return;
             }
@@ -358,22 +370,39 @@ export function UploadStageOverlay({
 
     const handleKaggleImport = async () => {
         const isToken = kaggleApiKey.trim().startsWith('KGAT');
-        if (!kaggleDataset.trim() || !kaggleApiKey.trim() || (!isToken && !kaggleUsername.trim())) {
-            setParseError(isToken ? 'Please enter dataset and API token' : 'Please enter dataset, username, and API key');
+
+        // Validation: Dataset is required. Credentials are optional (fallback to server env).
+        if (!kaggleDataset.trim()) {
+            setParseError('Please enter a dataset (username/dataset)');
             return;
         }
+
+        // If Key is provided but incomplete (e.g. basic auth without username), validation still helps
+
+        if (kaggleApiKey.trim() && !isToken && !kaggleUsername.trim()) {
+            setParseError('Please enter username for Basic Auth key');
+            showToast({
+                type: 'error',
+                title: 'Missing Username',
+                message: 'Please enter a username for your Basic Auth key, or use a Bearer Token.',
+                duration: 4000
+            });
+            return;
+        }
+
         setFetchingUrl(true);
         setParseError(null);
         try {
             console.log(`[Kaggle Import] Downloading: ${kaggleDataset}`);
 
+            // Send empty credentials if not provided - backend handles env fallback
             const res = await fetch('/api/datasets/kaggle', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     dataset: kaggleDataset.trim(),
-                    apiKey: kaggleApiKey.trim(),
-                    username: kaggleUsername.trim()
+                    apiKey: kaggleApiKey.trim(), // Can be empty string
+                    username: kaggleUsername.trim() // Can be empty string
                 })
             });
 
@@ -391,9 +420,21 @@ export function UploadStageOverlay({
             const file = new File([blob], filename, { type: 'application/zip' });
             setShowUrlImport(false); setKaggleDataset(''); setKaggleApiKey(''); setKaggleUsername('');
             await parseLocalFile(file);
-        } catch (e) {
+        } catch (e: any) {
             console.error('[Kaggle Import] Error:', e);
-            setParseError(e instanceof Error ? e.message : 'Failed to download from Kaggle');
+            const errorMessage = e instanceof Error ? e.message : 'Failed to download from Kaggle';
+            setParseError(errorMessage);
+
+            // Show beautiful toast for error
+            // Check if it's a Permission/Rules issue to give a better title
+            const isPermissionError = errorMessage.toLowerCase().includes('permission') || errorMessage.toLowerCase().includes('rules');
+
+            showToast({
+                type: 'error',
+                title: isPermissionError ? 'Action Required on Kaggle' : 'Download Failed',
+                message: errorMessage,
+                duration: 8000 // Longer duration for reading instructions
+            });
         }
         finally { setFetchingUrl(false); }
     };

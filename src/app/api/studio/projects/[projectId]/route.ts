@@ -76,6 +76,49 @@ export async function DELETE(
             console.warn(`[Project Delete] Suggestion cleanup error (non-fatal):`, suggestionError);
         }
 
+        // 2.5a. Delete user_datasets (Global collection, but linked to project via canonicalDatasetRef)
+        try {
+            // canonicalDatasetRef format: projects/{projectId}/datasets/{datasetId}
+            // Use range query to find all starting with projects/{projectId}/
+            const prefix = `projects/${projectId}/`;
+            const endPrefix = prefix + '\uf8ff'; // Unicode last character for prefix matching
+
+            const userDatasetsQuery = adminDb.collection('user_datasets')
+                .where('canonicalDatasetRef', '>=', prefix)
+                .where('canonicalDatasetRef', '<=', endPrefix);
+
+            const userDatasetsSnap = await userDatasetsQuery.get();
+
+            if (!userDatasetsSnap.empty) {
+                console.log(`[Project Delete] Deleting ${userDatasetsSnap.size} user_datasets entries`);
+                const batch = adminDb.batch();
+                userDatasetsSnap.docs.forEach(doc => batch.delete(doc.ref));
+                await batch.commit();
+            }
+        } catch (udError) {
+            console.warn(`[Project Delete] user_datasets cleanup error (non-fatal):`, udError);
+        }
+
+        // 2.6. Cascading Delete: Models, Deployments, Charts (Top-level collections)
+        try {
+            const collectionsToClean = ['models', 'deployments', 'charts', 'jobs'];
+
+            for (const colName of collectionsToClean) {
+                const querySnapshot = await adminDb.collection(colName)
+                    .where('projectId', '==', projectId)
+                    .get();
+
+                if (!querySnapshot.empty) {
+                    console.log(`[Project Delete] Deleting ${querySnapshot.size} docs from top-level ${colName}`);
+                    const batch = adminDb.batch();
+                    querySnapshot.docs.forEach(doc => batch.delete(doc.ref));
+                    await batch.commit();
+                }
+            }
+        } catch (cascadeError) {
+            console.warn(`[Project Delete] Cascading cleanup error (non-fatal):`, cascadeError);
+        }
+
         // 3. Delete all GCS files under projects/{projectId}/
         try {
             const bucket = storage.bucket(TRAINING_BUCKET);

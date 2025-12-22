@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Link, Zap, Database, Loader2, ExternalLink, X } from 'lucide-react';
+import { Link, Zap, Database, Loader2, ExternalLink, X, Check } from 'lucide-react';
 
 interface ImportModalProps {
     themeColor: string;
@@ -52,6 +52,20 @@ export function ImportModal({
     onImport
 }: ImportModalProps) {
 
+    // Add state for server configuration status
+    const [serverConfigured, setServerConfigured] = React.useState(false);
+
+    React.useEffect(() => {
+        if (showUrlImport) {
+            fetch('/api/datasets/kaggle/status')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.configured) setServerConfigured(true);
+                })
+                .catch(() => { });
+        }
+    }, [showUrlImport]);
+
     if (!showUrlImport) {
         return (
             <div className="flex justify-center">
@@ -77,11 +91,11 @@ export function ImportModal({
             style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}
         >
             {/* Header with Close Button */}
-            <div className="flex items-center justify-between mb-1">
+            <div className="relative flex items-center justify-center mb-1">
                 <h3 className="text-lg font-semibold text-white">Import Dataset</h3>
                 <button
                     onClick={() => setShowUrlImport(false)}
-                    className="p-2 -mr-2 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+                    className="absolute right-0 p-2 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
                 >
                     <X className="w-5 h-5" />
                 </button>
@@ -169,9 +183,16 @@ export function ImportModal({
                 </div>
             )}
 
+
             {/* Kaggle */}
             {importMode === 'kaggle' && (
                 <div className="space-y-4">
+                    {serverConfigured && (
+                        <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-2 justify-center">
+                            <Check className="w-4 h-4 text-green-400" />
+                            <p className="text-sm text-green-400 font-medium">Server credentials configured</p>
+                        </div>
+                    )}
                     <div className="space-y-2">
                         <label className="block text-sm font-medium text-white/60 text-center flex items-center justify-center gap-2">
                             <Database className="w-4 h-4" />
@@ -188,11 +209,11 @@ export function ImportModal({
                     <div className="space-y-2">
                         <label className="block text-sm font-medium text-white/60 text-center flex items-center justify-center gap-2">
                             <Zap className="w-4 h-4" />
-                            Kaggle Username (optional if using Token)
+                            Kaggle Username {serverConfigured ? <span className="text-white/30 font-normal">(Optional)</span> : '(optional if using Token)'}
                         </label>
                         <input
                             type="text"
-                            placeholder="Your Kaggle username"
+                            placeholder={serverConfigured ? "Using server credential" : "Your Kaggle username"}
                             value={kaggleUsername}
                             onChange={(e) => setKaggleUsername(e.target.value)}
                             className="w-full px-4 py-3 rounded-xl text-white text-center bg-black/30 border border-white/10 focus:border-white/30 focus:outline-none transition-colors"
@@ -201,11 +222,11 @@ export function ImportModal({
                     <div className="space-y-2">
                         <label className="block text-sm font-medium text-white/60 text-center flex items-center justify-center gap-2">
                             <Zap className="w-4 h-4" />
-                            Kaggle API Key / Token
+                            Kaggle API Key / Token {serverConfigured && <span className="text-white/30 font-normal">(Optional)</span>}
                         </label>
                         <input
                             type="password"
-                            placeholder="Your Kaggle API key or Token"
+                            placeholder={serverConfigured ? "Using server credential" : "Your Kaggle API key or Token"}
                             value={kaggleApiKey}
                             onChange={(e) => setKaggleApiKey(e.target.value)}
                             className="w-full px-4 py-3 rounded-xl text-white text-center bg-black/30 border border-white/10 focus:border-white/30 focus:outline-none transition-colors"
@@ -216,7 +237,7 @@ export function ImportModal({
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             onClick={onImport}
-                            disabled={fetchingUrl || !kaggleDataset.trim() || !kaggleApiKey.trim()}
+                            disabled={fetchingUrl || !kaggleDataset.trim()}
                             className="px-8 py-2.5 rounded-xl font-semibold text-white disabled:opacity-50"
                             style={{ background: `linear-gradient(135deg, ${themeColor}, ${themeColor}80)` }}
                         >

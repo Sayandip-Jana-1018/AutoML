@@ -49,7 +49,7 @@ const getRandomColor = () => {
  */
 export function useCollaboration({
     documentId,
-    serverUrl = 'ws://localhost:3100',
+    serverUrl = 'ws://localhost:4000/ws',
     userName = 'Anonymous',
     userColor = getRandomColor(),
     onContentChange

@@ -8,10 +8,24 @@ export const runtime = 'nodejs';
  */
 export async function POST(req: Request) {
     try {
-        const { dataset, apiKey, username } = await req.json();
+        let { dataset, apiKey, username } = await req.json();
+
+        // Fallback to server-side environment variables if not provided
+        if (!apiKey) {
+            // Check for any valid key in environment (Legacy or New)
+            if (process.env.KAGGLE_KEY) {
+                console.log('[Kaggle] Using KAGGLE_KEY from environment');
+                apiKey = process.env.KAGGLE_KEY;
+                username = process.env.KAGGLE_USERNAME;
+            } else if (process.env.KAGGLE_API_KEY) {
+                console.log('[Kaggle] Using KAGGLE_API_KEY from environment');
+                apiKey = process.env.KAGGLE_API_KEY;
+                username = process.env.KAGGLE_USERNAME;
+            }
+        }
 
         if (!dataset || !apiKey) {
-            return NextResponse.json({ error: 'Missing dataset or API key' }, { status: 400 });
+            return NextResponse.json({ error: 'Missing dataset or API key (and not found in env)' }, { status: 400 });
         }
 
         // Parse dataset: expect format "username/dataset-name"
@@ -33,6 +47,7 @@ export async function POST(req: Request) {
         } else {
             // Legacy Basic Auth
             const authUsername = username?.trim() || 'kaggle';
+            console.log(`[Kaggle] Authenticating as user: ${authUsername}`);
             const authString = Buffer.from(`${authUsername}:${apiKey.trim()}`).toString('base64');
             authHeader = `Basic ${authString}`;
         }
@@ -51,8 +66,25 @@ export async function POST(req: Request) {
         if (!downloadRes.ok) {
             const errorText = await downloadRes.text();
             console.error(`[Kaggle] Download failed: ${downloadRes.status}`, errorText);
+
+            let errorMessage = `Failed to download dataset: ${downloadRes.status}`;
+            if (downloadRes.status === 403) {
+                errorMessage = "Permission denied (403). Check your API Key/Token.";
+                if (authHeader.startsWith('Bearer')) {
+                    errorMessage += " You are using a Bearer Token (KGAT). Ensure it has the correct scopes or try generating a standard API Key (username + hex key) from Kaggle settings.";
+                } else if (!username || username === 'kaggle') {
+                    errorMessage += " For Basic Auth, a valid KAGGLE_USERNAME in .env is required. Defaulted to 'kaggle'.";
+                }
+
+                // Common cause: Unaccepted rules or phone verification
+                errorMessage += " NOTE: This dataset might require accepting rules or phone verification on Kaggle.";
+            } else if (downloadRes.status === 404) {
+                errorMessage = "Dataset not found (404). Check the 'username/dataset-name' format.";
+            }
+
             return NextResponse.json({
-                error: `Failed to download dataset: ${downloadRes.status}`
+                error: errorMessage,
+                details: errorText
             }, { status: downloadRes.status });
         }
 

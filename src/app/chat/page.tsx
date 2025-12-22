@@ -16,7 +16,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { collection, query, orderBy, onSnapshot, where, addDoc, updateDoc, doc, getDocs, deleteDoc, serverTimestamp, limit } from "firebase/firestore"
+import { collection, query, orderBy, onSnapshot, where, addDoc, updateDoc, doc, getDocs, getDoc, deleteDoc, serverTimestamp, limit } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 
 interface Model {
@@ -118,6 +118,8 @@ export default function ChatPage() {
         targetColumn?: string;
         qualityScore?: number;
     } | null>(null) // Dataset metadata for AI context
+    const [projectHistoryContext, setProjectHistoryContext] = useState<string>('') // God-mode context for AI
+    const [currentScript, setCurrentScript] = useState<string>('')
 
     // Tier access check - same logic as studio page
     const canAccessModel = (modelTier: 'free' | 'silver' | 'gold') => {
@@ -176,6 +178,71 @@ export default function ChatPage() {
 
         fetchDatasetSchema()
     }, [selectedProject?.projectId])
+
+    // Fetch full project history (jobs, scripts, best models) - 'God Mode' Context
+    useEffect(() => {
+        const fetchProjectHistory = async () => {
+            if (!selectedProject?.projectId) {
+                setProjectHistoryContext('')
+                return
+            }
+
+            try {
+                const projectId = selectedProject.projectId;
+                let historyContext = `[PROJECT KNOWLEDGE BASE - ID: ${projectId}]\n\n`;
+
+                // 1. Fetch Job History
+                const jobsRef = collection(db, 'projects', projectId, 'jobs');
+                const jobsQuery = query(jobsRef, orderBy('createdAt', 'desc'));
+                const jobsSnap = await getDocs(jobsQuery);
+
+                if (!jobsSnap.empty) {
+                    const jobs = jobsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+                    const completedJobs = jobs.filter((j: any) => j.status === 'succeeded' || j.status === 'completed');
+
+                    // Find best model
+                    const bestJob = completedJobs.reduce((prev: any, current: any) => {
+                        const prevAcc = prev?.metrics?.accuracy || 0;
+                        const currAcc = current?.metrics?.accuracy || 0;
+                        return (currAcc > prevAcc) ? current : prev;
+                    }, completedJobs[0] || null);
+
+                    historyContext += `### TRAINING RUNS (${jobs.length}):\n`;
+                    jobs.slice(0, 10).forEach((job: any) => { // Recent 10 jobs
+                        const acc = job.metrics?.accuracy ? (job.metrics.accuracy * 100).toFixed(1) + '%' : 'N/A';
+                        const date = job.createdAt?.toDate ? new Date(job.createdAt.toDate()).toLocaleDateString() : 'Unknown Date';
+                        historyContext += `- [${job.status}] ${job.algorithm || 'Unknown'} (v${job.scriptVersion || '?'}) | Acc: ${acc} | ${date}\n`;
+                    });
+
+                    if (bestJob) {
+                        const bestAcc = bestJob.metrics?.accuracy ? (bestJob.metrics.accuracy * 100).toFixed(1) + '%' : 'N/A';
+                        historyContext += `\n🏆 CHAMPION MODEL: ${bestJob.algorithm} (v${bestJob.scriptVersion})\n   • Accuracy: ${bestAcc}\n   • Loss: ${bestJob.metrics?.loss?.toFixed(4) || 'N/A'}\n   • Best Features: ${JSON.stringify(bestJob.config?.features || 'All')}\n`;
+                    }
+                } else {
+                    historyContext += `No completed training runs found yet.\n`;
+                }
+
+                // 2. Fetch Current Script
+                const projectDoc = await getDoc(doc(db, 'projects', projectId));
+                if (projectDoc.exists()) {
+                    const data = projectDoc.data();
+                    const script = data.currentScript || data.script;
+                    if (script) {
+                        historyContext += `\n### CURRENT ACTIVE KERNEL CODE:\n\`\`\`python\n${script.substring(0, 12000)}\n\`\`\`\n`;
+                        setCurrentScript(script);
+                    }
+                }
+
+                setProjectHistoryContext(historyContext);
+                console.log('[Chat] Built God-Mode Context');
+
+            } catch (err) {
+                console.error('Error fetching project history:', err);
+            }
+        };
+
+        fetchProjectHistory();
+    }, [selectedProject?.projectId]);
 
     // Check if message contains actionable ML suggestion
     const hasActionableSuggestion = (content: string) => {
@@ -245,7 +312,7 @@ export default function ChatPage() {
             // If generateCode is true, first ask GenAI to generate implementation code
             let finalSuggestion = messageContent
 
-            if (generateCode && !messageContent.includes('```python')) {
+            if (generateCode) {
                 setLoadingStep(2) // Step 2: Generating code
                 // Map selectedModel ID to studio API model name
                 const modelMap: Record<string, string> = {
@@ -255,28 +322,48 @@ export default function ChatPage() {
                 };
                 const studioModel = modelMap[selectedModel.id] || 'gemini';
 
-                // Call GenAI to generate implementation code from the chat context
+                // Build comprehensive prompt for COMPLETE NEW VERSION
+                const codeGenPrompt = `You are a Senior ML Engineer. Generate a COMPLETELY NEW and IMPROVED Python ML training script.
+
+REFERENCE SCRIPT (for structure and context only):
+\`\`\`python
+${currentScript}
+\`\`\`
+
+USER'S IMPROVEMENT REQUESTS (implement ALL of these):
+${messages.slice(-10).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n---\n')}
+
+LATEST INSTRUCTION: ${messageContent}
+
+CRITICAL REQUIREMENTS:
+1. Generate a BRAND NEW COMPLETE SCRIPT from scratch
+2. Implement ALL the improvements discussed in the chat
+3. Include ALL necessary imports at the top
+4. Include ALL functions: load_data, preprocess, train_model, evaluate, save_model
+5. Include the main() function and if __name__ == "__main__" block
+6. The script must be 100% complete and immediately runnable
+7. NO placeholders like "...", NO comments like "rest of code", NO "same as before"
+8. This is NOT a modification - it's a complete rewrite with improvements
+
+OUTPUT FORMAT:
+Return ONLY the complete Python script. No explanations, no markdown headers, just pure Python code.`;
+
+                // Call GenAI to generate implementation code
                 const genRes = await fetch('/api/studio/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         projectId,
-                        message: `Based on the chat conversation below, generate an IMPROVED Python ML script that implements the suggestions discussed.
-
-CONVERSATION CONTEXT:
-${messageContent}
-
-IMPORTANT - You MUST implement these improvements in the code:
-1. If accuracy improvements were discussed, add feature engineering, hyperparameter tuning, or algorithm changes
-2. If cross-validation was suggested, add cross_val_score
-3. If ensemble methods were suggested, use GradientBoosting or XGBoost
-4. If data cleaning was discussed, add outlier removal or better imputation
-5. Add comments explaining the improvements made
-
-CRITICAL: Generate the COMPLETE updated Python script with the improvements incorporated. Do NOT just describe changes - actually implement them in the code.`,
+                        message: codeGenPrompt,
                         model: studioModel,
-                        schema: datasetSchema,
-                        currentScript: currentScript
+                        currentScript: currentScript,
+                        datasetInfo: datasetSchema ? {
+                            filename: datasetSchema.filename,
+                            columns: datasetSchema.columns,
+                            rows: datasetSchema.rowCount,
+                            targetColumn: datasetSchema.targetColumn
+                        } : undefined,
+                        history: messages.map(m => ({ role: m.role, content: m.content }))
                     })
                 })
 
@@ -287,14 +374,9 @@ CRITICAL: Generate the COMPLETE updated Python script with the improvements inco
                         generatedSummary = genData.summary
                     }
                     if (genData.updatedScript) {
-                        // Always wrap in markdown code blocks for extraction
-                        if (!genData.updatedScript.includes('```python')) {
-                            finalSuggestion = `### AI Generated Code:\n\`\`\`python\n${genData.updatedScript}\n\`\`\``
-                        } else {
-                            finalSuggestion = genData.updatedScript
-                        }
-                    } else if (genData.responseMessage) {
-                        finalSuggestion = `${messageContent}\n\n### Generated Implementation:\n\`\`\`python\n${genData.responseMessage}\n\`\`\``
+                        // Use AI-generated script directly - no fallbacks
+                        finalSuggestion = `### AI Generated Code:\n\`\`\`python\n${genData.updatedScript}\n\`\`\``
+                        console.log('[Chat] AI script received, length:', genData.updatedScript.length);
                     }
                 }
             }
@@ -419,7 +501,13 @@ CRITICAL: Generate the COMPLETE updated Python script with the improvements inco
                     }
                 }
 
-                projectContext += `\n\nAnswer all questions in context of this selected project with specific knowledge of its dataset. Provide actionable suggestions for improving model accuracy.\n\n`
+
+                if (projectHistoryContext) {
+                    projectContext += `\n\n${projectHistoryContext}`;
+                }
+
+                projectContext += `\n\nAnswer all questions in context of this selected project with specific knowledge of its dataset. Provide actionable suggestions for improving model accuracy. You are an expert 'God' of this project who knows every model trained, every metric, and the actual code used.\n\n`
+
 
                 // Prepend context to the current user message
                 contextMessages = contextMessages.map((m, idx) => {
@@ -435,7 +523,15 @@ CRITICAL: Generate the COMPLETE updated Python script with the improvements inco
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     messages: contextMessages,
-                    modelId: selectedModel.id
+                    modelId: selectedModel.id,
+                    // Add Context for God Mode logic in api/chat
+                    datasetInfo: datasetSchema ? {
+                        filename: datasetSchema.filename,
+                        columns: datasetSchema.columns,
+                        rows: datasetSchema.rowCount,
+                        targetColumn: datasetSchema.targetColumn
+                    } : undefined,
+                    currentScript: currentScript
                 })
             })
 
@@ -642,6 +738,24 @@ CRITICAL: Generate the COMPLETE updated Python script with the improvements inco
                 m.user_email === user?.email
             )
 
+            // DEDUPLICATION: Remove duplicates by projectId (keep the most recent one)
+            const seenProjectIds = new Set<string>();
+            const seenNames = new Set<string>();
+            modelsList = modelsList.filter((m: any) => {
+                // Prefer projectId for uniqueness, fallback to model_id
+                const uniqueKey = m.projectId || m.model_id;
+                if (seenProjectIds.has(uniqueKey)) {
+                    return false; // Skip duplicate
+                }
+                // Also check by name to catch edge cases
+                if (seenNames.has(m.name)) {
+                    return false; // Skip duplicate by name
+                }
+                seenProjectIds.add(uniqueKey);
+                seenNames.add(m.name);
+                return true;
+            });
+
             // Sort client-side
             modelsList.sort((a: any, b: any) => (b.updatedAt?.getTime?.() || 0) - (a.updatedAt?.getTime?.() || 0))
 
@@ -705,8 +819,17 @@ CRITICAL: Generate the COMPLETE updated Python script with the improvements inco
 
                 <main className="relative z-10 flex-1 flex flex-col items-center justify-start p-6 mt-16 w-full">
                     <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="max-w-6xl mx-auto mb-12 text-center">
-                        <h1 className="text-5xl md:text-6xl font-black mb-6 tracking-tight drop-shadow-2xl">
-                            <span className="text-transparent bg-clip-text bg-gradient-to-b from-foreground to-foreground/50">Let's Chat</span>
+                        <h1
+                            className="text-5xl md:text-6xl font-black mb-6 tracking-tight drop-shadow-2xl animate-gradient-text"
+                            style={{
+                                backgroundImage: `linear-gradient(135deg, ${themeColor}, #ffffff 40%, ${themeColor})`,
+                                WebkitBackgroundClip: 'text',
+                                WebkitTextFillColor: 'transparent',
+                                backgroundClip: 'text',
+                                backgroundSize: '200% 200%'
+                            }}
+                        >
+                            Let's Chat
                         </h1>
                         <p className="text-xl md:text-2xl text-muted-foreground font-medium max-w-2xl mx-auto leading-relaxed">
                             Connect with AI models and collaborate seamlessly
@@ -955,7 +1078,7 @@ CRITICAL: Generate the COMPLETE updated Python script with the improvements inco
                                 {/* Project Context Badge */}
                                 {selectedProject && (
                                     <div
-                                        className="flex flex-col items-end gap-1"
+                                        className="flex flex-col items-center gap-1"
                                     >
                                         <div
                                             className="flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs"
@@ -969,8 +1092,8 @@ CRITICAL: Generate the COMPLETE updated Python script with the improvements inco
                                             <span className="font-bold" style={{ color: themeColor }}>{selectedProject.name}</span>
                                         </div>
                                         {datasetSchema && (
-                                            <span className="text-[10px] text-white/40 pr-1">
-                                                📊 {datasetSchema.filename} • {datasetSchema.columns?.length} cols • {datasetSchema.rowCount?.toLocaleString()} rows
+                                            <span className="text-[10px] text-white/40">
+                                                Dataset • {datasetSchema.columns?.length} cols • {datasetSchema.rowCount?.toLocaleString()} rows
                                             </span>
                                         )}
                                     </div>

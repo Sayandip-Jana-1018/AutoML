@@ -244,6 +244,10 @@ export async function POST(
 
         if (metrics) {
             updateData.metrics = metrics;
+            // Also update job's algorithm to reflect actual best algorithm from training
+            if (metrics.best_algorithm) {
+                updateData.algorithm = metrics.best_algorithm;
+            }
         }
 
         await jobRef.update(updateData);
@@ -289,7 +293,9 @@ export async function POST(
                         // Add feature columns for prediction forms
                         feature_columns: Array.isArray(validFeatureColumns) ? validFeatureColumns : [],
                         target_column: targetColumn,
-                        algorithm: job.algorithm || job.config?.algorithm || 'Unknown'
+                        // CRITICAL: Use best_algorithm from metrics if available (AutoML trained the best model)
+                        // Otherwise fall back to job.algorithm (manual selection)
+                        algorithm: metrics?.best_algorithm || job.algorithm || job.config?.algorithm || 'Unknown'
                     };
 
                     const modelId = await registerModel(modelData);

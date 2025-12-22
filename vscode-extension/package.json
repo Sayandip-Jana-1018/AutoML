@@ -2,7 +2,7 @@
     "name": "mlforge-studio",
     "displayName": "MLForge Studio",
     "description": "Real-time collaboration with MLForge Studio - sync code, share cursors, and push to cloud",
-    "version": "0.1.0",
+    "version": "0.1.3",
     "publisher": "mlforge",
     "engines": {
         "vscode": "^1.80.0"

@@ -43,6 +43,85 @@ const vscode = __importStar(require("vscode"));
 const mcp_client_1 = require("./mcp-client");
 const status_bar_1 = require("./status-bar");
 const collaborators_view_1 = require("./collaborators-view");
+const http = __importStar(require("http"));
+const https = __importStar(require("https"));
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+const os = __importStar(require("os"));
+// Simple HTTP GET function for VSCode extension (fetch not available)
+function httpGet(url, token) {
+    return new Promise((resolve) => {
+        const urlObj = new URL(url);
+        const isHttps = urlObj.protocol === 'https:';
+        const lib = isHttps ? https : http;
+        const options = {
+            hostname: urlObj.hostname,
+            port: urlObj.port || (isHttps ? 443 : 80),
+            path: urlObj.pathname + urlObj.search,
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            }
+        };
+        const req = lib.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    resolve(JSON.parse(data));
+                }
+                catch {
+                    console.error('[MLForge] Failed to parse response:', data);
+                    resolve(null);
+                }
+            });
+        });
+        req.on('error', (err) => {
+            console.error('[MLForge] HTTP request error:', err);
+            resolve(null);
+        });
+        req.end();
+    });
+}
+// Simple HTTP POST function for VSCode extension
+function httpPost(url, body) {
+    return new Promise((resolve) => {
+        const urlObj = new URL(url);
+        const isHttps = urlObj.protocol === 'https:';
+        const lib = isHttps ? https : http;
+        const bodyStr = JSON.stringify(body);
+        const options = {
+            hostname: urlObj.hostname,
+            port: urlObj.port || (isHttps ? 443 : 80),
+            path: urlObj.pathname + urlObj.search,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(bodyStr)
+            }
+        };
+        const req = lib.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    resolve({ ok: res.statusCode && res.statusCode >= 200 && res.statusCode < 300, data: JSON.parse(data) });
+                }
+                catch {
+                    console.error('[MLForge] Failed to parse response:', data);
+                    resolve({ ok: false, data: null });
+                }
+            });
+        });
+        req.on('error', (err) => {
+            console.error('[MLForge] HTTP POST error:', err);
+            resolve({ ok: false, data: null });
+        });
+        req.write(bodyStr);
+        req.end();
+    });
+}
 let mcpClient = null;
 let statusBar = null;
 let collaboratorsProvider = null;
@@ -73,7 +152,7 @@ function activate(context) {
     context.subscriptions.push(vscode.commands.registerCommand('mlforge.connect', () => connectToProject()), vscode.commands.registerCommand('mlforge.disconnect', () => disconnect()), vscode.commands.registerCommand('mlforge.commit', () => saveVersion()), vscode.commands.registerCommand('mlforge.push', () => pushToCloud()), vscode.commands.registerCommand('mlforge.showStatus', () => showStatus()));
     // Register URI handler for one-click connect from Studio
     context.subscriptions.push(vscode.window.registerUriHandler({
-        handleUri(uri) {
+        async handleUri(uri) {
             console.log('[MLForge] URI received:', uri.toString());
             // Parse query parameters
             const params = new URLSearchParams(uri.query);
@@ -98,6 +177,8 @@ function activate(context) {
                 if (wsUrl) {
                     context.globalState.update('mlforge.wsUrl', wsUrl);
                 }
+                // Fetch the current script from MLForge and open it
+                await openTrainPyFromProject(projectId, token || undefined);
                 // Try WebSocket connection for real-time sync (optional)
                 connectWithToken(projectId, wsUrl || undefined, token || undefined);
             }
@@ -132,6 +213,58 @@ function activate(context) {
     const config = vscode.workspace.getConfiguration('mlforge');
     if (config.get('autoConnect')) {
         checkForProjectLink();
+    }
+}
+// Open train.py from project by fetching the script from MLForge API
+async function openTrainPyFromProject(projectId, token) {
+    try {
+        const config = vscode.workspace.getConfiguration('mlforge');
+        const apiUrl = config.get('apiBaseUrl') || 'http://localhost:3000';
+        console.log('[MLForge] Fetching script for project:', projectId);
+        // Use https/http module instead of fetch (not available in VSCode extension host)
+        const url = `${apiUrl}/api/studio/projects/${projectId}/script`;
+        const data = await httpGet(url, token);
+        if (!data) {
+            console.error('[MLForge] Failed to fetch script');
+            vscode.window.showWarningMessage('Could not fetch script. Opening empty file.');
+            const doc = await vscode.workspace.openTextDocument({ language: 'python', content: '# MLForge Project: ' + projectId + '\n\n' });
+            await vscode.window.showTextDocument(doc);
+            return;
+        }
+        const scriptContent = data.script || '# MLForge Project: ' + projectId + '\n# No script found\n';
+        console.log('[MLForge] Fetched script, length:', scriptContent.length);
+        // Determine file path to save/open
+        let filePath = '';
+        if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+            // Use current workspace
+            const workspacePath = vscode.workspace.workspaceFolders[0].uri.fsPath;
+            filePath = path.join(workspacePath, 'train.py');
+        }
+        else {
+            // Use temp directory if no workspace open
+            const tempDir = os.tmpdir();
+            // Sanitize project ID for filename
+            const safeProjectId = projectId.replace(/[^a-zA-Z0-9-_]/g, '_');
+            filePath = path.join(tempDir, `mlforge_${safeProjectId}_train.py`);
+        }
+        // Write content to the file
+        // Note: usage of fs module requires nodejs environment, which VS Code extensions have
+        try {
+            fs.writeFileSync(filePath, scriptContent);
+        }
+        catch (writeErr) {
+            console.error('[MLForge] Failed to write file:', writeErr);
+            vscode.window.showErrorMessage(`Failed to save script to disk: ${writeErr.message}`);
+            return;
+        }
+        // Open the document from disk
+        const doc = await vscode.workspace.openTextDocument(filePath);
+        await vscode.window.showTextDocument(doc, { preview: false });
+        vscode.window.showInformationMessage('📄 train.py loaded from MLForge');
+    }
+    catch (error) {
+        console.error('[MLForge] Error opening train.py:', error);
+        vscode.window.showErrorMessage(`Failed to open train.py: ${error.message}`);
     }
 }
 async function connectToProject() {
@@ -357,14 +490,10 @@ async function syncCodeToCloud(code, showMessages = true) {
         const apiUrl = config.get('apiBaseUrl') || 'http://localhost:3000';
         if (showMessages)
             vscode.window.showInformationMessage('🔄 Syncing to MLForge...');
-        const response = await fetch(`${apiUrl}/api/mcp/sync-script`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ projectId, code, token, source: 'vscode' })
-        });
-        const result = await response.json();
+        const response = await httpPost(`${apiUrl}/api/mcp/sync-script`, { projectId, code, token, source: 'vscode' });
+        const result = response.data;
         if (!response.ok) {
-            throw new Error(result.error || 'Failed to sync');
+            throw new Error(result?.error || 'Failed to sync');
         }
         if (showMessages) {
             if (result.changed) {

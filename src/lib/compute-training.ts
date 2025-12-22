@@ -156,9 +156,15 @@ trap cleanup_and_exit EXIT
 write_status "installing" "dependencies" ""
 gsutil cp /tmp/status.json "$GCS_BASE/status.json" 2>/dev/null || echo "Warning: Could not upload initial status"
 
-# Install Python packages
-pip3 install --quiet --upgrade pip 2>/dev/null || { ERROR_MSG="Failed to upgrade pip"; exit 1; }
-pip3 install --quiet scikit-learn pandas numpy xgboost lightgbm catboost google-cloud-storage joblib 2>/dev/null || { ERROR_MSG="Failed to install Python packages"; exit 1; }
+# Create and activate virtual environment (Debian 12 PEP 668 compliance)
+echo "[1.5/6] Setting up virtual environment..."
+python3 -m venv /opt/mlforge-env
+source /opt/mlforge-env/bin/activate
+
+# Install Python packages inside venv
+pip install --quiet --upgrade pip 2>/dev/null || { ERROR_MSG="Failed to upgrade pip"; exit 1; }
+# CRITICAL: Pin scikit-learn>=1.5.0 to match local environment (v1.7.0) and avoid pickle errors (_RemainderColsList)
+pip install --quiet "scikit-learn>=1.5.0" pandas numpy xgboost lightgbm catboost google-cloud-storage joblib 2>/dev/null || { ERROR_MSG="Failed to install Python packages"; exit 1; }
 
 # Create working directory
 mkdir -p /tmp/training
@@ -169,7 +175,7 @@ echo "[2/6] Downloading training script..."
 write_status "downloading" "script" ""
 gsutil cp /tmp/status.json "$GCS_BASE/status.json" 2>/dev/null || true
 
-if ! gsutil cp ${scriptGcsPath} ./train.py 2>&1; then
+if ! gsutil cp "${scriptGcsPath}" ./train.py 2>&1; then
     ERROR_MSG="Failed to download training script"
     exit 1
 fi
@@ -185,14 +191,14 @@ if [ -z "${datasetGcsPath}" ]; then
 fi
 
 if [[ "${datasetGcsPath}" == *.zip ]]; then
-    if ! gsutil cp ${datasetGcsPath} ./dataset.zip 2>&1; then
+    if ! gsutil cp "${datasetGcsPath}" ./dataset.zip 2>&1; then
         ERROR_MSG="Failed to download dataset"
         exit 1
     fi
     unzip -q dataset.zip -d ./data
     export DATASET_PATH="./data"
 else
-    if ! gsutil cp ${datasetGcsPath} ./dataset.csv 2>&1; then
+    if ! gsutil cp "${datasetGcsPath}" ./dataset.csv 2>&1; then
         ERROR_MSG="Failed to download dataset from ${datasetGcsPath}"
         exit 1
     fi
@@ -230,7 +236,8 @@ sed -i 's|"/tmp/dataset.csv"|"./dataset.csv"|g' train.py
 sed -i "s|'/tmp/training/dataset.csv'|'./dataset.csv'|g" train.py
 
 echo "========================================"
-python3 train.py 2>&1 | tee /tmp/training_output.txt
+# Run with venv python
+python train.py 2>&1 | tee /tmp/training_output.txt
 TRAIN_EXIT_CODE=\${PIPESTATUS[0]}
 echo "========================================"
 
@@ -339,7 +346,7 @@ export async function submitComputeEngineJob(params: {
                     boot: true,
                     autoDelete: true,
                     initializeParams: {
-                        sourceImage: 'projects/debian-cloud/global/images/family/debian-11',
+                        sourceImage: 'projects/debian-cloud/global/images/family/debian-12',
                         diskSizeGb: '50'
                     }
                 }],

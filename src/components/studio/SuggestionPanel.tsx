@@ -312,14 +312,14 @@ export function SuggestionPanel({
                                                 boxShadow: '0 6px 25px rgba(239, 68, 68, 0.1)'
                                             }}
                                         >
-                                            <div className="flex items-center gap-2 mb-3">
+                                            <div className="flex items-center justify-center gap-2 mb-3">
                                                 <div className="p-1.5 rounded-lg bg-red-500/20">
                                                     <ShieldAlert className="w-4 h-4 text-red-400" />
                                                 </div>
                                                 <span className="text-xs font-bold text-red-300">Security Notice</span>
                                             </div>
                                             {suggestion.sanitization.blockers.map((blocker, i) => (
-                                                <div key={i} className="flex items-start gap-2 text-xs text-red-200/80 mb-1 ml-8">
+                                                <div key={i} className="flex flex-col items-center justify-center gap-2 text-xs text-red-200/80 mb-1 text-center">
                                                     <span className="text-red-400 font-bold">⚠</span>
                                                     <span>{blocker.message}</span>
                                                 </div>
@@ -358,7 +358,7 @@ export function SuggestionPanel({
                                                 boxShadow: '0 6px 25px rgba(239, 68, 68, 0.1)'
                                             }}
                                         >
-                                            <div className="flex items-center gap-2 mb-3">
+                                            <div className="flex items-center justify-center gap-2 mb-3">
                                                 <div className="p-1.5 rounded-lg bg-red-500/20">
                                                     <AlertCircle className="w-4 h-4 text-red-400" />
                                                 </div>
@@ -368,18 +368,18 @@ export function SuggestionPanel({
                                                 </span>
                                             </div>
                                             {scriptValidation.errors.slice(0, 3).map((error, i) => (
-                                                <div key={i} className="flex items-start gap-2 text-xs text-red-200/80 mb-2 ml-8">
-                                                    <span className="text-red-400 font-bold">✗</span>
-                                                    <div>
+                                                <div key={i} className="flex flex-col items-center justify-center gap-1 text-xs text-red-200/80 mb-2 text-center">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-red-400 font-bold">✗</span>
                                                         <span>{error.message}</span>
-                                                        {error.suggestion && (
-                                                            <div className="text-red-200/60 mt-0.5">→ {error.suggestion}</div>
-                                                        )}
                                                     </div>
+                                                    {error.suggestion && (
+                                                        <div className="text-red-200/60 mt-0.5">→ {error.suggestion}</div>
+                                                    )}
                                                 </div>
                                             ))}
                                             {scriptValidation.errors.length > 3 && (
-                                                <div className="text-xs text-red-200/60 ml-8 mb-3">
+                                                <div className="text-xs text-red-200/60 text-center mb-3">
                                                     +{scriptValidation.errors.length - 3} more error(s)
                                                 </div>
                                             )}
@@ -411,7 +411,7 @@ export function SuggestionPanel({
                                                 boxShadow: '0 6px 25px rgba(251, 146, 60, 0.1)'
                                             }}
                                         >
-                                            <div className="flex items-center gap-2 mb-3">
+                                            <div className="flex items-center justify-center gap-2 mb-3">
                                                 <div className="p-1.5 rounded-lg bg-orange-500/20">
                                                     <AlertTriangle className="w-4 h-4 text-orange-400" />
                                                 </div>
@@ -421,18 +421,18 @@ export function SuggestionPanel({
                                                 </span>
                                             </div>
                                             {scriptValidation.warnings.slice(0, 2).map((warning, i) => (
-                                                <div key={i} className="flex items-start gap-2 text-xs text-orange-200/80 mb-2 ml-8">
-                                                    <span className="text-orange-400 font-bold">⚠</span>
-                                                    <div>
+                                                <div key={i} className="flex flex-col items-center justify-center gap-1 text-xs text-orange-200/80 mb-2 text-center">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-orange-400 font-bold">⚠</span>
                                                         <span>{warning.message}</span>
-                                                        {warning.suggestion && (
-                                                            <div className="text-orange-200/60 mt-0.5">→ {warning.suggestion}</div>
-                                                        )}
                                                     </div>
+                                                    {warning.suggestion && (
+                                                        <div className="text-orange-200/60 mt-0.5">→ {warning.suggestion}</div>
+                                                    )}
                                                 </div>
                                             ))}
                                             {scriptValidation.warnings.length > 2 && (
-                                                <div className="text-xs text-orange-200/60 ml-8">
+                                                <div className="text-xs text-orange-200/60 text-center">
                                                     +{scriptValidation.warnings.length - 2} more warning(s)
                                                 </div>
                                             )}
@@ -584,8 +584,32 @@ export function SuggestionPanel({
 
                                                     <div className="space-y-4 max-w-2xl mx-auto">
                                                         {suggestion.summary.changes.map((change, idx) => {
+                                                            // Handle different data structures from AI
+                                                            // AI might return 'function' instead of 'title', or objects instead of strings
+                                                            const changeTitle = typeof (change as any).title === 'string'
+                                                                ? (change as any).title
+                                                                : typeof (change as any).function === 'string'
+                                                                    ? (change as any).function
+                                                                    : typeof (change as any).name === 'string'
+                                                                        ? (change as any).name
+                                                                        : `Change ${idx + 1}`;
+
+                                                            const changeDescription = typeof change.description === 'string'
+                                                                ? change.description
+                                                                : typeof change.description === 'object' && change.description !== null
+                                                                    ? JSON.stringify(change.description)
+                                                                    : '';
+
+                                                            const changeSeverity = typeof change.severity === 'string'
+                                                                ? change.severity
+                                                                : 'medium';
+
+                                                            const changeType = typeof (change as any).type === 'string'
+                                                                ? (change as any).type
+                                                                : 'general';
+
                                                             const getIcon = () => {
-                                                                switch (change.type) {
+                                                                switch (changeType) {
                                                                     case 'algorithm': return TrendingUp;
                                                                     case 'preprocessing': return Database;
                                                                     case 'hyperparameter': return Settings;
@@ -594,8 +618,8 @@ export function SuggestionPanel({
                                                                 }
                                                             };
                                                             const Icon = getIcon();
-                                                            const severityColor = change.severity === 'high' ? themeColor :
-                                                                change.severity === 'medium' ? 'rgba(251, 146, 60, 0.8)' :
+                                                            const severityColor = changeSeverity === 'high' ? themeColor :
+                                                                changeSeverity === 'medium' ? 'rgba(251, 146, 60, 0.8)' :
                                                                     'rgba(156, 163, 175, 0.8)';
 
                                                             return (
@@ -627,8 +651,8 @@ export function SuggestionPanel({
                                                                     </div>
 
 
-                                                                    <h4 className="font-bold text-black dark:text-white mb-3 text-lg">{change.title}</h4>
-                                                                    <p className="text-black/70 dark:text-white/70 text-sm leading-relaxed mx-auto max-w-md">{change.description}</p>
+                                                                    <h4 className="font-bold text-black dark:text-white mb-3 text-lg">{changeTitle}</h4>
+                                                                    <p className="text-black/70 dark:text-white/70 text-sm leading-relaxed mx-auto max-w-md">{changeDescription}</p>
 
                                                                     {/* Severity badge */}
                                                                     <div className="mt-4 flex justify-center">
@@ -638,8 +662,8 @@ export function SuggestionPanel({
                                                                                 color: severityColor,
                                                                                 border: `1px solid ${severityColor}30`
                                                                             }}>
-                                                                            {change.severity === 'high' ? '🔥 High Impact' :
-                                                                                change.severity === 'medium' ? '⚡ Medium Impact' : '✨ Enhancement'}
+                                                                            {changeSeverity === 'high' ? '🔥 High Impact' :
+                                                                                changeSeverity === 'medium' ? '⚡ Medium Impact' : '✨ Enhancement'}
                                                                         </span>
                                                                     </div>
                                                                 </motion.div>
@@ -680,6 +704,9 @@ export function SuggestionPanel({
                                             <p className="text-sm">No summary available for this suggestion</p>
                                         </div>
                                     )}
+
+                                    {/* Bottom spacer to prevent overlap with fixed footer */}
+                                    <div className="h-24" />
                                 </motion.div>
                             )}
                         </div>

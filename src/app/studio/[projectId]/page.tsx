@@ -1,5 +1,8 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
@@ -681,9 +684,9 @@ export default function StudioPage() {
             }
             showToast({
                 type: 'automl',
-                title: '🤖 AutoML Model Selected!',
-                message: `📊 Algorithm: ${data.algorithm}\n💡 ${data.algorithmReason || 'Best model for your data'}\n\n✅ Script generated and ready to train!`,
-                duration: 10000
+                title: '🤖 AutoML Training Ready!',
+                message: `🔄 Training ALL Models:\n   • LogisticRegression\n   • RandomForest\n   • GradientBoosting\n   • XGBoost\n   • LightGBM\n\n🏆 Best performing model will be saved!\n\n✅ Script generated - Click Train to start`,
+                duration: 12000
             });
         } catch (error) {
             console.error('AutoML failed:', error);
@@ -1077,8 +1080,64 @@ Please provide the complete corrected script that fixes all these issues. Make s
             duration: 4000
         });
     };
+    // Sync code from VSCode/MCP to local editor
+    const handleSyncFromVSCode = async () => {
+        setIsSyncingVSCode(true);
+        try {
+            // Fetch the latest project data from Firestore
+            const projectDoc = await getDoc(doc(db, 'projects', projectId));
+            if (!projectDoc.exists()) {
+                throw new Error('Project not found');
+            }
 
-    // Open project in VS Code with one-click connection
+            const projectData = projectDoc.data();
+            const latestCode = projectData?.currentScript || '';
+
+            if (!latestCode) {
+                showToast({
+                    type: 'info',
+                    title: 'No Updates',
+                    message: 'No synced code found from VSCode',
+                    duration: 3000
+                });
+                return;
+            }
+
+            // Check if code actually changed
+            if (latestCode === localCode) {
+                showToast({
+                    type: 'info',
+                    title: 'Already in Sync',
+                    message: 'Your code is already up to date',
+                    duration: 3000
+                });
+                return;
+            }
+
+            // Update local editor
+            setLocalCode(latestCode);
+
+            showToast({
+                type: 'success',
+                title: '✅ Synced from VSCode!',
+                message: `Code updated from ${projectData?.lastSyncSource || 'VSCode'}`,
+                duration: 4000
+            });
+
+        } catch (error: any) {
+            console.error('[Sync] Error:', error);
+            showToast({
+                type: 'error',
+                title: 'Sync Failed',
+                message: error.message || 'Could not sync code from VSCode',
+                duration: 5000
+            });
+        } finally {
+            setIsSyncingVSCode(false);
+        }
+    };
+
+
     const handleOpenVSCode = async () => {
         setIsConnectingVSCode(true);
         setMcpError(null);
@@ -1235,42 +1294,6 @@ Please provide the complete corrected script that fixes all these issues. Make s
         }
     };
 
-    // Sync code from VS Code - fetches latest script from project
-    const handleSyncFromVSCode = async () => {
-        setIsSyncingVSCode(true);
-        try {
-            // Fetch the latest script from Firestore
-            const projectDoc = await getDoc(doc(db, 'projects', projectId));
-            if (projectDoc.exists()) {
-                const data = projectDoc.data();
-                if (data.script && data.script !== localCode) {
-                    setLocalCode(data.script);
-                    showToast({
-                        type: 'success',
-                        title: 'Synced!',
-                        message: 'Code synced from VS Code',
-                        duration: 2000
-                    });
-                } else {
-                    showToast({
-                        type: 'info',
-                        title: 'Already in sync',
-                        message: 'Your code is already up to date',
-                        duration: 2000
-                    });
-                }
-            }
-        } catch (error) {
-            console.error('[VS Code Sync] Error:', error);
-            showToast({
-                type: 'error',
-                title: 'Sync Failed',
-                message: 'Could not sync from VS Code'
-            });
-        } finally {
-            setIsSyncingVSCode(false);
-        }
-    };
 
     // --- Loading State ---
     if (loading) {
@@ -1489,7 +1512,7 @@ Please provide the complete corrected script that fixes all these issues. Make s
             )}
 
             {/* Main Content */}
-            <main className="relative z-10 pt-24 md:pt-20 px-2 md:px-4 pb-8 min-h-screen">
+            <main className="relative z-10 pt-24 px-2 md:px-4 pb-8 min-h-screen">
                 {/* Header */}
                 <StudioHeader
                     projectId={projectId}
@@ -1581,21 +1604,21 @@ Please provide the complete corrected script that fixes all these issues. Make s
                 </div>
 
                 {/* Main Grid - Stacks on mobile, side-by-side on lg */}
-                <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 px-4 lg:px-0 lg:h-[calc(100vh-200px)]">
+                <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 px-4 lg:px-0 lg:h-[calc(100vh-220px)]">
                     {/* Left: Code Editor */}
                     <CodeEditor
                         code={localCode}
                         onChange={(val) => setLocalCode(val)}
                         onSave={handleSave}
-                        onSyncVSCode={vsCodeConnected ? handleSyncFromVSCode : undefined}
+                        onSyncVSCode={handleSyncFromVSCode}
                         saving={isSaving}
                         syncing={isSyncingVSCode}
                     />
 
                     {/* Right: Split View */}
-                    <div className="flex flex-col gap-4 h-full">
+                    <div className="flex flex-col gap-4 h-full min-h-0 overflow-hidden">
                         {/* Terminal / History Tabs - All top level */}
-                        <div className="h-[280px]">
+                        <div className="h-[325px]">
                             <div className="h-full flex flex-col">
                                 {/* Single Row of 4 Tabs - Centered on mobile, icon-only */}
                                 <GlassCard className="px-2 md:px-4 py-1.5 md:py-2 mb-3 md:mb-4 flex items-center justify-center gap-1 md:gap-2" hover={false}>

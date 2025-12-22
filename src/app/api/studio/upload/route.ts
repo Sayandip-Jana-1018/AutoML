@@ -104,33 +104,56 @@ export async function POST(req: Request) {
 
             if (userDatasetDoc.exists) {
                 const existingData = userDatasetDoc.data()!;
-                console.log(`[Upload] Found user dataset, reusing: ${existingData.canonicalDatasetRef}`);
+                const gcsPath = existingData.gcsPath || existingData.canonicalDatasetRef;
 
-                // Update current project to reference this dataset
-                await adminDb.collection('projects').doc(projectId).update({
-                    datasetUploaded: true,
-                    latestDatasetId: existingData.datasetId,
-                    datasetVersionId: existingData.versionId,
-                    taskType: existingData.taskType,
-                    inferredTaskType: existingData.inferredTaskType,
-                    targetColumnSuggestion: existingData.targetColumnSuggestion,
-                    'workflow.stage': 'ready',
-                    'workflow.step': 5,
-                    'workflow.status': 'success',
-                    'workflow.datasetReused': true,
-                    'workflow.updatedAt': FieldValue.serverTimestamp(),
-                    'dataset.filename': existingData.filename || fileName,
-                    'dataset.columns': existingData.columnNames,
-                    'dataset.rowCount': existingData.rowCount,
-                    'dataset.fileSize': existingData.fileSize || fileSize
-                });
+                // CRITICAL FIX: Verify the file actually exists in GCS (project may have been deleted)
+                // gcsPath format: gs://bucket-name/path/to/file
+                const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'mlforge-fluent-cable-480715-c8';
+                const filePath = gcsPath.replace(`gs://${bucketName}/`, '');
 
-                return NextResponse.json({
-                    reused: true,
-                    datasetId: existingData.datasetId,
-                    gcsPath: existingData.gcsPath,
-                    message: 'Dataset already exists in your account, reusing'
-                });
+                // Import storage only when needed to avoid performance hit
+                const { Storage } = await import('@google-cloud/storage');
+                const adminStorage = new Storage(); // Use default creds from environment
+                const file = adminStorage.bucket(bucketName).file(filePath);
+
+                const [exists] = await file.exists();
+
+                if (exists) {
+                    console.log(`[Upload] Found valid user dataset, reusing: ${existingData.canonicalDatasetRef}`);
+
+                    // Update current project to reference this dataset
+                    await adminDb.collection('projects').doc(projectId).update({
+                        datasetUploaded: true,
+                        latestDatasetId: existingData.datasetId,
+                        datasetVersionId: existingData.versionId,
+                        taskType: existingData.taskType,
+                        inferredTaskType: existingData.inferredTaskType,
+                        targetColumnSuggestion: existingData.targetColumnSuggestion,
+                        'workflow.stage': 'ready',
+                        'workflow.step': 5,
+                        'workflow.status': 'success',
+                        'workflow.datasetReused': true,
+                        'workflow.updatedAt': FieldValue.serverTimestamp(),
+                        'dataset.filename': existingData.filename || fileName,
+                        'dataset.columns': existingData.columnNames,
+                        'dataset.rowCount': existingData.rowCount,
+                        'dataset.fileSize': existingData.fileSize || fileSize,
+                        'dataset.url': existingData.gcsPath, // Ensure path is available for training
+                        'datasetGcsPath': existingData.gcsPath // Redundant backup for legacy checks
+                    });
+
+                    return NextResponse.json({
+                        reused: true,
+                        datasetId: existingData.datasetId,
+                        gcsPath: existingData.gcsPath,
+                        message: 'Dataset already exists in your account, reusing'
+                    });
+                } else {
+                    console.warn(`[Upload] Stale user dataset record found (file missing): ${gcsPath}. Deleting record.`);
+                    // Delete stale record so next upload works cleanly
+                    await adminDb.collection('user_datasets').doc(userDatasetKey).delete();
+                    // Proceed to normal upload...
+                }
             }
         }
 
@@ -165,7 +188,9 @@ export async function POST(req: Request) {
                     'dataset.filename': existingDataset.name || fileName,
                     'dataset.columns': existingDataset.columnNames,
                     'dataset.rowCount': existingDataset.rowCount,
-                    'dataset.fileSize': existingDataset.fileSize || fileSize
+                    'dataset.fileSize': existingDataset.fileSize || fileSize,
+                    'dataset.url': existingDataset.gcsPath, // Ensure path is available for training
+                    'datasetGcsPath': existingDataset.gcsPath // Redundant backup for legacy checks
                 });
 
                 return NextResponse.json({

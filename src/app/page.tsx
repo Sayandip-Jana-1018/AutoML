@@ -28,6 +28,7 @@ import { SmoothScroll } from "@/components/SmoothScroll"
 import { ThemeColorPicker } from "@/components/ThemeColorPicker"
 import { useAuth } from "@/context/auth-context"
 import { Loader2 } from "lucide-react"
+import { MagicCube } from "@/components/MagicCube"
 
 import AuthSuccessHandler from "@/components/auth-success-handler"
 
@@ -63,24 +64,24 @@ export default function Home() {
             <Navbar />
             <ScrollProgress />
             {/* Hero Section with Parallax Container - MacBook scrolls first */}
-            <div className="relative" style={{ height: '150vh' }}>
+            <div id="hero" className="relative" style={{ height: '150vh' }}>
                 <div className="sticky top-0 h-screen">
                     <HeroSection themeColor={themeColor} />
                 </div>
             </div>
-            <HowItWorksSection />
+            <div id="how-it-works"><HowItWorksSection /></div>
             <SectionDivider />
-            <TechStackSection />
+            <div id="tech-stack"><TechStackSection /></div>
             <SectionDivider />
-            <FeaturesSection />
-            <PricingSection themeColor={themeColor} />
+            <div id="features"><FeaturesSection /></div>
+            <div id="pricing"><PricingSection themeColor={themeColor} /></div>
             <SectionDivider />
             <ComparisonSection />
-            <VisualizeSection />
+            <div id="visualize"><VisualizeSection /></div>
             <SectionDivider />
             <DemoSection />
             <SectionDivider />
-            <TestimonialsSection />
+            <div id="testimonials"><TestimonialsSection /></div>
             <SectionDivider />
             <CTAFooterSection />
             <ThemeToggle />

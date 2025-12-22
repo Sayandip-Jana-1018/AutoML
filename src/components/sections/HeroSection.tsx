@@ -4,6 +4,7 @@ import { motion } from "framer-motion"
 import { ArrowRight, Sparkles, Zap, Code2, Rocket, Database, Cpu, Brain, Cloud, Terminal, LogOut } from "lucide-react"
 import { NavButton } from "@/components/NavButton"
 import MagicReveal from "@/components/ui/MagicReveal"
+import { MagicCube } from "@/components/MagicCube"
 import { TiltCard } from "@/components/ui/TiltCard"
 import { useAuth } from "@/context/auth-context"
 import Image from "next/image"
@@ -19,7 +20,7 @@ export function HeroSection({ themeColor }: HeroSectionProps) {
         <section className="relative z-20 min-h-screen flex items-center justify-center px-6 md:px-12 lg:px-16 xl:px-20 pt-32 pb-20">
             <MagicReveal
                 title="AutoForge ~ ML"
-                titleClassName="text-6xl md:text-7xl lg:text-8xl font-black tracking-tighter mb-6 pb-2 overflow-visible"
+                titleClassName="text-6xl md:text-7xl lg:text-8xl font-black tracking-tighter mb-6 pb-4 overflow-visible"
                 contentDelay={0.7}
                 particleCount={60}
             >
@@ -264,68 +265,9 @@ export function HeroSection({ themeColor }: HeroSectionProps) {
                             transition={{ duration: 0.8, delay: 0.8 }}
                             className="relative h-[500px] lg:h-[600px] flex items-center justify-end z-10 pb-48 pr-0"
                         >
-                            {/* Rotating Cube Container - No float animation */}
+                            {/* Rotating Cube Container - Replaced with MagicCube */}
                             <div className="relative">
-                                {/* 3D Rotating Cube - Theme Colored */}
-                                <div className="relative w-32 h-32" style={{ perspective: '800px' }}>
-                                    <motion.div
-                                        animate={{ rotateX: 360, rotateY: 360 }}
-                                        transition={{
-                                            duration: 15,
-                                            repeat: Infinity,
-                                            ease: 'linear'
-                                        }}
-                                        className="w-full h-full relative"
-                                        style={{ transformStyle: 'preserve-3d' }}
-                                    >
-                                        {/* 6 Cube Faces with different tech icons - translateZ = half of width (88px) */}
-                                        {[
-                                            { transform: 'translateZ(88px)', Icon: Database },
-                                            { transform: 'rotateY(180deg) translateZ(88px)', Icon: Cpu },
-                                            { transform: 'rotateY(90deg) translateZ(88px)', Icon: Brain },
-                                            { transform: 'rotateY(-90deg) translateZ(88px)', Icon: Rocket },
-                                            { transform: 'rotateX(90deg) translateZ(88px)', Icon: Cloud },
-                                            { transform: 'rotateX(-90deg) translateZ(88px)', Icon: Terminal },
-                                        ].map((face, i) => (
-                                            <motion.div
-                                                key={i}
-                                                className="absolute w-44 h-44 rounded-2xl border-2 backdrop-blur-xl flex items-center justify-center"
-                                                style={{
-                                                    transform: face.transform,
-                                                    background: `linear-gradient(135deg, ${themeColor}50, ${themeColor}20, rgba(0,0,0,0.3))`,
-                                                    borderColor: themeColor,
-                                                    backfaceVisibility: 'hidden',
-                                                }}
-                                                animate={{
-                                                    boxShadow: [
-                                                        `0 0 25px ${themeColor}30, inset 0 0 20px ${themeColor}10`,
-                                                        `0 0 50px ${themeColor}50, inset 0 0 35px ${themeColor}25`,
-                                                        `0 0 25px ${themeColor}30, inset 0 0 20px ${themeColor}10`
-                                                    ]
-                                                }}
-                                                transition={{
-                                                    duration: 2.5,
-                                                    repeat: Infinity,
-                                                    ease: "easeInOut",
-                                                    delay: i * 0.3
-                                                }}
-                                            >
-                                                <motion.div
-                                                    animate={{ scale: [1, 1.15, 1], opacity: [0.7, 1, 0.7] }}
-                                                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: i * 0.2 }}
-                                                >
-                                                    <face.Icon
-                                                        className="w-14 h-14"
-                                                        style={{
-                                                            color: themeColor,
-                                                            filter: `drop-shadow(0 0 15px ${themeColor}) drop-shadow(0 0 30px ${themeColor}80)`
-                                                        }}
-                                                    />
-                                                </motion.div>
-                                            </motion.div>
-                                        ))}
-                                    </motion.div>
-                                </div>
+                                <MagicCube themeColor={themeColor} size={180} />
 
                                 {/* Pulsating Glow Effect Under Cube */}
                                 <motion.div
@@ -334,22 +276,6 @@ export function HeroSection({ themeColor }: HeroSectionProps) {
                                     animate={{ opacity: [0.5, 0.9, 0.5], scale: [0.85, 1.15, 0.85] }}
                                     transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
                                 />
-
-                                {/* Orbiting particles */}
-                                <motion.div
-                                    className="absolute inset-0 -m-10"
-                                    animate={{ rotate: 360 }}
-                                    transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                                >
-                                    <div
-                                        className="absolute top-1/2 left-0 w-3 h-3 rounded-full -translate-y-1/2"
-                                        style={{ background: themeColor, boxShadow: `0 0 15px ${themeColor}` }}
-                                    />
-                                    <div
-                                        className="absolute top-1/2 right-0 w-2 h-2 rounded-full -translate-y-1/2"
-                                        style={{ background: themeColor, boxShadow: `0 0 10px ${themeColor}` }}
-                                    />
-                                </motion.div>
                             </div>
                         </motion.div>
                     </div>

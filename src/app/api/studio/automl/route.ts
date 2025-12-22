@@ -301,7 +301,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Model output configuration from environment
-MODEL_OUTPUT_PATH = os.environ.get('MODEL_OUTPUT_PATH', '/tmp/model')
+MODEL_OUTPUT_PATH = os.environ.get('MODEL_OUTPUT_PATH', '/tmp/training/model')
 GCS_OUTPUT_PATH = os.environ.get('GCS_OUTPUT_PATH', '')
 DATASET_GCS_PATH = os.environ.get('DATASET_GCS_PATH', '')
 
@@ -580,7 +580,8 @@ ${isClassification ? `    # === CLASSIFICATION MODELS ===
                 ('preprocessor', preprocessor),
                 ('model', model)
             ])
-            scores = cross_val_score(pipeline, X_train, y_train, cv=cv_folds, scoring=scoring_metric, n_jobs=-1)
+            # Use n_jobs=1 for cross_val_score to avoid pickling issues with joblib/multiprocessing
+            scores = cross_val_score(pipeline, X_train, y_train, cv=cv_folds, scoring=scoring_metric, n_jobs=1)
             mean_score = scores.mean()
             std_score = scores.std()
             results[name] = {'mean': mean_score, 'std': std_score, 'pipeline': pipeline}
@@ -772,7 +773,7 @@ else:
     print("ℹ️  No GPU detected, falling back to CPU")
 
 # Model output configuration from environment
-MODEL_OUTPUT_PATH = os.environ.get('MODEL_OUTPUT_PATH', '/tmp/model')
+MODEL_OUTPUT_PATH = os.environ.get('MODEL_OUTPUT_PATH', '/tmp/training/model')
 GCS_OUTPUT_PATH = os.environ.get('GCS_OUTPUT_PATH', '')
 DATASET_GCS_PATH = os.environ.get('DATASET_GCS_PATH', '')
 

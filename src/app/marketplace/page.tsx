@@ -169,7 +169,16 @@ export default function MarketplacePage() {
             <main className="relative z-10 min-h-screen p-6 pt-24 pb-12">
                 {/* Header - Larger and pushed down */}
                 <div className="text-center mb-10">
-                    <h1 className="text-4xl md:text-5xl font-black text-white mb-3">
+                    <h1
+                        className="text-4xl md:text-5xl font-black text-white mb-3 pb-4 animate-gradient-text"
+                        style={{
+                            backgroundImage: `linear-gradient(135deg, ${themeColor}, #ffffff 40%, ${themeColor})`,
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            backgroundClip: 'text',
+                            backgroundSize: '200% 200%'
+                        }}
+                    >
                         Model Marketplace
                     </h1>
                     <p className="text-white/50 text-base">
@@ -316,6 +325,9 @@ export default function MarketplacePage() {
                                                     <div className="flex items-center gap-2 mt-1">
                                                         <span className="px-1.5 py-0.5 rounded-md text-[9px] font-medium bg-white/5 text-white/50 border border-white/10 uppercase tracking-wider">
                                                             {model.taskType || 'ML Model'}
+                                                        </span>
+                                                        <span className="text-[9px] text-white/30">
+                                                            {model.updatedAt ? new Date(model.updatedAt).toLocaleDateString() : ''}
                                                         </span>
                                                     </div>
                                                 </div>

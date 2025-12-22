@@ -145,12 +145,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, isGenerating, onRun
                     </div>
                     <div>
                         <h3 className="font-bold text-xl tracking-wide flex items-center gap-2"
-                            style={{
-                                background: `linear-gradient(to right, ${themeColor}, #ffffff)`,
-                                WebkitBackgroundClip: 'text',
-                                WebkitTextFillColor: 'transparent',
-                                textShadow: `0 2px 10px ${themeColor}40`
-                            }}
+                            style={{ color: themeColor }}
                         >
                             {displayTitle}
                         </h3>

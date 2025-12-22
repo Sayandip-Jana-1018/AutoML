@@ -73,14 +73,15 @@ export async function POST(req: Request) {
             );
         }
 
-        // Extract code from suggestion
+        // Extract code from suggestion - use directly without fallback
         const extractedCode = extractCodeFromSuggestion(suggestion);
+        console.log('[Suggestions API] Extracted code length:', extractedCode?.length || 0);
 
         // Sanitize the extracted code
         const sanitizeResult = sanitizeCodeSuggestion(extractedCode);
 
         // Generate hash for duplicate detection
-        const textHash = hashText(suggestion);
+        const textHash = hashText(extractedCode || suggestion);
 
         // Check for duplicate unapplied suggestions (unless explicitly skipped)
         if (!skipDuplicateCheck) {
@@ -171,10 +172,10 @@ export async function POST(req: Request) {
                     summaryPrompt = `Compare OLD and NEW Python ML scripts. Identify SPECIFIC changes and improvements.
 
 OLD CODE:
-${currentScriptSnapshot.substring(0, 1500)}
+${currentScriptSnapshot.substring(0, 14000)}
 
 NEW CODE:
-${extractedCode.substring(0, 1500)}
+${extractedCode.substring(0, 14000)}
 
 Return ONLY this JSON (max 5 changes):
 {"changes":[
@@ -192,7 +193,7 @@ RULES:
                     summaryPrompt = `Analyze this Python ML code and list ALL improvement features it contains.
 
 CODE:
-${extractedCode.substring(0, 1500)}
+${extractedCode.substring(0, 14000)}
 
 Return ONLY this JSON (identify what improvements this code has):
 {"changes":[

@@ -59,9 +59,36 @@ export async function GET(request: NextRequest) {
 
         const readable = new ReadableStream({
             start(controller) {
-                stream.on('data', (chunk) => controller.enqueue(chunk));
-                stream.on('end', () => controller.close());
-                stream.on('error', (err) => controller.error(err));
+                let closed = false;
+                stream.on('data', (chunk) => {
+                    if (!closed) {
+                        try {
+                            controller.enqueue(chunk);
+                        } catch (e) {
+                            // Controller may already be closed
+                        }
+                    }
+                });
+                stream.on('end', () => {
+                    if (!closed) {
+                        closed = true;
+                        try {
+                            controller.close();
+                        } catch (e) {
+                            // Already closed
+                        }
+                    }
+                });
+                stream.on('error', (err) => {
+                    if (!closed) {
+                        closed = true;
+                        try {
+                            controller.error(err);
+                        } catch (e) {
+                            // Already closed
+                        }
+                    }
+                });
             },
         });
 

@@ -239,7 +239,7 @@ export default function PricingPage() {
             ],
             missing: [
                 "GPU Training (RunPod)",
-                "500 MB Datasets",
+                "1GB or 1024 MB Datasets",
                 "Claude 3.5 Opus"
             ]
         },
@@ -255,7 +255,7 @@ export default function PricingPage() {
                 "🚀 RunPod GPU (RTX 4000 Ada)",
                 "9 vCPU • 50 GB RAM • 20 GB VRAM",
                 `Max ${RESOURCE_POLICIES.gold.maxTrainingHours} Hours Training`,
-                "500 MB Dataset Limit",
+                "1GB or 1024 MB Dataset Limit",
                 "Image/CNN Training Support",
                 `${RESOURCE_POLICIES.gold.maxHpoTrials}+ HPO Trials`,
                 "Claude 3.5 Opus (Best for Code)",
@@ -331,7 +331,18 @@ export default function PricingPage() {
                 </div>
 
                 <div className="relative z-10 text-center mb-12">
-                    <h1 className="text-4xl md:text-5xl font-black text-white mb-3">Pricing</h1>
+                    <h1
+                        className="text-4xl md:text-5xl font-black text-white mb-3 pb-4 animate-gradient-text"
+                        style={{
+                            backgroundImage: `linear-gradient(135deg, ${themeColor}, #ffffff 40%, ${themeColor})`,
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            backgroundClip: 'text',
+                            backgroundSize: '200% 200%'
+                        }}
+                    >
+                        Pricing
+                    </h1>
                     <p className="text-white/60 text-sm md:text-base">Created to be with you throughout your entire journey.</p>
 
                     <div className="mt-6 inline-flex bg-white/5 rounded-full p-1 border border-white/10">

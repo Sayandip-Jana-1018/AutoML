@@ -17,6 +17,18 @@ export const runtime = 'nodejs'; // Required for Google Cloud SDK
 function detectAlgorithmFromScript(script: string): string {
     const scriptLower = script.toLowerCase();
 
+    // FIRST: Check if this is an AutoML script (trains ALL models and picks best)
+    // AutoML scripts have specific markers like candidates={}, best_algorithm, algorithm_comparison
+    const isAutoMLScript = (
+        (script.includes('candidates = {}') || script.includes('candidates={}')) &&
+        (script.includes('best_algorithm') || script.includes('algorithm_comparison')) &&
+        (script.includes('cross_val_score') || script.includes('SMART AUTOML'))
+    );
+
+    if (isAutoMLScript) {
+        return 'AutoML (Evaluating All Models)';
+    }
+
     // Common algorithm patterns (order matters - check specific patterns first)
     const algorithmPatterns: [RegExp | string, string][] = [
         // Clustering

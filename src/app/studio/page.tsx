@@ -374,7 +374,18 @@ export default function StudioEntryPage() {
                         >
                             <Sparkles className="w-7 h-7 md:w-8 md:h-8" style={{ color: themeColor }} />
                         </motion.div>
-                        <h1 className="text-xl md:text-2xl font-bold text-black dark:text-white mb-2">Welcome to Studio</h1>
+                        <h1
+                            className="text-xl md:text-2xl font-bold text-black dark:text-white mb-2 animate-gradient-text"
+                            style={{
+                                backgroundImage: `linear-gradient(135deg, ${themeColor}, #ffffff 40%, ${themeColor})`,
+                                WebkitBackgroundClip: 'text',
+                                WebkitTextFillColor: 'transparent',
+                                backgroundClip: 'text',
+                                backgroundSize: '200% 200%'
+                            }}
+                        >
+                            Welcome to Studio
+                        </h1>
                         <p className="text-black/50 dark:text-white/50 text-sm">Create a new project or continue working</p>
                     </div>
 

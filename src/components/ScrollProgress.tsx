@@ -5,15 +5,16 @@ import { useThemeColor } from "@/context/theme-context"
 import { Rocket } from "lucide-react"
 import { motion, useScroll, useSpring, useTransform, useMotionValueEvent } from "framer-motion"
 import Magnetic from "@/components/ui/Magnetic"
+import Link from "next/link"
 
 const SECTIONS = [
-    { name: "Hero", position: 0 },
-    { name: "How It Works", position: 14 },
-    { name: "Tech Stack", position: 28 },
-    { name: "Features", position: 42 },
-    { name: "Pricing", position: 56 },
-    { name: "Visualize", position: 70 },
-    { name: "Testimonials", position: 85 },
+    { name: "Hero", position: 0, link: "/#hero" },
+    { name: "How It Works", position: 14, link: "/#how-it-works" },
+    { name: "Tech Stack", position: 28, link: "/#tech-stack" },
+    { name: "Features", position: 42, link: "/#features" },
+    { name: "Pricing", position: 56, link: "/#pricing" },
+    { name: "Visualize", position: 70, link: "/#visualize" },
+    { name: "Testimonials", position: 85, link: "/#testimonials" },
 ]
 
 export function ScrollProgress() {
@@ -169,13 +170,12 @@ function PercentageLabel({ progress }: { progress: any }) {
     return <>{value}%</>
 }
 
+
+
 // Logic for dots
 function SectionDot({ section, themeColor }: { section: any, themeColor: string }) {
-    return (
-        <div
-            className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 group pointer-events-auto cursor-pointer"
-            style={{ top: `${section.position}%` }}
-        >
+    const Content = (
+        <>
             <div
                 className="w-2.5 h-2.5 rounded-full transition-all duration-300 border border-white/40 bg-black/80 group-hover:scale-150"
                 style={{
@@ -189,6 +189,27 @@ function SectionDot({ section, themeColor }: { section: any, themeColor: string 
                     {section.name}
                 </span>
             </div>
+        </>
+    )
+
+    if (section.link) {
+        return (
+            <Link
+                href={section.link}
+                className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 group pointer-events-auto cursor-pointer"
+                style={{ top: `${section.position}%` }}
+            >
+                {Content}
+            </Link>
+        )
+    }
+
+    return (
+        <div
+            className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 group pointer-events-auto cursor-pointer"
+            style={{ top: `${section.position}%` }}
+        >
+            {Content}
         </div>
     )
 }
