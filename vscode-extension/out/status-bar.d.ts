@@ -8,6 +8,7 @@ export declare class StatusBarManager implements vscode.Disposable {
     setConnecting(): void;
     setConnected(projectId: string): void;
     setDisconnected(): void;
+    setStatus(state: 'syncing' | 'success' | 'error', text?: string): void;
     setError(message: string): void;
     updateCollaboratorCount(count: number): void;
     dispose(): void;

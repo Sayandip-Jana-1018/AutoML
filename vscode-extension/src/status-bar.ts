@@ -35,6 +35,23 @@ export class StatusBarManager implements vscode.Disposable {
         this.statusBarItem.backgroundColor = undefined;
     }
 
+    setStatus(state: 'syncing' | 'success' | 'error', text?: string): void {
+        switch (state) {
+            case 'syncing':
+                this.statusBarItem.text = text || '$(sync~spin) MLForge: Syncing...';
+                this.statusBarItem.backgroundColor = undefined;
+                break;
+            case 'success':
+                this.statusBarItem.text = text || '$(check) MLForge: Synced';
+                this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
+                break;
+            case 'error':
+                this.statusBarItem.text = text || '$(error) MLForge: Error';
+                this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+                break;
+        }
+    }
+
     setError(message: string): void {
         this.statusBarItem.text = '$(error) MLForge: Error';
         this.statusBarItem.tooltip = message;

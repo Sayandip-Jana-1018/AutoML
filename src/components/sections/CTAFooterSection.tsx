@@ -97,7 +97,7 @@ export function CTAFooterSection() {
                         </p>
 
                         <div className="flex flex-col sm:flex-row justify-center gap-4">
-                            <NavButton href="/studio" variant="primary" size="lg" icon="arrow" requiresAuth>
+                            <NavButton href="http://localhost:3001" variant="primary" size="lg" icon="arrow" requiresAuth>
                                 Start Building Free
                             </NavButton>
                             <NavButton href="mailto:sayandip.jana24@gmail.com" variant="secondary" size="lg" external>

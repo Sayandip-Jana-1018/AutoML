@@ -61,6 +61,22 @@ class StatusBarManager {
         this.statusBarItem.tooltip = 'Click to connect to MLForge';
         this.statusBarItem.backgroundColor = undefined;
     }
+    setStatus(state, text) {
+        switch (state) {
+            case 'syncing':
+                this.statusBarItem.text = text || '$(sync~spin) MLForge: Syncing...';
+                this.statusBarItem.backgroundColor = undefined;
+                break;
+            case 'success':
+                this.statusBarItem.text = text || '$(check) MLForge: Synced';
+                this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
+                break;
+            case 'error':
+                this.statusBarItem.text = text || '$(error) MLForge: Error';
+                this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+                break;
+        }
+    }
     setError(message) {
         this.statusBarItem.text = '$(error) MLForge: Error';
         this.statusBarItem.tooltip = message;

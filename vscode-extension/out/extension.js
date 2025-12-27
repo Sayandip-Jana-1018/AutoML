@@ -133,13 +133,20 @@ let currentProjectId = null;
 let currentToken = null;
 // Store extension context for persistence
 let extensionContext = null;
+// Output channel for visible logging
+let outputChannel;
 function activate(context) {
+    // Create output channel first for visible logging
+    outputChannel = vscode.window.createOutputChannel('MLForge');
+    outputChannel.appendLine('🚀 MLForge extension activated!');
+    outputChannel.show(true);
     console.log('MLForge extension activated');
     extensionContext = context;
     // Restore connection state from persistent storage
     currentProjectId = context.globalState.get('mlforge.projectId') || null;
     currentToken = context.globalState.get('mlforge.token') || null;
     if (currentProjectId) {
+        outputChannel.appendLine(`📁 Restored connection to project: ${currentProjectId}`);
         console.log('[MLForge] Restored connection to project:', currentProjectId);
     }
     // Initialize status bar
@@ -153,12 +160,18 @@ function activate(context) {
     // Register URI handler for one-click connect from Studio
     context.subscriptions.push(vscode.window.registerUriHandler({
         async handleUri(uri) {
+            outputChannel.appendLine(`🔗 URI received: ${uri.toString()}`);
+            outputChannel.show(true);
             console.log('[MLForge] URI received:', uri.toString());
+            // Show immediate feedback that URI was received
+            vscode.window.showInformationMessage('🔗 MLForge: Connecting to project...');
             // Parse query parameters
             const params = new URLSearchParams(uri.query);
             const projectId = params.get('projectId');
             const wsUrl = params.get('wsUrl');
             const token = params.get('token');
+            outputChannel.appendLine(`📋 Parsed: projectId=${projectId}, token=${token ? 'present' : 'missing'}`);
+            console.log('[MLForge] Parsed params:', { projectId, wsUrl: wsUrl ? 'present' : 'missing', token: token ? 'present' : 'missing' });
             if (projectId) {
                 // Store connection info globally for sync without WebSocket
                 currentProjectId = projectId;
@@ -166,7 +179,6 @@ function activate(context) {
                 // Persist to globalState so it survives reloads
                 extensionContext?.globalState.update('mlforge.projectId', projectId);
                 extensionContext?.globalState.update('mlforge.token', token);
-                vscode.window.showInformationMessage(`✓ Connected to MLForge project: ${projectId}`);
                 console.log('[MLForge] Connection persisted to globalState');
                 statusBar?.setConnected(projectId);
                 // Store in global state for persistence
@@ -177,13 +189,22 @@ function activate(context) {
                 if (wsUrl) {
                     context.globalState.update('mlforge.wsUrl', wsUrl);
                 }
-                // Fetch the current script from MLForge and open it
-                await openTrainPyFromProject(projectId, token || undefined);
+                // Fetch the current script from MLForge and open it with progress
+                await vscode.window.withProgress({
+                    location: vscode.ProgressLocation.Notification,
+                    title: 'MLForge: Loading project...',
+                    cancellable: false
+                }, async (progress) => {
+                    progress.report({ message: 'Fetching script...' });
+                    await openTrainPyFromProject(projectId, token || undefined);
+                    progress.report({ message: 'Connected!' });
+                });
+                vscode.window.showInformationMessage(`✅ MLForge: Connected to project ${projectId.substring(0, 8)}...`);
                 // Try WebSocket connection for real-time sync (optional)
                 connectWithToken(projectId, wsUrl || undefined, token || undefined);
             }
             else {
-                vscode.window.showErrorMessage('Invalid MLForge URI: missing projectId');
+                vscode.window.showErrorMessage('MLForge: Invalid URI - missing projectId');
             }
         }
     }));
@@ -477,38 +498,47 @@ async function syncCodeToCloud(code, showMessages = true) {
     const token = mcpClient?.token || currentToken;
     if (!projectId) {
         if (showMessages)
-            vscode.window.showWarningMessage('Not connected to MLForge. Open a project from Studio first.');
+            vscode.window.showWarningMessage('MLForge: Not connected. Open a project from Studio first.');
         return;
     }
     if (!code.trim()) {
         if (showMessages)
-            vscode.window.showWarningMessage('No code to sync');
+            vscode.window.showWarningMessage('MLForge: No code to sync');
         return;
     }
+    // Update status bar
+    statusBar?.setStatus('syncing', '$(sync~spin) Syncing...');
     try {
         const config = vscode.workspace.getConfiguration('mlforge');
         const apiUrl = config.get('apiBaseUrl') || 'http://localhost:3000';
-        if (showMessages)
-            vscode.window.showInformationMessage('🔄 Syncing to MLForge...');
+        console.log(`[MLForge] Syncing to ${apiUrl}/api/mcp/sync-script for project ${projectId}`);
         const response = await httpPost(`${apiUrl}/api/mcp/sync-script`, { projectId, code, token, source: 'vscode' });
         const result = response.data;
         if (!response.ok) {
-            throw new Error(result?.error || 'Failed to sync');
+            throw new Error(result?.error || 'Server returned error');
         }
+        // Update status bar with success
+        statusBar?.setConnected(projectId);
         if (showMessages) {
             if (result.changed) {
-                vscode.window.showInformationMessage(`✅ Code synced to MLForge (v${result.version})`);
+                vscode.window.showInformationMessage(`✅ MLForge: Synced (v${result.version})`);
             }
             else {
-                vscode.window.showInformationMessage('✓ Code already in sync');
+                vscode.window.showInformationMessage('✓ MLForge: Already in sync');
             }
         }
         console.log('[MLForge] Sync complete:', result);
     }
     catch (error) {
         console.error('[MLForge] Sync error:', error);
-        if (showMessages)
-            vscode.window.showErrorMessage(`Failed to push: ${error.message}`);
+        statusBar?.setStatus('error', '$(error) Sync failed');
+        if (showMessages) {
+            vscode.window.showErrorMessage(`MLForge sync failed: ${error.message}. Make sure your Next.js server is running.`, 'Retry').then(action => {
+                if (action === 'Retry') {
+                    syncCodeToCloud(code, showMessages);
+                }
+            });
+        }
     }
 }
 // Push from a saved notebook document
